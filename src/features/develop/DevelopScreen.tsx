@@ -4,15 +4,20 @@ import { getPhrases } from '../../data/genres';
 import { JacketView } from '../../components/JacketView';
 import { TypingPanel } from '../../components/TypingPanel';
 import { GhostBar } from '../../components/GhostBar';
+import { ComboGauge } from '../../components/ComboGauge';
+import { trendLabel, trendMultiplier } from '../../data/trend';
 import { useTyping } from './useTyping';
 
 export const DevelopScreen = () => {
   const current = useGameStore((s) => s.current);
   const ghosts = useGameStore((s) => s.ghosts);
   const employees = useGameStore((s) => s.employees);
+  const trend = useGameStore((s) => s.trend);
   const tickEmployees = useGameStore((s) => s.tickEmployees);
   const addDevelopLoC = useGameStore((s) => s.addDevelopLoC);
   const finishDevelopment = useGameStore((s) => s.finishDevelopment);
+  const reportCombo = useGameStore((s) => s.reportCombo);
+  const reportWPM = useGameStore((s) => s.reportWPM);
 
   const [elapsed, setElapsed] = useState(0);
 
@@ -21,10 +26,12 @@ export const DevelopScreen = () => {
     return getPhrases(current.genreId, current.requiredLoC * 3);
   }, [current?.genreId, current?.requiredLoC]);
 
-  const { view, failCount } = useTyping({
+  const { view, failCount, combo, wpm } = useTyping({
     phrases,
     onPhraseComplete: () => addDevelopLoC(1),
     paused: !current || current.finishedAt !== null,
+    onCorrect: (c) => reportCombo(c),
+    onWpm: (w) => reportWPM(w),
   });
 
   const startedAt = current?.startedAt ?? null;
@@ -57,9 +64,11 @@ export const DevelopScreen = () => {
 
   const progressPct = Math.min(100, (current.doneLoC / current.requiredLoC) * 100);
   const autoRate = employees * 0.5 + (current.adBoostActive ? 0.5 : 0);
+  const tMul = trendMultiplier(trend, current.genreId, current.themeId);
+  const isHot = combo >= 15;
 
   return (
-    <div className="screen develop-screen">
+    <div className={`screen develop-screen ${isHot ? 'is-hot' : ''}`}>
       <header className="topbar">
         <h1>💻 開発中</h1>
         <div className="topbar-meta">
@@ -82,13 +91,26 @@ export const DevelopScreen = () => {
           </div>
         </div>
         <GhostBar elapsedSec={elapsed} ghostSec={ghosts[current.scale]} />
-        {autoRate > 0 && (
-          <div className="aux-row">
-            👥 自動生産: {autoRate.toFixed(1)} LoC/秒
-            {current.adBoostActive && ' (📺 広告ブースト中)'}
+        <ComboGauge combo={combo} />
+        <div className="aux-row aux-grid">
+          <span>WPM: {Math.round(wpm)}</span>
+          <span>最大コンボ: {current.maxCombo}</span>
+          <span className="aux-misses">ミス: {failCount}</span>
+          {autoRate > 0 && (
+            <span>
+              👥 自動生産: {autoRate.toFixed(1)} LoC/秒
+              {current.adBoostActive && ' 📺'}
+            </span>
+          )}
+          {tMul > 1 && (
+            <span className="aux-trend">📈 トレンド合致 ×{tMul.toFixed(1)}</span>
+          )}
+        </div>
+        {trend && (
+          <div className="aux-row trend-line">
+            今月のトレンド: {trendLabel(trend)}
           </div>
         )}
-        <div className="aux-row aux-misses">ミス: {failCount}</div>
       </section>
 
       <section className="card typing-card">

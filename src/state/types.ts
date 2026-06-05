@@ -8,7 +8,8 @@ export type Screen =
   | 'polish'
   | 'release'
   | 'office'
-  | 'library';
+  | 'library'
+  | 'collection';
 
 export type Work = {
   id: string;
@@ -21,6 +22,9 @@ export type Work = {
   isMasterpiece: boolean;
   developSec: number;
   revenue: number;
+  fansGained: number;
+  ghostBeaten: boolean;
+  launchAdUsed: boolean;
   createdAt: number;
 };
 
@@ -32,6 +36,10 @@ export type CurrentProject = {
   requiredLoC: number;
   doneLoC: number;
   polishLoC: number;
+  /** ノリ／コンボ最大値（このプロジェクト内） */
+  maxCombo: number;
+  /** ポリッシュ時の累積コンボボーナス（0〜0.5） */
+  comboBonus: number;
   startedAt: number;
   finishedAt: number | null;
   adBoostActive: boolean;

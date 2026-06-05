@@ -3,9 +3,12 @@ import { nextLockedScale, SCALES } from '../../data/scales';
 
 export const OfficeScreen = () => {
   const funds = useGameStore((s) => s.funds);
+  const lifetimeRevenue = useGameStore((s) => s.lifetimeRevenue);
+  const fans = useGameStore((s) => s.fans);
   const employees = useGameStore((s) => s.employees);
   const unlocked = useGameStore((s) => s.unlockedScales);
   const library = useGameStore((s) => s.library);
+  const records = useGameStore((s) => s.records);
   const pendingAdBoost = useGameStore((s) => s.pendingAdBoost);
   const hireEmployee = useGameStore((s) => s.hireEmployee);
   const unlockNextScale = useGameStore((s) => s.unlockNextScale);
@@ -21,11 +24,25 @@ export const OfficeScreen = () => {
         <h1>🏢 オフィス</h1>
         <div className="topbar-meta">
           <span>💰 ¥{funds.toLocaleString()}</span>
-          <span>👥 {employees}人</span>
+          <span>👥 ファン {fans.toLocaleString()}</span>
+          <span>🧑‍💻 {employees}人</span>
           <span>📚 {library.length}本</span>
           <button className="link-btn" onClick={() => goTo('library')}>ライブラリ</button>
+          <button className="link-btn" onClick={() => goTo('collection')}>図鑑</button>
         </div>
       </header>
+
+      <section className="card">
+        <h2>会社サマリ</h2>
+        <ul className="release-stats">
+          <li>累計売上: ¥{lifetimeRevenue.toLocaleString()}</li>
+          <li>累計リリース: {library.length}本</li>
+          <li>最高メタスコア: {records.bestMetascore}</li>
+          <li>最高売上: ¥{records.bestRevenue.toLocaleString()}</li>
+          <li>最高コンボ: {records.bestCombo}</li>
+          <li>最高WPM: {records.bestWPM}</li>
+        </ul>
+      </section>
 
       <section className="card">
         <h2>人材確保</h2>
