@@ -1,22 +1,17 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { Scale } from '../data/scales';
-import { SCALE_BY_ID, nextLockedScale, SCALES } from '../data/scales';
 import type { GenreId } from '../data/genres';
 import { GENRES } from '../data/genres';
+import type { Scale } from '../data/scales';
+import { nextLockedScale, SCALE_BY_ID, SCALES } from '../data/scales';
 import type { ThemeId } from '../data/themes';
 import { THEMES } from '../data/themes';
 import { generateTitle } from '../data/titleGenerator';
 import { ensureTrend, type Trend } from '../data/trend';
-import type { Screen, Work, CurrentProject } from './types';
-import * as storage from '../utils/storage';
+import { computeMetascore, computeRevenue, fanDelta, polishToQuality } from '../utils/metascore';
 import type { Records } from '../utils/storage';
-import {
-  computeMetascore,
-  computeRevenue,
-  polishToQuality,
-  fanDelta,
-} from '../utils/metascore';
+import * as storage from '../utils/storage';
+import type { CurrentProject, Screen, Work } from './types';
 
 const HIRE_COST = 200;
 
@@ -37,12 +32,12 @@ const computeStageUnlocks = (
   if (libraryCount >= 3) stage = 2;
   if (libraryCount >= 8) stage = 3;
   if (libraryCount >= 15) stage = 4;
-  const newGenres = GENRES
-    .filter((g) => g.unlockStage <= stage && !currentGenres.includes(g.id))
-    .map((g) => g.id);
-  const newThemes = THEMES
-    .filter((t) => t.unlockStage <= stage && !currentThemes.includes(t.id))
-    .map((t) => t.id);
+  const newGenres = GENRES.filter(
+    (g) => g.unlockStage <= stage && !currentGenres.includes(g.id),
+  ).map((g) => g.id);
+  const newThemes = THEMES.filter(
+    (t) => t.unlockStage <= stage && !currentThemes.includes(t.id),
+  ).map((t) => t.id);
   return { unlocked: newGenres.length + newThemes.length, newGenres, newThemes };
 };
 
@@ -223,12 +218,17 @@ export const useGameStore = create<GameState>()(
       const meta = computeMetascore(quality, cur.genreId, cur.themeId, trend);
       const launchAdActive = !!opts?.launchAd;
       const revenue = computeRevenue(
-        meta.metascore, cur.genreId, cur.themeId, cur.scale, trend, get().fans, launchAdActive,
+        meta.metascore,
+        cur.genreId,
+        cur.themeId,
+        cur.scale,
+        trend,
+        get().fans,
+        launchAdActive,
       );
       const gainedFans = Math.max(0, fanDelta(meta.metascore));
       const newFans = Math.max(0, get().fans + fanDelta(meta.metascore));
-      const developSec =
-        cur.finishedAt !== null ? (cur.finishedAt - cur.startedAt) / 1000 : 0;
+      const developSec = cur.finishedAt !== null ? (cur.finishedAt - cur.startedAt) / 1000 : 0;
       const prevGhost = get().ghosts[cur.scale];
       // 完成時に再計算（finishDevelopment ですでに更新しているが、ライブラリ記録用に再判定）
       const ghostBeaten = prevGhost !== null && developSec <= prevGhost;

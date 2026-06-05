@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 const BASE = 'http://localhost:5173';
 
@@ -7,11 +7,7 @@ const BASE = 'http://localhost:5173';
  * NanoType-JP は keypress イベントで判定するため、表示中の先頭1文字を
  * 順に押下していけば必ず進む（ローマ字の複数許容は最初に提示されたパターンに従えばよい）。
  */
-async function typeUntil(
-  page: Page,
-  doneLocator: string,
-  maxKeys = 1500,
-): Promise<boolean> {
+async function typeUntil(page: Page, doneLocator: string, maxKeys = 1500): Promise<boolean> {
   for (let i = 0; i < maxKeys; i++) {
     const done = await page.locator(doneLocator).count();
     if (done > 0) return true;
@@ -57,19 +53,43 @@ test('localStorageリセット → トップが企画画面で表示される', 
 test('ジャンル12種・テーマ15種・規模5種が画面に存在', async ({ page }) => {
   await resetAndOpen(page);
   const expectedGenres = [
-    'アクション','パズル','RPG','シューティング','アドベンチャー','シミュレーション',
-    'レース','ホラー','格闘','ローグライク','リズム','サンドボックス',
+    'アクション',
+    'パズル',
+    'RPG',
+    'シューティング',
+    'アドベンチャー',
+    'シミュレーション',
+    'レース',
+    'ホラー',
+    '格闘',
+    'ローグライク',
+    'リズム',
+    'サンドボックス',
   ];
   for (const name of expectedGenres) {
     await expect(page.getByRole('button', { name: new RegExp(name) })).toBeVisible();
   }
   const expectedThemes = [
-    'ファンタジー','SF','寿司','忍者','温泉','中世','現代','農業','動物','戦争','会社員','コンビニ','ゾンビ','海賊','宇宙人',
+    'ファンタジー',
+    'SF',
+    '寿司',
+    '忍者',
+    '温泉',
+    '中世',
+    '現代',
+    '農業',
+    '動物',
+    '戦争',
+    '会社員',
+    'コンビニ',
+    'ゾンビ',
+    '海賊',
+    '宇宙人',
   ];
   for (const name of expectedThemes) {
     await expect(page.getByRole('button', { name: new RegExp(name) })).toBeVisible();
   }
-  for (const name of ['ミニゲーム','スマホゲーム','インディー大作','話題作','AAAタイトル']) {
+  for (const name of ['ミニゲーム', 'スマホゲーム', 'インディー大作', '話題作', 'AAAタイトル']) {
     await expect(page.getByRole('button', { name: new RegExp(name) })).toBeVisible();
   }
 });
@@ -87,7 +107,9 @@ test('企画→開発→ポリッシュ→リリースのコアループが回�
   await page.getByRole('button', { name: '🚀 リリースする' }).click();
   await expect(page.locator('h1')).toContainText('リリース');
   await expect(page.locator('.meta-value')).toBeVisible();
-  await expect(page.getByRole('button', { name: /広告を見て売上.*\+50%/ })).toBeVisible({ timeout: 6000 });
+  await expect(page.getByRole('button', { name: /広告を見て売上.*\+50%/ })).toBeVisible({
+    timeout: 6000,
+  });
   await page.getByRole('button', { name: /広告を見て売上.*\+50%/ }).click();
   await expect(page.getByText('ローンチ広告キャンペーン適用済')).toBeVisible({ timeout: 4000 });
 

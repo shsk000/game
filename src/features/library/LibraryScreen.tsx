@@ -1,8 +1,8 @@
-import { useGameStore } from '../../state/gameStore';
 import { JacketView } from '../../components/JacketView';
 import { GENRE_BY_ID } from '../../data/genres';
-import { THEME_BY_ID } from '../../data/themes';
 import { SCALE_BY_ID } from '../../data/scales';
+import { THEME_BY_ID } from '../../data/themes';
+import { useGameStore } from '../../state/gameStore';
 
 export const LibraryScreen = () => {
   const library = useGameStore((s) => s.library);
@@ -14,7 +14,9 @@ export const LibraryScreen = () => {
         <h1>📚 ライブラリ</h1>
         <div className="topbar-meta">
           <span>{library.length}本</span>
-          <button className="link-btn" onClick={() => goTo('office')}>戻る</button>
+          <button className="link-btn" onClick={() => goTo('office')}>
+            戻る
+          </button>
         </div>
       </header>
 
@@ -31,7 +33,9 @@ export const LibraryScreen = () => {
                 <JacketView genreId={w.genreId} themeId={w.themeId} title={w.title} size="md" />
                 <div className="library-meta">
                   <div className="lib-tags">
-                    {genre.emoji}{genre.name} × {theme.emoji}{theme.name}
+                    {genre.emoji}
+                    {genre.name} × {theme.emoji}
+                    {theme.name}
                   </div>
                   <div className="lib-scale">{scale.name}</div>
                   <div className={`lib-meta-score ${w.isMasterpiece ? 'masterpiece' : ''}`}>
@@ -39,7 +43,8 @@ export const LibraryScreen = () => {
                     {w.isMasterpiece && ' 🌟'}
                   </div>
                   <div className="lib-stats">
-                    Q{w.quality} ／ ⏱ {w.developSec.toFixed(2)}秒 ／ 💰 ¥{w.revenue.toLocaleString()}
+                    Q{w.quality} ／ ⏱ {w.developSec.toFixed(2)}秒 ／ 💰 ¥
+                    {w.revenue.toLocaleString()}
                   </div>
                 </div>
               </div>

@@ -1,5 +1,5 @@
-import type { Scale } from '../data/scales';
 import type { GenreId } from '../data/genres';
+import type { Scale } from '../data/scales';
 import type { ThemeId } from '../data/themes';
 
 export type Screen =

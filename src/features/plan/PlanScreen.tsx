@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react';
-import { useGameStore } from '../../state/gameStore';
-import { GENRES, GENRE_BY_ID } from '../../data/genres';
-import type { GenreId } from '../../data/genres';
-import { THEMES, THEME_BY_ID } from '../../data/themes';
-import type { ThemeId } from '../../data/themes';
-import { SCALES } from '../../data/scales';
-import type { Scale } from '../../data/scales';
+import { useEffect, useState } from 'react';
 import { JacketView } from '../../components/JacketView';
+import type { GenreId } from '../../data/genres';
+import { GENRE_BY_ID, GENRES } from '../../data/genres';
+import type { Scale } from '../../data/scales';
+import { SCALES } from '../../data/scales';
+import type { ThemeId } from '../../data/themes';
+import { THEME_BY_ID, THEMES } from '../../data/themes';
 import { trendLabel } from '../../data/trend';
+import { useGameStore } from '../../state/gameStore';
 
 export const PlanScreen = () => {
   const startProject = useGameStore((s) => s.startProject);
@@ -50,9 +50,15 @@ export const PlanScreen = () => {
           <span>👥 ファン {fans.toLocaleString()}</span>
           <span>🧑‍💻 {employees}人</span>
           <span>📚 {library.length}本</span>
-          <button className="link-btn" onClick={() => goTo('office')}>オフィスへ</button>
-          <button className="link-btn" onClick={() => goTo('library')}>ライブラリ</button>
-          <button className="link-btn" onClick={() => goTo('collection')}>図鑑</button>
+          <button className="link-btn" onClick={() => goTo('office')}>
+            オフィスへ
+          </button>
+          <button className="link-btn" onClick={() => goTo('library')}>
+            ライブラリ
+          </button>
+          <button className="link-btn" onClick={() => goTo('collection')}>
+            図鑑
+          </button>
         </div>
       </header>
 
@@ -60,10 +66,12 @@ export const PlanScreen = () => {
         <section className="card offline-card">
           <h2>📬 おかえりなさい</h2>
           <p>
-            離席中（{Math.round(offlineReport.awaySec / 60)}分）にファンが
-            ¥{offlineReport.earned.toLocaleString()} を運んできました。
+            離席中（{Math.round(offlineReport.awaySec / 60)}分）にファンが ¥
+            {offlineReport.earned.toLocaleString()} を運んできました。
           </p>
-          <button className="link-btn" onClick={clearOfflineReport}>受け取った（閉じる）</button>
+          <button className="link-btn" onClick={clearOfflineReport}>
+            受け取った（閉じる）
+          </button>
         </section>
       )}
 
@@ -152,10 +160,7 @@ export const PlanScreen = () => {
             )}
           </div>
         </div>
-        <button
-          className="primary-btn"
-          onClick={() => startProject(genreId, themeId, scale)}
-        >
+        <button className="primary-btn" onClick={() => startProject(genreId, themeId, scale)}>
           ▶ 開発開始
         </button>
       </section>

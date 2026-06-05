@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useGameStore } from '../../state/gameStore';
+import { ads } from '../../ads/AdProvider';
 import { JacketView } from '../../components/JacketView';
-import { scoreFlavor } from '../../utils/metascore';
+import { compatLabel, getCompat } from '../../data/compatibility';
 import { GENRE_BY_ID } from '../../data/genres';
 import { THEME_BY_ID } from '../../data/themes';
-import { compatLabel, getCompat } from '../../data/compatibility';
-import { ads } from '../../ads/AdProvider';
+import { useGameStore } from '../../state/gameStore';
+import { scoreFlavor } from '../../utils/metascore';
 
 export const ReleaseScreen = () => {
   const work = useGameStore((s) => s.lastReleased);
@@ -29,7 +29,7 @@ export const ReleaseScreen = () => {
     let raf = 0;
     const loop = () => {
       const t = Math.min(1, (performance.now() - start) / totalMs);
-      const eased = 1 - Math.pow(1 - t, 3);
+      const eased = 1 - (1 - t) ** 3;
       setDisplayScore(Math.round(target * eased));
       if (t < 1) raf = requestAnimationFrame(loop);
       else setPhase('done');
@@ -77,9 +77,13 @@ export const ReleaseScreen = () => {
         <div className="release-info">
           <h2>{work.title}</h2>
           <div className="release-tags">
-            <span>{genre.emoji} {genre.name}</span>
+            <span>
+              {genre.emoji} {genre.name}
+            </span>
             <span>×</span>
-            <span>{theme.emoji} {theme.name}</span>
+            <span>
+              {theme.emoji} {theme.name}
+            </span>
           </div>
           <div className={`meta-score ${work.isMasterpiece ? 'masterpiece' : ''}`}>
             <span className="meta-label">メタスコア</span>
@@ -93,7 +97,9 @@ export const ReleaseScreen = () => {
               {work.ghostBeaten && <div className="ghost-update-badge">🏁 ゴースト記録更新！</div>}
               <ul className="release-stats">
                 <li>品質 Q {work.quality}</li>
-                <li>相性 {compatLabel(compat)} ({compat.toFixed(2)}x)</li>
+                <li>
+                  相性 {compatLabel(compat)} ({compat.toFixed(2)}x)
+                </li>
                 <li>開発タイム {work.developSec.toFixed(2)}秒</li>
                 <li>👥 ファン +{work.fansGained}</li>
                 <li className="revenue">
@@ -108,11 +114,7 @@ export const ReleaseScreen = () => {
                 {launchAdApplied ? (
                   <p className="ad-applied">✅ ローンチ広告キャンペーン適用済（売上 ×1.5）</p>
                 ) : (
-                  <button
-                    className="primary-btn ad-btn"
-                    disabled={adRunning}
-                    onClick={runLaunchAd}
-                  >
+                  <button className="primary-btn ad-btn" disabled={adRunning} onClick={runLaunchAd}>
                     {adRunning ? '広告再生中…' : '📺 広告を見て売上 +50%（ローンチキャンペーン）'}
                   </button>
                 )}

@@ -1,8 +1,8 @@
+import { getCompat } from '../data/compatibility';
 import type { GenreId } from '../data/genres';
-import type { ThemeId } from '../data/themes';
 import type { Scale } from '../data/scales';
 import { SCALE_BY_ID } from '../data/scales';
-import { getCompat } from '../data/compatibility';
+import type { ThemeId } from '../data/themes';
 import type { Trend } from '../data/trend';
 import { trendMultiplier } from '../data/trend';
 
@@ -72,11 +72,7 @@ export const scoreFlavor = (m: number): string => {
  *   TAU=30 ⇒ 30LoC磨くと残差の約63%、60LoCで約86%が埋まる。
  * → Q90 以降が指数的に伸びにくい＝「どこで切り上げるか」の判断が生まれる
  */
-export const polishToQuality = (
-  baseQuality: number,
-  polishLoC: number,
-  comboBonus = 0,
-): number => {
+export const polishToQuality = (baseQuality: number, polishLoC: number, comboBonus = 0): number => {
   const TAU = 30;
   const effective = polishLoC * (1 + comboBonus);
   const ratio = 1 - Math.exp(-effective / TAU);

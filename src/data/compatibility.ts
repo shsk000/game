@@ -1,6 +1,6 @@
 import type { GenreId } from './genres';
-import type { ThemeId } from './themes';
 import { GENRE_BY_ID } from './genres';
+import type { ThemeId } from './themes';
 import { THEME_BY_ID } from './themes';
 
 /** タグペアの相性加点（base 1.0 に対する加減算） */

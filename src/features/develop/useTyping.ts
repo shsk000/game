@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
 import NanoTypeJp from '@shsk002/nano-type-jp';
+import { useEffect, useRef, useState } from 'react';
 
 export type TypingView = {
   hiragana: string;

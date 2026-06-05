@@ -1,6 +1,6 @@
 import type { GenreId } from '../data/genres';
-import type { ThemeId } from '../data/themes';
 import { GENRE_BY_ID } from '../data/genres';
+import type { ThemeId } from '../data/themes';
 import { THEME_BY_ID } from '../data/themes';
 
 type Props = {
@@ -18,10 +18,7 @@ export const JacketView = ({ genreId, themeId, title, size = 'md' }: Props) => {
   const genreFs = size === 'lg' ? 44 : size === 'sm' ? 22 : 32;
   return (
     <div className="jacket" style={{ width: dim }}>
-      <div
-        className="jacket-art"
-        style={{ background: genre.bgColor, height: dim }}
-      >
+      <div className="jacket-art" style={{ background: genre.bgColor, height: dim }}>
         <span className="jacket-theme" style={{ fontSize: themeFs }}>
           {theme.emoji}
         </span>

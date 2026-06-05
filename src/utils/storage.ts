@@ -1,8 +1,8 @@
-import type { Scale } from '../data/scales';
-import type { Work } from '../state/types';
-import type { Trend } from '../data/trend';
 import type { GenreId } from '../data/genres';
+import type { Scale } from '../data/scales';
 import type { ThemeId } from '../data/themes';
+import type { Trend } from '../data/trend';
+import type { Work } from '../state/types';
 
 const KEY = 'typing-factory:v2';
 const LEGACY_KEY_V1 = 'typing-factory:v1';
@@ -31,7 +31,11 @@ export type Persisted = {
 };
 
 const emptyGhostsRecord = (): Record<Scale, number | null> => ({
-  mini: null, mobile: null, indie: null, hit: null, aaa: null,
+  mini: null,
+  mobile: null,
+  indie: null,
+  hit: null,
+  aaa: null,
 });
 
 export const defaults = (): Persisted => ({
@@ -79,7 +83,11 @@ export const load = (): Persisted | null => {
       const migrated = migrateFromV1(legacy);
       if (migrated) {
         save(migrated);
-        try { localStorage.removeItem(LEGACY_KEY_V1); } catch { /* ignore */ }
+        try {
+          localStorage.removeItem(LEGACY_KEY_V1);
+        } catch {
+          /* ignore */
+        }
         return migrated;
       }
     }

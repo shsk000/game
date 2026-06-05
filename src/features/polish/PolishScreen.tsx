@@ -1,12 +1,12 @@
 import { useMemo } from 'react';
-import { useGameStore } from '../../state/gameStore';
-import { getPhrases } from '../../data/genres';
+import { ComboGauge } from '../../components/ComboGauge';
 import { JacketView } from '../../components/JacketView';
 import { TypingPanel } from '../../components/TypingPanel';
-import { ComboGauge } from '../../components/ComboGauge';
-import { useTyping } from '../develop/useTyping';
+import { getPhrases } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
+import { useGameStore } from '../../state/gameStore';
 import { polishToQuality } from '../../utils/metascore';
+import { useTyping } from '../develop/useTyping';
 
 export const PolishScreen = () => {
   const current = useGameStore((s) => s.current);
@@ -41,8 +41,7 @@ export const PolishScreen = () => {
     current.finishedAt !== null ? (current.finishedAt - current.startedAt) / 1000 : 0;
   // ゴースト更新判定（完成時点で更新済みのため、ghosts[scale] === developSec の近似で判定）
   const ghostBeaten =
-    ghosts[current.scale] !== null &&
-    Math.abs((ghosts[current.scale] ?? 0) - developSec) < 0.001;
+    ghosts[current.scale] !== null && Math.abs((ghosts[current.scale] ?? 0) - developSec) < 0.001;
 
   return (
     <div className="screen polish-screen">
@@ -71,10 +70,7 @@ export const PolishScreen = () => {
             )}
           </div>
           <div className="progress-bar">
-            <div
-              className="progress-fill polish-fill"
-              style={{ width: `${projectedQ}%` }}
-            />
+            <div className="progress-fill polish-fill" style={{ width: `${projectedQ}%` }} />
           </div>
         </div>
         <ComboGauge combo={combo} />

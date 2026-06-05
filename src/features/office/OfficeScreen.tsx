@@ -1,5 +1,5 @@
-import { useGameStore, HIRE_EMPLOYEE_COST } from '../../state/gameStore';
 import { nextLockedScale, SCALES } from '../../data/scales';
+import { HIRE_EMPLOYEE_COST, useGameStore } from '../../state/gameStore';
 
 export const OfficeScreen = () => {
   const funds = useGameStore((s) => s.funds);
@@ -27,8 +27,12 @@ export const OfficeScreen = () => {
           <span>👥 ファン {fans.toLocaleString()}</span>
           <span>🧑‍💻 {employees}人</span>
           <span>📚 {library.length}本</span>
-          <button className="link-btn" onClick={() => goTo('library')}>ライブラリ</button>
-          <button className="link-btn" onClick={() => goTo('collection')}>図鑑</button>
+          <button className="link-btn" onClick={() => goTo('library')}>
+            ライブラリ
+          </button>
+          <button className="link-btn" onClick={() => goTo('collection')}>
+            図鑑
+          </button>
         </div>
       </header>
 
@@ -83,11 +87,7 @@ export const OfficeScreen = () => {
       <section className="card">
         <h2>📺 広告（モック）</h2>
         <p>広告を見ると次の開発で +0.5 LoC/秒の自動生産が乗ります。</p>
-        <button
-          className="primary-btn"
-          disabled={pendingAdBoost}
-          onClick={() => buyAdBoost()}
-        >
+        <button className="primary-btn" disabled={pendingAdBoost} onClick={() => buyAdBoost()}>
           {pendingAdBoost ? '次の開発に適用予定' : '広告を見る（モック）：次の開発を加速'}
         </button>
       </section>
@@ -96,9 +96,12 @@ export const OfficeScreen = () => {
         <button className="primary-btn" onClick={() => goTo('plan')}>
           ▶ 新規開発へ
         </button>
-        <button className="link-btn danger" onClick={() => {
-          if (confirm('セーブデータをリセットしますか？')) reset();
-        }}>
+        <button
+          className="link-btn danger"
+          onClick={() => {
+            if (confirm('セーブデータをリセットしますか？')) reset();
+          }}
+        >
           セーブをリセット
         </button>
       </section>

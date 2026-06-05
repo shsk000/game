@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useGameStore } from '../../state/gameStore';
-import { getPhrases } from '../../data/genres';
+import { ComboGauge } from '../../components/ComboGauge';
+import { GhostBar } from '../../components/GhostBar';
 import { JacketView } from '../../components/JacketView';
 import { TypingPanel } from '../../components/TypingPanel';
-import { GhostBar } from '../../components/GhostBar';
-import { ComboGauge } from '../../components/ComboGauge';
+import { getPhrases } from '../../data/genres';
 import { trendLabel, trendMultiplier } from '../../data/trend';
+import { useGameStore } from '../../state/gameStore';
 import { useTyping } from './useTyping';
 
 export const DevelopScreen = () => {
@@ -102,23 +102,13 @@ export const DevelopScreen = () => {
               {current.adBoostActive && ' 📺'}
             </span>
           )}
-          {tMul > 1 && (
-            <span className="aux-trend">📈 トレンド合致 ×{tMul.toFixed(1)}</span>
-          )}
+          {tMul > 1 && <span className="aux-trend">📈 トレンド合致 ×{tMul.toFixed(1)}</span>}
         </div>
-        {trend && (
-          <div className="aux-row trend-line">
-            今月のトレンド: {trendLabel(trend)}
-          </div>
-        )}
+        {trend && <div className="aux-row trend-line">今月のトレンド: {trendLabel(trend)}</div>}
       </section>
 
       <section className="card typing-card">
-        <TypingPanel
-          hiragana={view.hiragana}
-          completed={view.completed}
-          remained={view.remained}
-        />
+        <TypingPanel hiragana={view.hiragana} completed={view.completed} remained={view.remained} />
       </section>
       <p className="hint">物理キーボードで打鍵してください（日本語IMEはOFF）</p>
     </div>

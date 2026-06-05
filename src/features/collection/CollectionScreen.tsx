@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
+import { compatLabel, getCompat } from '../../data/compatibility';
+import { GENRE_BY_ID, GENRES } from '../../data/genres';
+import { THEME_BY_ID, THEMES } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
-import { GENRES, GENRE_BY_ID } from '../../data/genres';
-import { THEMES, THEME_BY_ID } from '../../data/themes';
-import { getCompat, compatLabel } from '../../data/compatibility';
 
 type Cell = {
   discovered: boolean;
@@ -21,7 +21,11 @@ export const CollectionScreen = () => {
     for (const w of library) {
       const key = `${w.genreId}|${w.themeId}`;
       const cur: Cell = map.get(key) ?? {
-        discovered: true, count: 0, bestQ: 0, bestRevenue: 0, bestMeta: 0,
+        discovered: true,
+        count: 0,
+        bestQ: 0,
+        bestRevenue: 0,
+        bestMeta: 0,
       };
       cur.count += 1;
       cur.bestQ = Math.max(cur.bestQ, w.quality);
@@ -40,13 +44,19 @@ export const CollectionScreen = () => {
       <header className="topbar">
         <h1>📖 ジャンル相性図鑑</h1>
         <div className="topbar-meta">
-          <span>発見 {discoveredCount} / {totalCells}</span>
-          <button className="link-btn" onClick={() => goTo('office')}>戻る</button>
+          <span>
+            発見 {discoveredCount} / {totalCells}
+          </span>
+          <button className="link-btn" onClick={() => goTo('office')}>
+            戻る
+          </button>
         </div>
       </header>
 
       <section className="card">
-        <p className="hint">マスをクリックする必要はありません。発見済みは相性ランクと記録を表示します。</p>
+        <p className="hint">
+          マスをクリックする必要はありません。発見済みは相性ランクと記録を表示します。
+        </p>
         <div className="collection-table-wrap">
           <table className="collection-table">
             <thead>
@@ -76,12 +86,18 @@ export const CollectionScreen = () => {
                     const cell = stats.get(key);
                     if (!cell) {
                       return (
-                        <td key={t.id} className="ct-cell ct-unknown">？</td>
+                        <td key={t.id} className="ct-cell ct-unknown">
+                          ？
+                        </td>
                       );
                     }
                     const c = getCompat(g.id, t.id);
                     return (
-                      <td key={t.id} className="ct-cell ct-known" title={`${GENRE_BY_ID[g.id].name} × ${THEME_BY_ID[t.id].name}`}>
+                      <td
+                        key={t.id}
+                        className="ct-cell ct-known"
+                        title={`${GENRE_BY_ID[g.id].name} × ${THEME_BY_ID[t.id].name}`}
+                      >
                         <div className="ct-rank">{compatLabel(c)}</div>
                         <div className="ct-numbers">
                           <span>Q{cell.bestQ}</span>

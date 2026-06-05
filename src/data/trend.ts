@@ -1,7 +1,7 @@
 import type { GenreId } from './genres';
+import { GENRE_BY_ID, GENRES } from './genres';
 import type { ThemeId } from './themes';
-import { GENRES, GENRE_BY_ID } from './genres';
-import { THEMES, THEME_BY_ID } from './themes';
+import { THEME_BY_ID, THEMES } from './themes';
 
 export type Trend = {
   genreId: GenreId;
@@ -13,7 +13,7 @@ export type Trend = {
 /** 1トレンドの寿命（ms）。MVPでは6分＝中盤のテンポ */
 const TREND_DURATION_MS = 6 * 60 * 1000;
 
-const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
 export const newTrend = (now: number): Trend => ({
   genreId: pick(GENRES.map((g) => g.id)),

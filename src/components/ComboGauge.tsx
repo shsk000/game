@@ -4,10 +4,10 @@ type Props = {
 };
 
 const TIERS: Array<{ at: number; label: string; cls: string }> = [
-  { at: 50, label: '🔥 FEVER',     cls: 'tier-fever' },
-  { at: 30, label: '⚡ HOT',        cls: 'tier-hot' },
-  { at: 15, label: '✨ Good',       cls: 'tier-good' },
-  { at: 5,  label: 'Combo',         cls: 'tier-soft' },
+  { at: 50, label: '🔥 FEVER', cls: 'tier-fever' },
+  { at: 30, label: '⚡ HOT', cls: 'tier-hot' },
+  { at: 15, label: '✨ Good', cls: 'tier-good' },
+  { at: 5, label: 'Combo', cls: 'tier-soft' },
 ];
 
 const labelFor = (c: number) => {

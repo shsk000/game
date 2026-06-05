@@ -16,10 +16,7 @@ export type AdProvider = {
     label?: string;
   }): void;
 
-  showInterstitial(options?: {
-    onComplete?: () => void;
-    onFail?: () => void;
-  }): void;
+  showInterstitial(options?: { onComplete?: () => void; onFail?: () => void }): void;
 };
 
 /** MVP用モック実装：仮の遅延の後に必ず成功とする */
