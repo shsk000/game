@@ -1,5 +1,13 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { ACHIEVEMENTS } from '../data/achievements';
+import {
+  newCandidate,
+  REFRESH_COST,
+  sumDesignerBonus,
+  sumPrBonus,
+  sumProgrammerSpeed,
+} from '../data/employees';
 import type { GenreId } from '../data/genres';
 import { GENRES } from '../data/genres';
 import type { Scale } from '../data/scales';
@@ -9,11 +17,10 @@ import { THEMES } from '../data/themes';
 import { generateTitle } from '../data/titleGenerator';
 import { ensureTrend, type Trend } from '../data/trend';
 import { computeMetascore, computeRevenue, fanDelta, polishToQuality } from '../utils/metascore';
+import { decayRateFor, INITIAL_SHARE, settleAllWorks, settlePool } from '../utils/sales';
 import type { Records } from '../utils/storage';
 import * as storage from '../utils/storage';
-import type { CurrentProject, Screen, Work } from './types';
-
-const HIRE_COST = 200;
+import type { Achievement, Candidate, CurrentProject, Employee, Screen, Work } from './types';
 
 const persisted = storage.load() ?? storage.defaults();
 
@@ -41,15 +48,65 @@ const computeStageUnlocks = (
   return { unlocked: newGenres.length + newThemes.length, newGenres, newThemes };
 };
 
+const evaluateAchievements = (
+  current: Achievement[],
+  ctx: {
+    library: Work[];
+    fans: number;
+    lifetimeRevenue: number;
+    bestCombo: number;
+    lastWork?: Work;
+  },
+): { unlocked: Achievement[]; newly: Achievement[] } => {
+  const set = new Set(current);
+  const candidates: Achievement[] = [];
+  if (ctx.library.length >= 1) candidates.push('first-release');
+  if (ctx.lastWork?.isMasterpiece || ctx.library.some((w) => w.isMasterpiece)) {
+    candidates.push('first-masterpiece');
+  }
+  if (ctx.lastWork?.ghostBeaten || ctx.library.some((w) => w.ghostBeaten)) {
+    candidates.push('ghost-killer');
+  }
+  if (ctx.bestCombo >= 100) candidates.push('combo-100');
+  if (ctx.fans >= 1000) candidates.push('fan-1k');
+  if (ctx.lifetimeRevenue >= 1_000_000) candidates.push('million-yen');
+  const discovered = new Set(ctx.library.map((w) => `${w.genreId}|${w.themeId}`));
+  if (discovered.size >= 90) candidates.push('collector-half');
+  if (ctx.library.some((w) => w.scale === 'aaa')) candidates.push('aaa-released');
+  const newly: Achievement[] = [];
+  for (const a of candidates) {
+    if (!set.has(a)) {
+      set.add(a);
+      newly.push(a);
+    }
+  }
+  return { unlocked: Array.from(set), newly };
+};
+
 type OfflineReport = {
   earned: number;
   awaySec: number;
 };
 
+const now = () => Date.now();
+
+const computeOfflineEarnings = (
+  lastSeenAt: number,
+  library: Work[],
+): { report: OfflineReport | null; library: Work[] } => {
+  if (!lastSeenAt) return { report: null, library };
+  const awaySec = Math.max(0, (now() - lastSeenAt) / 1000);
+  if (awaySec < 60) return { report: null, library };
+  const { earned, library: updated } = settleAllWorks(library, awaySec);
+  if (earned <= 0) return { report: null, library: updated };
+  return { report: { earned, awaySec }, library: updated };
+};
+
 type Actions = {
   goTo: (screen: Screen) => void;
   startProject: (genreId: GenreId, themeId: ThemeId, scale: Scale) => void;
-  tickEmployees: (deltaSec: number) => void;
+  tickAuto: (deltaSec: number) => void;
+  tickSales: (deltaSec: number) => void;
   addDevelopLoC: (n: number) => void;
   addPolishLoC: (n: number) => void;
   applyComboToPolish: (bonus: number) => void;
@@ -57,10 +114,18 @@ type Actions = {
   reportWPM: (wpm: number) => void;
   finishDevelopment: () => void;
   releaseWork: (opts?: { launchAd?: boolean }) => Work;
-  hireEmployee: () => boolean;
+  buyAdDevBoost: () => void;
+  buyAdPolishBoost: () => void;
+  buyAdSurvey: (g: GenreId, t: ThemeId) => void;
+  triggerBugIfDue: () => void;
+  clearBug: () => void;
+  hireCandidate: () => boolean;
+  refreshCandidate: () => boolean;
+  fireEmployee: (id: string) => void;
   unlockNextScale: () => boolean;
-  buyAdBoost: () => void;
   clearOfflineReport: () => void;
+  finishTutorial: () => void;
+  clearNewlyAchieved: () => void;
   reset: () => void;
 };
 
@@ -69,7 +134,8 @@ export type GameState = {
   funds: number;
   lifetimeRevenue: number;
   fans: number;
-  employees: number;
+  employees: Employee[];
+  candidate: Candidate | null;
   unlockedScales: Scale[];
   unlockedGenres: GenreId[];
   unlockedThemes: ThemeId[];
@@ -77,47 +143,38 @@ export type GameState = {
   library: Work[];
   trend: Trend;
   records: Records;
+  achievements: Achievement[];
+  newlyAchieved: Achievement[];
+  tutorialDone: boolean;
   current: CurrentProject | null;
   lastReleased: Work | null;
-  pendingAdBoost: boolean;
   offlineReport: OfflineReport | null;
 } & Actions;
 
-const now = () => Date.now();
-
-const computeOfflineEarnings = (lastSeenAt: number, fans: number): OfflineReport | null => {
-  if (!lastSeenAt) return null;
-  const awaySec = Math.max(0, (now() - lastSeenAt) / 1000);
-  // 5分以上離席していた場合のみ、ファンが収益を運んでくる
-  if (awaySec < 300) return null;
-  const cappedSec = Math.min(awaySec, 6 * 60 * 60); // 上限 6時間
-  const ratePerSec = Math.sqrt(Math.max(0, fans)) * 0.05;
-  const earned = Math.round(ratePerSec * cappedSec);
-  if (earned <= 0) return null;
-  return { earned, awaySec: cappedSec };
-};
-
-const offlineReport = computeOfflineEarnings(persisted.lastSeenAt, persisted.fans);
+const offlineCalc = computeOfflineEarnings(persisted.lastSeenAt, persisted.library);
 const initialTrend = ensureTrend(persisted.trend, now());
 
 export const useGameStore = create<GameState>()(
   subscribeWithSelector((set, get) => ({
     screen: 'plan',
-    funds: persisted.funds + (offlineReport?.earned ?? 0),
-    lifetimeRevenue: persisted.lifetimeRevenue + (offlineReport?.earned ?? 0),
+    funds: persisted.funds + (offlineCalc.report?.earned ?? 0),
+    lifetimeRevenue: persisted.lifetimeRevenue + (offlineCalc.report?.earned ?? 0),
     fans: persisted.fans,
     employees: persisted.employees,
+    candidate: newCandidate(),
     unlockedScales: persisted.unlockedScales,
     unlockedGenres: persisted.unlockedGenres,
     unlockedThemes: persisted.unlockedThemes,
     ghosts: persisted.ghosts,
-    library: persisted.library,
+    library: offlineCalc.library,
     trend: initialTrend,
     records: persisted.records,
+    achievements: persisted.achievements,
+    newlyAchieved: [],
+    tutorialDone: persisted.tutorialDone,
     current: null,
     lastReleased: null,
-    pendingAdBoost: false,
-    offlineReport,
+    offlineReport: offlineCalc.report,
 
     goTo: (screen) => set({ screen }),
 
@@ -134,27 +191,83 @@ export const useGameStore = create<GameState>()(
         polishLoC: 0,
         maxCombo: 0,
         comboBonus: 0,
+        devBoostRemainingSec: 0,
+        polishBoostRemainingSec: 0,
+        bugPhrase: null,
         startedAt: performance.now(),
         finishedAt: null,
-        adBoostActive: get().pendingAdBoost,
+        adBoostActive: false,
+        surveyedCompat: null,
       };
       set({
         current: project,
         screen: 'develop',
-        pendingAdBoost: false,
         trend: ensureTrend(get().trend, now()),
       });
     },
 
-    tickEmployees: (deltaSec) => {
+    tickAuto: (deltaSec) => {
       const cur = get().current;
-      if (!cur || cur.finishedAt !== null) return;
-      const employees = get().employees;
-      if (employees <= 0 && !cur.adBoostActive) return;
-      const rate = employees * 0.5 + (cur.adBoostActive ? 0.5 : 0);
-      const add = rate * deltaSec;
-      const newDone = Math.min(cur.requiredLoC, cur.doneLoC + add);
-      set({ current: { ...cur, doneLoC: newDone } });
+      if (!cur) return;
+      const progSpeed = sumProgrammerSpeed(get().employees);
+      const boost = cur.devBoostRemainingSec > 0 ? 2 : 1;
+      const polishBoost = cur.polishBoostRemainingSec > 0;
+      const add = progSpeed * deltaSec * boost;
+      if (cur.finishedAt === null) {
+        const newDone = Math.min(cur.requiredLoC, cur.doneLoC + add);
+        set({
+          current: {
+            ...cur,
+            doneLoC: newDone,
+            devBoostRemainingSec: Math.max(0, cur.devBoostRemainingSec - deltaSec),
+            polishBoostRemainingSec: Math.max(0, cur.polishBoostRemainingSec - deltaSec),
+          },
+        });
+      } else if (polishBoost) {
+        set({
+          current: {
+            ...cur,
+            polishBoostRemainingSec: Math.max(0, cur.polishBoostRemainingSec - deltaSec),
+          },
+        });
+      }
+    },
+
+    tickSales: (deltaSec) => {
+      if (deltaSec <= 0) return;
+      const lib = get().library;
+      let earned = 0;
+      const updated = lib.map((w) => {
+        if (!w.selling) return w;
+        const r = settlePool(w.salesPool, w.decayPerSec, deltaSec);
+        earned += r.payout;
+        return {
+          ...w,
+          salesPool: r.remaining,
+          totalRevenue: w.totalRevenue + r.payout,
+          selling: !r.sold,
+        };
+      });
+      if (earned <= 0) {
+        // selling 状態が変わったケースだけ反映
+        const changed = updated.some((w, i) => w.selling !== lib[i].selling);
+        if (changed) set({ library: updated });
+        return;
+      }
+      const s = get();
+      const newAch = evaluateAchievements(s.achievements, {
+        library: updated,
+        fans: s.fans,
+        lifetimeRevenue: s.lifetimeRevenue + earned,
+        bestCombo: s.records.bestCombo,
+      });
+      set({
+        library: updated,
+        funds: s.funds + earned,
+        lifetimeRevenue: s.lifetimeRevenue + earned,
+        achievements: newAch.unlocked,
+        newlyAchieved: [...s.newlyAchieved, ...newAch.newly],
+      });
     },
 
     addDevelopLoC: (n) => {
@@ -167,7 +280,8 @@ export const useGameStore = create<GameState>()(
     addPolishLoC: (n) => {
       const cur = get().current;
       if (!cur) return;
-      set({ current: { ...cur, polishLoC: cur.polishLoC + n } });
+      const boost = cur.polishBoostRemainingSec > 0 ? 2 : 1;
+      set({ current: { ...cur, polishLoC: cur.polishLoC + n * boost } });
     },
 
     applyComboToPolish: (bonus) => {
@@ -213,11 +327,22 @@ export const useGameStore = create<GameState>()(
       const cur = get().current;
       if (!cur) throw new Error('no current project');
       const def = SCALE_BY_ID[cur.scale];
-      const quality = polishToQuality(def.baseQuality, cur.polishLoC, cur.comboBonus);
+      const designerBonus = sumDesignerBonus(get().employees);
+      const prBonus = sumPrBonus(get().employees);
+      const quality = polishToQuality(
+        def.baseQuality,
+        cur.polishLoC,
+        cur.comboBonus,
+        designerBonus,
+      );
       const trend = get().trend;
       const meta = computeMetascore(quality, cur.genreId, cur.themeId, trend);
       const launchAdActive = !!opts?.launchAd;
-      const revenue = computeRevenue(
+      const pioneer = !get().library.some(
+        (w) => w.genreId === cur.genreId && w.themeId === cur.themeId,
+      );
+      const pioneerBonus = pioneer ? 0.3 : 0;
+      const totalRevenue = computeRevenue(
         meta.metascore,
         cur.genreId,
         cur.themeId,
@@ -225,12 +350,16 @@ export const useGameStore = create<GameState>()(
         trend,
         get().fans,
         launchAdActive,
+        prBonus,
+        pioneerBonus,
       );
-      const gainedFans = Math.max(0, fanDelta(meta.metascore));
-      const newFans = Math.max(0, get().fans + fanDelta(meta.metascore));
+      const initialRevenue = Math.round(totalRevenue * INITIAL_SHARE);
+      const salesPool = totalRevenue - initialRevenue;
+      const decayPerSec = decayRateFor(meta.metascore);
+      const gainedFans = Math.max(0, fanDelta(meta.metascore, prBonus));
+      const newFans = Math.max(0, get().fans + fanDelta(meta.metascore, prBonus));
       const developSec = cur.finishedAt !== null ? (cur.finishedAt - cur.startedAt) / 1000 : 0;
       const prevGhost = get().ghosts[cur.scale];
-      // 完成時に再計算（finishDevelopment ですでに更新しているが、ライブラリ記録用に再判定）
       const ghostBeaten = prevGhost !== null && developSec <= prevGhost;
 
       const work: Work = {
@@ -243,23 +372,20 @@ export const useGameStore = create<GameState>()(
         metascore: meta.metascore,
         isMasterpiece: meta.isMasterpiece,
         developSec,
-        revenue,
+        initialRevenue,
+        salesPool,
+        initialSalesPool: salesPool,
+        decayPerSec,
+        totalRevenue: initialRevenue, // 初動はすでに加算した分のみ。販売で積み上がる
+        selling: salesPool > 0,
         fansGained: gainedFans,
         ghostBeaten,
         launchAdUsed: launchAdActive,
+        pioneer,
+        releasedAt: Date.now(),
         createdAt: Date.now(),
       };
 
-      // 記録更新
-      const rec = get().records;
-      const newRec: Records = {
-        bestMetascore: Math.max(rec.bestMetascore, meta.metascore),
-        bestRevenue: Math.max(rec.bestRevenue, revenue),
-        bestCombo: rec.bestCombo,
-        bestWPM: rec.bestWPM,
-      };
-
-      // ライブラリ更新後のアンロック判定
       const newLibrary = [work, ...get().library];
       const stageUnlock = computeStageUnlocks(
         get().unlockedGenres,
@@ -267,12 +393,30 @@ export const useGameStore = create<GameState>()(
         newLibrary.length,
       );
 
+      const rec = get().records;
+      const newRec: Records = {
+        bestMetascore: Math.max(rec.bestMetascore, meta.metascore),
+        bestRevenue: Math.max(rec.bestRevenue, totalRevenue),
+        bestCombo: rec.bestCombo,
+        bestWPM: rec.bestWPM,
+      };
+
+      const newAch = evaluateAchievements(get().achievements, {
+        library: newLibrary,
+        fans: newFans,
+        lifetimeRevenue: get().lifetimeRevenue + initialRevenue,
+        bestCombo: rec.bestCombo,
+        lastWork: work,
+      });
+
       set({
         library: newLibrary,
-        funds: get().funds + revenue,
-        lifetimeRevenue: get().lifetimeRevenue + revenue,
+        funds: get().funds + initialRevenue,
+        lifetimeRevenue: get().lifetimeRevenue + initialRevenue,
         fans: newFans,
         records: newRec,
+        achievements: newAch.unlocked,
+        newlyAchieved: [...get().newlyAchieved, ...newAch.newly],
         unlockedGenres: [...get().unlockedGenres, ...stageUnlock.newGenres],
         unlockedThemes: [...get().unlockedThemes, ...stageUnlock.newThemes],
         lastReleased: work,
@@ -282,10 +426,70 @@ export const useGameStore = create<GameState>()(
       return work;
     },
 
-    hireEmployee: () => {
-      if (get().funds < HIRE_COST) return false;
-      set({ funds: get().funds - HIRE_COST, employees: get().employees + 1 });
+    buyAdDevBoost: () => {
+      const cur = get().current;
+      if (!cur || cur.finishedAt !== null) return;
+      set({ current: { ...cur, devBoostRemainingSec: cur.devBoostRemainingSec + 30 } });
+    },
+
+    buyAdPolishBoost: () => {
+      const cur = get().current;
+      if (!cur) return;
+      set({ current: { ...cur, polishBoostRemainingSec: cur.polishBoostRemainingSec + 30 } });
+    },
+
+    buyAdSurvey: (g, t) => {
+      const cur = get().current;
+      const surveyed = +getCompatPublic(g, t).toFixed(2);
+      if (cur) {
+        set({ current: { ...cur, surveyedCompat: surveyed } });
+      } else {
+        // 企画中：ストアにスナップショットを残すために state を借りる手段がないため、
+        // PlanScreen 側で setState 呼び出しに頼る（このアクションは経由しない）
+      }
+    },
+
+    triggerBugIfDue: () => {
+      const cur = get().current;
+      if (!cur || cur.finishedAt !== null || cur.bugPhrase) return;
+      // 15% で発生（呼び出し側で間引き）
+      if (Math.random() < 0.15) {
+        const candidates = ['ばぐしゅうせい', 'くらっしゅかいひ', 'ふぐあいたいおう', 'えらーろぐ'];
+        const phrase = candidates[Math.floor(Math.random() * candidates.length)];
+        set({ current: { ...cur, bugPhrase: phrase } });
+      }
+    },
+
+    clearBug: () => {
+      const cur = get().current;
+      if (!cur) return;
+      set({ current: { ...cur, bugPhrase: null } });
+    },
+
+    hireCandidate: () => {
+      const cand = get().candidate;
+      if (!cand) return false;
+      if (get().funds < cand.wage) return false;
+      const emp: Employee = {
+        ...cand,
+        id: `e-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      };
+      set({
+        funds: get().funds - cand.wage,
+        employees: [...get().employees, emp],
+        candidate: newCandidate(),
+      });
       return true;
+    },
+
+    refreshCandidate: () => {
+      if (get().funds < REFRESH_COST) return false;
+      set({ funds: get().funds - REFRESH_COST, candidate: newCandidate() });
+      return true;
+    },
+
+    fireEmployee: (id) => {
+      set({ employees: get().employees.filter((e) => e.id !== id) });
     },
 
     unlockNextScale: () => {
@@ -299,11 +503,9 @@ export const useGameStore = create<GameState>()(
       return true;
     },
 
-    buyAdBoost: () => {
-      set({ pendingAdBoost: true });
-    },
-
     clearOfflineReport: () => set({ offlineReport: null }),
+    finishTutorial: () => set({ tutorialDone: true }),
+    clearNewlyAchieved: () => set({ newlyAchieved: [] }),
 
     reset: () => {
       storage.reset();
@@ -314,6 +516,7 @@ export const useGameStore = create<GameState>()(
         lifetimeRevenue: d.lifetimeRevenue,
         fans: d.fans,
         employees: d.employees,
+        candidate: newCandidate(),
         unlockedScales: d.unlockedScales,
         unlockedGenres: d.unlockedGenres,
         unlockedThemes: d.unlockedThemes,
@@ -321,16 +524,18 @@ export const useGameStore = create<GameState>()(
         library: d.library,
         trend: ensureTrend(null, now()),
         records: d.records,
+        achievements: [],
+        newlyAchieved: [],
+        tutorialDone: false,
         current: null,
         lastReleased: null,
-        pendingAdBoost: false,
         offlineReport: null,
       });
     },
   })),
 );
 
-// セーブ：永続化対象スライスが変わるたびに保存
+// セーブ
 useGameStore.subscribe(
   (s) => ({
     funds: s.funds,
@@ -344,10 +549,12 @@ useGameStore.subscribe(
     library: s.library,
     trend: s.trend,
     records: s.records,
+    achievements: s.achievements,
+    tutorialDone: s.tutorialDone,
   }),
   (snap) => {
     storage.save({
-      version: 2,
+      version: 3,
       ...snap,
       lastSeenAt: now(),
     });
@@ -355,12 +562,12 @@ useGameStore.subscribe(
   { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
 );
 
-// 離席時刻の定期更新（5秒に1回程度で十分）
+// 離席時刻更新
 if (typeof window !== 'undefined') {
   setInterval(() => {
     const s = useGameStore.getState();
     storage.save({
-      version: 2,
+      version: 3,
       funds: s.funds,
       lifetimeRevenue: s.lifetimeRevenue,
       fans: s.fans,
@@ -372,10 +579,17 @@ if (typeof window !== 'undefined') {
       library: s.library,
       trend: s.trend,
       records: s.records,
+      achievements: s.achievements,
+      tutorialDone: s.tutorialDone,
       lastSeenAt: now(),
     });
   }, 5000);
 }
 
-export const HIRE_EMPLOYEE_COST = HIRE_COST;
+// 内部利用：相性の安全な取得（循環依存回避のため lazy require）
+import { getCompat } from '../data/compatibility';
+
+const getCompatPublic = (g: GenreId, t: ThemeId) => getCompat(g, t);
+
 export const ALL_SCALES = SCALES;
+export const ALL_ACHIEVEMENTS = ACHIEVEMENTS;

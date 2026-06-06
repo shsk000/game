@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
+import { ads } from '../../ads/AdProvider';
 import { JacketView } from '../../components/JacketView';
+import { Tutorial } from '../../components/Tutorial';
+import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
+import { compatLabel, getCompat } from '../../data/compatibility';
 import type { GenreId } from '../../data/genres';
 import { GENRE_BY_ID, GENRES } from '../../data/genres';
 import type { Scale } from '../../data/scales';
@@ -19,10 +23,12 @@ export const PlanScreen = () => {
   const fans = useGameStore((s) => s.fans);
   const employees = useGameStore((s) => s.employees);
   const library = useGameStore((s) => s.library);
-  const pendingAdBoost = useGameStore((s) => s.pendingAdBoost);
   const trend = useGameStore((s) => s.trend);
   const offlineReport = useGameStore((s) => s.offlineReport);
   const clearOfflineReport = useGameStore((s) => s.clearOfflineReport);
+  const newlyAchieved = useGameStore((s) => s.newlyAchieved);
+  const clearNewlyAchieved = useGameStore((s) => s.clearNewlyAchieved);
+  const tutorialDone = useGameStore((s) => s.tutorialDone);
 
   const firstGenre = (unlockedGenres[0] ?? GENRES[0].id) as GenreId;
   const firstTheme = (unlockedThemes[0] ?? THEMES[0].id) as ThemeId;
@@ -30,6 +36,8 @@ export const PlanScreen = () => {
   const [genreId, setGenreId] = useState<GenreId>(firstGenre);
   const [themeId, setThemeId] = useState<ThemeId>(firstTheme);
   const [scale, setScale] = useState<Scale>('mini');
+  const [surveyedCompat, setSurveyedCompat] = useState<number | null>(null);
+  const [adRunning, setAdRunning] = useState(false);
 
   useEffect(() => {
     if (!unlockedGenres.includes(genreId)) setGenreId(unlockedGenres[0] as GenreId);
@@ -38,8 +46,28 @@ export const PlanScreen = () => {
     if (!unlockedThemes.includes(themeId)) setThemeId(unlockedThemes[0] as ThemeId);
   }, [unlockedThemes, themeId]);
 
+  useEffect(() => {
+    setSurveyedCompat(null);
+  }, [genreId, themeId]);
+
   const isTrendyGenre = trend && trend.genreId === genreId;
   const isTrendyTheme = trend && trend.themeId === themeId;
+
+  const pioneer = !library.some((w) => w.genreId === genreId && w.themeId === themeId);
+  const sellingCount = library.filter((w) => w.selling).length;
+
+  const handleSurvey = () => {
+    if (adRunning) return;
+    setAdRunning(true);
+    ads.showRewarded({
+      label: 'survey',
+      onComplete: () => {
+        setSurveyedCompat(getCompat(genreId, themeId));
+        setAdRunning(false);
+      },
+      onFail: () => setAdRunning(false),
+    });
+  };
 
   return (
     <div className="screen plan-screen">
@@ -48,8 +76,9 @@ export const PlanScreen = () => {
         <div className="topbar-meta">
           <span>💰 ¥{funds.toLocaleString()}</span>
           <span>👥 ファン {fans.toLocaleString()}</span>
-          <span>🧑‍💻 {employees}人</span>
+          <span>🧑‍💻 {employees.length}人</span>
           <span>📚 {library.length}本</span>
+          {sellingCount > 0 && <span>📈 販売中 {sellingCount}本</span>}
           <button className="link-btn" onClick={() => goTo('office')}>
             オフィスへ
           </button>
@@ -71,6 +100,25 @@ export const PlanScreen = () => {
           </p>
           <button className="link-btn" onClick={clearOfflineReport}>
             受け取った（閉じる）
+          </button>
+        </section>
+      )}
+
+      {newlyAchieved.length > 0 && (
+        <section className="card achievement-toast">
+          <h2>🏆 実績解除！</h2>
+          <ul>
+            {newlyAchieved.map((id) => {
+              const def = ACHIEVEMENT_BY_ID[id];
+              return (
+                <li key={id}>
+                  {def.emoji} <strong>{def.name}</strong> — {def.desc}
+                </li>
+              );
+            })}
+          </ul>
+          <button className="link-btn" onClick={clearNewlyAchieved}>
+            閉じる
           </button>
         </section>
       )}
@@ -154,16 +202,27 @@ export const PlanScreen = () => {
                 <span className="trend-hit"> 🔥 トレンド合致！</span>
               )}
             </p>
+            {pioneer && <p className="pioneer-pill">🌱 新規開拓ボーナス +30%</p>}
             <p className="hint">※相性は完成後に判明します（隠しパラメータ）</p>
-            {pendingAdBoost && (
-              <p className="ad-active">📺 広告ブースト適用予定（次の開発で自動進行+0.5/秒）</p>
-            )}
+            <div className="survey-row">
+              {surveyedCompat !== null ? (
+                <p style={{ color: 'var(--warn)' }}>
+                  相性: {compatLabel(surveyedCompat)} ({surveyedCompat.toFixed(2)}x)
+                </p>
+              ) : (
+                <button className="link-btn" onClick={handleSurvey} disabled={adRunning}>
+                  {adRunning ? '広告再生中…' : '📺 市場調査（広告で相性を一部開示）'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
         <button className="primary-btn" onClick={() => startProject(genreId, themeId, scale)}>
           ▶ 開発開始
         </button>
       </section>
+
+      {!tutorialDone && <Tutorial />}
     </div>
   );
 };

@@ -29,7 +29,7 @@ export const CollectionScreen = () => {
       };
       cur.count += 1;
       cur.bestQ = Math.max(cur.bestQ, w.quality);
-      cur.bestRevenue = Math.max(cur.bestRevenue, w.revenue);
+      cur.bestRevenue = Math.max(cur.bestRevenue, w.totalRevenue);
       cur.bestMeta = Math.max(cur.bestMeta, w.metascore);
       map.set(key, cur);
     }

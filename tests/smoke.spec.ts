@@ -31,6 +31,7 @@ async function typeUntil(page: Page, doneLocator: string, maxKeys = 1500): Promi
 async function resetAndOpen(page: Page) {
   // localStorage を初回のみクリア（リロードでは保持）
   await page.addInitScript(() => {
+    (window as unknown as { __sfxMuted: boolean }).__sfxMuted = true;
     try {
       if (!sessionStorage.getItem('__cleared')) {
         localStorage.clear();
@@ -39,6 +40,14 @@ async function resetAndOpen(page: Page) {
     } catch {}
   });
   await page.goto(BASE);
+  await dismissTutorial(page);
+}
+
+async function dismissTutorial(page: Page) {
+  const skip = page.getByRole('button', { name: /スキップ|始める/ });
+  if ((await skip.count()) > 0) {
+    await skip.first().click({ trial: false });
+  }
 }
 
 test('localStorageリセット → トップが企画画面で表示される', async ({ page }) => {
@@ -115,7 +124,7 @@ test('企画→開発→ポリッシュ→リリースのコアループが回�
 
   await page.getByRole('button', { name: '次へ（オフィス）' }).click();
   await expect(page.locator('h1')).toContainText('オフィス');
-  await expect(page.getByText(/累計売上/)).toBeVisible();
+  await expect(page.getByText(/累計売上:/)).toBeVisible();
 });
 
 test('図鑑画面がリリース後に発見済み1マスを表示する', async ({ page }) => {
@@ -138,11 +147,21 @@ test('セーブが永続化されてリロードでも累計が残る', async ({
   expect(reached).toBe(true);
   await page.getByRole('button', { name: '🚀 リリースする' }).click();
   await page.getByRole('button', { name: '次へ（オフィス）' }).click();
-  const beforeText = await page.getByText(/累計売上/).textContent();
+  const beforeText = await page.getByText(/累計売上:/).textContent();
   expect(beforeText).toBeTruthy();
   await page.reload();
+  await dismissTutorial(page);
   await expect(page.locator('h1')).toContainText('企画会議');
   await page.getByRole('button', { name: 'オフィスへ' }).click();
-  const afterText = await page.getByText(/累計売上/).textContent();
+  const afterText = await page.getByText(/累計売上:/).textContent();
   expect(afterText).toBe(beforeText);
+});
+
+test('採用候補が表示されオフィスで雇用できる', async ({ page }) => {
+  await resetAndOpen(page);
+  await page.getByRole('button', { name: 'オフィスへ' }).click();
+  await expect(page.locator('h1')).toContainText('オフィス');
+  await expect(page.getByRole('heading', { name: '採用' })).toBeVisible();
+  // Candidate card present
+  await expect(page.locator('.candidate-card')).toBeVisible();
 });

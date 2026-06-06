@@ -20,9 +20,9 @@ export const computeMetascore = (
   trend: Trend | null,
 ): MetascoreResult => {
   const compat = getCompat(genreId, themeId);
-  const trendBoost = (trendMultiplier(trend, genreId, themeId) - 1) * 10; // +0, +3, +7
+  const trendBoost = (trendMultiplier(trend, genreId, themeId) - 1) * 10;
   const base = quality * Math.min(1.0, compat * 0.85) + trendBoost;
-  const variance = (Math.random() - 0.5) * 10; // ±5
+  const variance = (Math.random() - 0.5) * 10;
   const isMasterpiece = Math.random() < 0.03;
   const bonus = isMasterpiece ? 25 : 0;
   return {
@@ -32,12 +32,7 @@ export const computeMetascore = (
 };
 
 /**
- * 売上計算（設計書 7-E）。
- *   売上 = 基礎単価 × 必要LoC係数 × (メタ/50) × 相性 × トレンド × ファン係数
- * MVPでは:
- *   - 基礎単価 = baseUnit
- *   - 必要LoC係数 = 1 + ln(requiredLoC/8)   ※miniを1.0基準にした緩やかな増加
- *   - ファン係数 = 1 + sqrt(fans) / 50
+ * 売上計算。広報ボーナス・新規開拓ボーナスを加味。
  */
 export const computeRevenue = (
   metascore: number,
@@ -47,6 +42,8 @@ export const computeRevenue = (
   trend: Trend | null,
   fans: number,
   launchAdActive: boolean,
+  prBonus = 0,
+  pioneerBonus = 0,
 ): number => {
   const compat = getCompat(genreId, themeId);
   const def = SCALE_BY_ID[scale];
@@ -54,7 +51,18 @@ export const computeRevenue = (
   const trendMul = trendMultiplier(trend, genreId, themeId);
   const fanMul = 1 + Math.sqrt(Math.max(0, fans)) / 50;
   const launchMul = launchAdActive ? 1.5 : 1.0;
-  const v = def.baseUnit * locMul * (metascore / 50) * compat * trendMul * fanMul * launchMul;
+  const prMul = 1 + prBonus;
+  const pioneerMul = 1 + pioneerBonus;
+  const v =
+    def.baseUnit *
+    locMul *
+    (metascore / 50) *
+    compat *
+    trendMul *
+    fanMul *
+    launchMul *
+    prMul *
+    pioneerMul;
   return Math.max(0, Math.round(v));
 };
 
@@ -69,22 +77,28 @@ export const scoreFlavor = (m: number): string => {
 /**
  * ポリッシュによる品質上昇（逓減カーブ）。
  *   Q = base + (100 - base) × (1 - exp(-polishLoC / TAU))
- *   TAU=30 ⇒ 30LoC磨くと残差の約63%、60LoCで約86%が埋まる。
- * → Q90 以降が指数的に伸びにくい＝「どこで切り上げるか」の判断が生まれる
  */
-export const polishToQuality = (baseQuality: number, polishLoC: number, comboBonus = 0): number => {
+export const polishToQuality = (
+  baseQuality: number,
+  polishLoC: number,
+  comboBonus = 0,
+  designerBonus = 0,
+): number => {
   const TAU = 30;
   const effective = polishLoC * (1 + comboBonus);
   const ratio = 1 - Math.exp(-effective / TAU);
-  const q = baseQuality + (100 - baseQuality) * ratio;
+  const q = baseQuality + designerBonus + (100 - baseQuality - designerBonus) * ratio;
   return Math.min(100, Math.round(q));
 };
 
-/** リリース時のファン増分。メタが高いほどジワッと、低いと減ることもある */
-export const fanDelta = (metascore: number): number => {
-  if (metascore >= 90) return 80;
-  if (metascore >= 70) return 40;
-  if (metascore >= 50) return 15;
-  if (metascore >= 30) return 0;
-  return -5;
+/** リリース時のファン増分。広報ボーナスで底上げ */
+export const fanDelta = (metascore: number, prBonus = 0): number => {
+  let base: number;
+  if (metascore >= 90) base = 80;
+  else if (metascore >= 70) base = 40;
+  else if (metascore >= 50) base = 15;
+  else if (metascore >= 30) base = 0;
+  else base = -5;
+  if (base <= 0) return base;
+  return Math.round(base * (1 + prBonus));
 };

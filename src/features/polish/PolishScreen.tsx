@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { ads } from '../../ads/AdProvider';
 import { ComboGauge } from '../../components/ComboGauge';
 import { JacketView } from '../../components/JacketView';
 import { TypingPanel } from '../../components/TypingPanel';
@@ -11,10 +12,14 @@ import { useTyping } from '../develop/useTyping';
 export const PolishScreen = () => {
   const current = useGameStore((s) => s.current);
   const ghosts = useGameStore((s) => s.ghosts);
+  const employees = useGameStore((s) => s.employees);
   const addPolishLoC = useGameStore((s) => s.addPolishLoC);
   const releaseWork = useGameStore((s) => s.releaseWork);
   const applyComboToPolish = useGameStore((s) => s.applyComboToPolish);
   const reportCombo = useGameStore((s) => s.reportCombo);
+  const buyAdPolishBoost = useGameStore((s) => s.buyAdPolishBoost);
+
+  const [adRunning, setAdRunning] = useState(false);
 
   const phrases = useMemo(() => {
     if (!current) return [];
@@ -27,7 +32,6 @@ export const PolishScreen = () => {
     paused: !current,
     onCorrect: (c) => {
       reportCombo(c);
-      // ノリ中はポリッシュ効率に加点（最大 +0.5）
       const bonus = Math.min(0.5, c / 100);
       applyComboToPolish(bonus);
     },
@@ -36,12 +40,33 @@ export const PolishScreen = () => {
   if (!current) return null;
 
   const scaleDef = SCALE_BY_ID[current.scale];
-  const projectedQ = polishToQuality(scaleDef.baseQuality, current.polishLoC, current.comboBonus);
+  const designerBonus = employees
+    .filter((e) => e.role === 'designer')
+    .reduce((a, b) => a + b.power, 0);
+  const projectedQ = polishToQuality(
+    scaleDef.baseQuality,
+    current.polishLoC,
+    current.comboBonus,
+    designerBonus,
+  );
   const developSec =
     current.finishedAt !== null ? (current.finishedAt - current.startedAt) / 1000 : 0;
-  // ゴースト更新判定（完成時点で更新済みのため、ghosts[scale] === developSec の近似で判定）
   const ghostBeaten =
     ghosts[current.scale] !== null && Math.abs((ghosts[current.scale] ?? 0) - developSec) < 0.001;
+  const polishBoost = current.polishBoostRemainingSec > 0;
+
+  const runPolishBoost = () => {
+    if (adRunning || polishBoost) return;
+    setAdRunning(true);
+    ads.showRewarded({
+      label: 'polish-boost',
+      onComplete: () => {
+        buyAdPolishBoost();
+        setAdRunning(false);
+      },
+      onFail: () => setAdRunning(false),
+    });
+  };
 
   return (
     <div className="screen polish-screen">
@@ -68,6 +93,15 @@ export const PolishScreen = () => {
             {current.comboBonus > 0 && (
               <span className="combo-bonus-note"> ×{(1 + current.comboBonus).toFixed(2)}</span>
             )}
+            {designerBonus > 0 && (
+              <span className="designer-bonus-note"> +デザイナー{designerBonus}</span>
+            )}
+            {polishBoost && (
+              <span className="ad-active-note">
+                {' '}
+                📺×2 残{Math.ceil(current.polishBoostRemainingSec)}s
+              </span>
+            )}
           </div>
           <div className="progress-bar">
             <div className="progress-fill polish-fill" style={{ width: `${projectedQ}%` }} />
@@ -78,6 +112,19 @@ export const PolishScreen = () => {
           <span>磨いた行数: {current.polishLoC}</span>
           <span>最大コンボ: {current.maxCombo}</span>
           <span className="aux-misses">ミス: {failCount}</span>
+        </div>
+        <div className="ad-block">
+          <button
+            className="link-btn ad-btn"
+            disabled={adRunning || polishBoost}
+            onClick={runPolishBoost}
+          >
+            {polishBoost
+              ? `📺 ポリッシュ効率2倍（残${Math.ceil(current.polishBoostRemainingSec)}s）`
+              : adRunning
+                ? '広告再生中…'
+                : '📺 広告でポリッシュ効率2倍（30秒）'}
+          </button>
         </div>
         <button className="primary-btn" onClick={() => releaseWork()}>
           🚀 リリースする

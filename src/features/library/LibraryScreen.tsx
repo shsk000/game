@@ -28,10 +28,18 @@ export const LibraryScreen = () => {
             const genre = GENRE_BY_ID[w.genreId];
             const theme = THEME_BY_ID[w.themeId];
             const scale = SCALE_BY_ID[w.scale];
+            const sellingRatio =
+              w.initialSalesPool > 0
+                ? Math.max(0, Math.min(1, w.salesPool / w.initialSalesPool))
+                : 0;
             return (
               <div key={w.id} className="library-card">
                 <JacketView genreId={w.genreId} themeId={w.themeId} title={w.title} size="md" />
                 <div className="library-meta">
+                  <div className="lib-title-row">
+                    {w.pioneer && '🌱 '}
+                    {w.title}
+                  </div>
                   <div className="lib-tags">
                     {genre.emoji}
                     {genre.name} × {theme.emoji}
@@ -43,9 +51,24 @@ export const LibraryScreen = () => {
                     {w.isMasterpiece && ' 🌟'}
                   </div>
                   <div className="lib-stats">
-                    Q{w.quality} ／ ⏱ {w.developSec.toFixed(2)}秒 ／ 💰 ¥
-                    {w.revenue.toLocaleString()}
+                    Q{w.quality} ／ ⏱ {w.developSec.toFixed(2)}秒 ／ 💰 初動 ¥
+                    {w.initialRevenue.toLocaleString()} ／ 累計 ¥{w.totalRevenue.toLocaleString()}
                   </div>
+                  {w.selling ? (
+                    <div className="lib-selling">
+                      <div className="lib-selling-bar">
+                        <div
+                          className="lib-selling-fill"
+                          style={{ width: `${sellingRatio * 100}%` }}
+                        />
+                      </div>
+                      <div className="lib-selling-label">
+                        販売中 残¥{w.salesPool.toLocaleString()}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="lib-sold-out">完売 ¥{w.totalRevenue.toLocaleString()}</div>
+                  )}
                 </div>
               </div>
             );
