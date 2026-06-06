@@ -74,21 +74,53 @@ export const scoreFlavor = (m: number): string => {
   return 'バグだらけ';
 };
 
+export type QualityBreakdown = {
+  base: number;
+  categories: number;
+  employees: number;
+  performance: number;
+  ads: number;
+  variance: number;
+};
+
 /**
- * ポリッシュによる品質上昇（逓減カーブ）。
- *   Q = base + (100 - base) × (1 - exp(-polishLoC / TAU))
+ * 4レバー方式の品質計算。
+ *   Q = 30 + cap(20, cat) + cap(25, emp) + cap(20, perf) + cap(15, ad) + variance(±5)
  */
-export const polishToQuality = (
-  baseQuality: number,
-  polishLoC: number,
-  comboBonus = 0,
-  designerBonus = 0,
-): number => {
-  const TAU = 30;
-  const effective = polishLoC * (1 + comboBonus);
-  const ratio = 1 - Math.exp(-effective / TAU);
-  const q = baseQuality + designerBonus + (100 - baseQuality - designerBonus) * ratio;
-  return Math.min(100, Math.round(q));
+export const computeQuality = (args: {
+  scaleBase: number;
+  categoryHit: number;
+  employeeHit: number;
+  performance: number;
+  adBonus: number;
+}): { Q: number; breakdown: QualityBreakdown } => {
+  const base = 30;
+  const categories = Math.max(0, Math.min(20, args.categoryHit));
+  const employees = Math.max(0, Math.min(25, args.employeeHit));
+  const performance = Math.max(0, Math.min(20, args.performance));
+  const ads = Math.max(0, Math.min(15, args.adBonus));
+  const variance = Math.round((Math.random() - 0.5) * 10); // ±5
+  const sum = base + categories + employees + performance + ads + variance;
+  const Q = clamp(sum, 0, 100);
+  return {
+    Q: Math.round(Q),
+    breakdown: { base, categories, employees, performance, ads, variance },
+  };
+};
+
+/**
+ * タイピングパフォーマンスから 0..20 のスコアを算出。
+ *   wpm/10 (0..7) + maxCombo/15 (0..7) + accuracy*6 (0..6 → cap 7) → 合計を 0..20 にクランプ
+ */
+export const computePerformanceScore = (perf: {
+  wpm: number;
+  maxCombo: number;
+  accuracy: number;
+}): number => {
+  const wpmPart = clamp(perf.wpm / 10, 0, 7);
+  const comboPart = clamp(perf.maxCombo / 15, 0, 7);
+  const accPart = clamp(perf.accuracy * 6, 0, 7);
+  return clamp(Math.round(wpmPart + comboPart + accPart), 0, 20);
 };
 
 /** リリース時のファン増分。広報ボーナスで底上げ */

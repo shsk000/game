@@ -3,7 +3,6 @@ import { DevelopScreen } from './features/develop/DevelopScreen';
 import { LibraryScreen } from './features/library/LibraryScreen';
 import { OfficeScreen } from './features/office/OfficeScreen';
 import { PlanScreen } from './features/plan/PlanScreen';
-import { PolishScreen } from './features/polish/PolishScreen';
 import { ReleaseScreen } from './features/release/ReleaseScreen';
 import { useGameStore } from './state/gameStore';
 
@@ -14,8 +13,6 @@ export default function App() {
       return <PlanScreen />;
     case 'develop':
       return <DevelopScreen />;
-    case 'polish':
-      return <PolishScreen />;
     case 'release':
       return <ReleaseScreen />;
     case 'office':

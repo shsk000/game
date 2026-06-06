@@ -17,6 +17,8 @@ type Options = {
   onCorrect?: (combo: number) => void;
   /** WPM（成功打鍵/分）が更新されたとき */
   onWpm?: (wpm: number) => void;
+  /** 正確度（0〜1）が更新されたとき。各キー入力ごとに発火 */
+  onAccuracy?: (acc: number) => void;
 };
 
 export const useTyping = ({
@@ -26,6 +28,7 @@ export const useTyping = ({
   onComboBreak,
   onCorrect,
   onWpm,
+  onAccuracy,
 }: Options) => {
   const engineRef = useRef<NanoTypeJp | null>(null);
   if (engineRef.current === null) engineRef.current = new NanoTypeJp();
@@ -35,20 +38,26 @@ export const useTyping = ({
   const [failCount, setFailCount] = useState(0);
   const [combo, setCombo] = useState(0);
   const [wpm, setWpm] = useState(0);
+  const [accuracy, setAccuracy] = useState(1);
 
   const onPhraseCompleteRef = useRef(onPhraseComplete);
   const onComboBreakRef = useRef(onComboBreak);
   const onCorrectRef = useRef(onCorrect);
   const onWpmRef = useRef(onWpm);
+  const onAccuracyRef = useRef(onAccuracy);
   useEffect(() => {
     onPhraseCompleteRef.current = onPhraseComplete;
     onComboBreakRef.current = onComboBreak;
     onCorrectRef.current = onCorrect;
     onWpmRef.current = onWpm;
-  }, [onPhraseComplete, onComboBreak, onCorrect, onWpm]);
+    onAccuracyRef.current = onAccuracy;
+  }, [onPhraseComplete, onComboBreak, onCorrect, onWpm, onAccuracy]);
 
   // WPM 計算用：成功打鍵タイムスタンプ（直近30件で平均）
   const correctTimesRef = useRef<number[]>([]);
+  // 正確度カウント
+  const correctCountRef = useRef(0);
+  const failCountRef = useRef(0);
 
   useEffect(() => {
     const engine = engineRef.current!;
@@ -64,12 +73,21 @@ export const useTyping = ({
 
   useEffect(() => {
     if (paused) return;
+    const reportAccuracy = () => {
+      const correct = correctCountRef.current;
+      const fail = failCountRef.current;
+      const total = correct + fail;
+      const acc = total === 0 ? 1 : correct / total;
+      setAccuracy(acc);
+      onAccuracyRef.current?.(acc);
+    };
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key.length !== 1) return;
       const engine = engineRef.current!;
       const r = engine.answerAlphabet(e.key);
       if (r.result === 'correct') {
+        correctCountRef.current += 1;
         setView((v) => ({
           ...v,
           completed: r.inputAlphabet.completedInputAlphabet,
@@ -92,13 +110,17 @@ export const useTyping = ({
             onWpmRef.current?.(w);
           }
         }
+        reportAccuracy();
       } else if (r.result === 'fail') {
+        failCountRef.current += 1;
         setFailCount((c) => c + 1);
         setCombo((c) => {
           if (c > 0) onComboBreakRef.current?.(c);
           return 0;
         });
+        reportAccuracy();
       } else if (r.result === 'complete') {
+        correctCountRef.current += 1;
         onPhraseCompleteRef.current();
         setCombo((c) => {
           const nc = c + 1;
@@ -106,11 +128,12 @@ export const useTyping = ({
           return nc;
         });
         setIdx((i) => i + 1);
+        reportAccuracy();
       }
     };
     window.addEventListener('keypress', handler);
     return () => window.removeEventListener('keypress', handler);
   }, [paused]);
 
-  return { view, idx, failCount, combo, wpm };
+  return { view, idx, failCount, combo, wpm, accuracy };
 };

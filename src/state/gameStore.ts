@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { ACHIEVEMENTS } from '../data/achievements';
+import type { CategoryId } from '../data/categories';
+import { CATEGORY_BY_ID, categoryAffinity, INITIAL_CATEGORY_IDS } from '../data/categories';
 import {
   newCandidate,
   REFRESH_COST,
-  sumDesignerBonus,
+  sumEmployeeCategoryBonus,
   sumPrBonus,
   sumProgrammerSpeed,
 } from '../data/employees';
@@ -16,11 +18,25 @@ import type { ThemeId } from '../data/themes';
 import { THEMES } from '../data/themes';
 import { generateTitle } from '../data/titleGenerator';
 import { ensureTrend, type Trend } from '../data/trend';
-import { computeMetascore, computeRevenue, fanDelta, polishToQuality } from '../utils/metascore';
+import {
+  computeMetascore,
+  computePerformanceScore,
+  computeQuality,
+  computeRevenue,
+  fanDelta,
+} from '../utils/metascore';
 import { decayRateFor, INITIAL_SHARE, settleAllWorks, settlePool } from '../utils/sales';
 import type { Records } from '../utils/storage';
 import * as storage from '../utils/storage';
-import type { Achievement, Candidate, CurrentProject, Employee, Screen, Work } from './types';
+import type {
+  Achievement,
+  Candidate,
+  CurrentProject,
+  Employee,
+  Screen,
+  Work,
+  WorkBreakdown,
+} from './types';
 
 const persisted = storage.load() ?? storage.defaults();
 
@@ -46,6 +62,27 @@ const computeStageUnlocks = (
     (t) => t.unlockStage <= stage && !currentThemes.includes(t.id),
   ).map((t) => t.id);
   return { unlocked: newGenres.length + newThemes.length, newGenres, newThemes };
+};
+
+const CATEGORY_UNLOCK_THRESHOLDS: { count: number; id: CategoryId }[] = [
+  { count: 5, id: 'story' },
+  { count: 10, id: 'presentation' },
+  { count: 20, id: 'innovation' },
+];
+
+const computeNewlyUnlockedCategories = (
+  current: CategoryId[],
+  libraryCount: number,
+): CategoryId[] => {
+  const set = new Set(current);
+  const added: CategoryId[] = [];
+  for (const { count, id } of CATEGORY_UNLOCK_THRESHOLDS) {
+    if (libraryCount >= count && !set.has(id)) {
+      set.add(id);
+      added.push(id);
+    }
+  }
+  return added;
 };
 
 const evaluateAchievements = (
@@ -102,20 +139,30 @@ const computeOfflineEarnings = (
   return { report: { earned, awaySec }, library: updated };
 };
 
+type ReleaseOpts = {
+  launchAd?: boolean;
+  marketingAd?: boolean;
+  debugAd?: boolean;
+};
+
 type Actions = {
   goTo: (screen: Screen) => void;
-  startProject: (genreId: GenreId, themeId: ThemeId, scale: Scale) => void;
+  startProject: (
+    genreId: GenreId,
+    themeId: ThemeId,
+    scale: Scale,
+    selectedCategories: CategoryId[],
+    assignedEmployeeIds: string[],
+  ) => void;
   tickAuto: (deltaSec: number) => void;
   tickSales: (deltaSec: number) => void;
   addDevelopLoC: (n: number) => void;
-  addPolishLoC: (n: number) => void;
-  applyComboToPolish: (bonus: number) => void;
   reportCombo: (combo: number) => void;
   reportWPM: (wpm: number) => void;
+  reportAccuracy: (acc: number) => void;
   finishDevelopment: () => void;
-  releaseWork: (opts?: { launchAd?: boolean }) => Work;
+  releaseWork: (opts?: ReleaseOpts) => Work;
   buyAdDevBoost: () => void;
-  buyAdPolishBoost: () => void;
   buyAdSurvey: (g: GenreId, t: ThemeId) => void;
   triggerBugIfDue: () => void;
   clearBug: () => void;
@@ -139,6 +186,7 @@ export type GameState = {
   unlockedScales: Scale[];
   unlockedGenres: GenreId[];
   unlockedThemes: ThemeId[];
+  unlockedCategories: CategoryId[];
   ghosts: Record<Scale, number | null>;
   library: Work[];
   trend: Trend;
@@ -165,6 +213,10 @@ export const useGameStore = create<GameState>()(
     unlockedScales: persisted.unlockedScales,
     unlockedGenres: persisted.unlockedGenres,
     unlockedThemes: persisted.unlockedThemes,
+    unlockedCategories:
+      persisted.unlockedCategories && persisted.unlockedCategories.length > 0
+        ? persisted.unlockedCategories
+        : [...INITIAL_CATEGORY_IDS],
     ghosts: persisted.ghosts,
     library: offlineCalc.library,
     trend: initialTrend,
@@ -178,7 +230,7 @@ export const useGameStore = create<GameState>()(
 
     goTo: (screen) => set({ screen }),
 
-    startProject: (genreId, themeId, scale) => {
+    startProject: (genreId, themeId, scale, selectedCategories, assignedEmployeeIds) => {
       const def = SCALE_BY_ID[scale];
       const title = generateTitle(genreId, themeId);
       const project: CurrentProject = {
@@ -188,16 +240,16 @@ export const useGameStore = create<GameState>()(
         scale,
         requiredLoC: def.requiredLoC,
         doneLoC: 0,
-        polishLoC: 0,
         maxCombo: 0,
-        comboBonus: 0,
         devBoostRemainingSec: 0,
-        polishBoostRemainingSec: 0,
         bugPhrase: null,
         startedAt: performance.now(),
         finishedAt: null,
         adBoostActive: false,
         surveyedCompat: null,
+        selectedCategories: [...selectedCategories],
+        assignedEmployeeIds: [...assignedEmployeeIds],
+        perf: { wpm: 0, maxCombo: 0, accuracy: 1 },
       };
       set({
         current: project,
@@ -211,7 +263,6 @@ export const useGameStore = create<GameState>()(
       if (!cur) return;
       const progSpeed = sumProgrammerSpeed(get().employees);
       const boost = cur.devBoostRemainingSec > 0 ? 2 : 1;
-      const polishBoost = cur.polishBoostRemainingSec > 0;
       const add = progSpeed * deltaSec * boost;
       if (cur.finishedAt === null) {
         const newDone = Math.min(cur.requiredLoC, cur.doneLoC + add);
@@ -220,14 +271,6 @@ export const useGameStore = create<GameState>()(
             ...cur,
             doneLoC: newDone,
             devBoostRemainingSec: Math.max(0, cur.devBoostRemainingSec - deltaSec),
-            polishBoostRemainingSec: Math.max(0, cur.polishBoostRemainingSec - deltaSec),
-          },
-        });
-      } else if (polishBoost) {
-        set({
-          current: {
-            ...cur,
-            polishBoostRemainingSec: Math.max(0, cur.polishBoostRemainingSec - deltaSec),
           },
         });
       }
@@ -277,23 +320,16 @@ export const useGameStore = create<GameState>()(
       set({ current: { ...cur, doneLoC: newDone } });
     },
 
-    addPolishLoC: (n) => {
-      const cur = get().current;
-      if (!cur) return;
-      const boost = cur.polishBoostRemainingSec > 0 ? 2 : 1;
-      set({ current: { ...cur, polishLoC: cur.polishLoC + n * boost } });
-    },
-
-    applyComboToPolish: (bonus) => {
-      const cur = get().current;
-      if (!cur) return;
-      set({ current: { ...cur, comboBonus: Math.max(cur.comboBonus, Math.min(0.5, bonus)) } });
-    },
-
     reportCombo: (combo) => {
       const cur = get().current;
       if (cur && combo > cur.maxCombo) {
-        set({ current: { ...cur, maxCombo: combo } });
+        set({
+          current: {
+            ...cur,
+            maxCombo: combo,
+            perf: { ...cur.perf, maxCombo: Math.max(cur.perf.maxCombo, combo) },
+          },
+        });
       }
       const rec = get().records;
       if (combo > rec.bestCombo) {
@@ -302,10 +338,21 @@ export const useGameStore = create<GameState>()(
     },
 
     reportWPM: (wpm) => {
+      const cur = get().current;
+      if (cur) {
+        set({ current: { ...cur, perf: { ...cur.perf, wpm: Math.max(cur.perf.wpm, wpm) } } });
+      }
       const rec = get().records;
       if (wpm > rec.bestWPM) {
         set({ records: { ...rec, bestWPM: Math.round(wpm) } });
       }
+    },
+
+    reportAccuracy: (acc) => {
+      const cur = get().current;
+      if (!cur) return;
+      const clamped = Math.max(0, Math.min(1, acc));
+      set({ current: { ...cur, perf: { ...cur.perf, accuracy: clamped } } });
     },
 
     finishDevelopment: () => {
@@ -319,7 +366,7 @@ export const useGameStore = create<GameState>()(
       set({
         current: { ...cur, finishedAt: nowMs, doneLoC: cur.requiredLoC },
         ghosts: { ...get().ghosts, [cur.scale]: newGhost },
-        screen: 'polish',
+        screen: 'release',
       });
     },
 
@@ -327,14 +374,40 @@ export const useGameStore = create<GameState>()(
       const cur = get().current;
       if (!cur) throw new Error('no current project');
       const def = SCALE_BY_ID[cur.scale];
-      const designerBonus = sumDesignerBonus(get().employees);
-      const prBonus = sumPrBonus(get().employees);
-      const quality = polishToQuality(
-        def.baseQuality,
-        cur.polishLoC,
-        cur.comboBonus,
-        designerBonus,
+      const employees = get().employees;
+      const prBonus = sumPrBonus(employees);
+
+      // categoryHit: 選択カテゴリの affinity 合計
+      let categoryHit = 0;
+      for (const cid of cur.selectedCategories) {
+        const cat = CATEGORY_BY_ID[cid];
+        if (!cat) continue;
+        categoryHit += categoryAffinity(cat, cur.genreId, cur.themeId);
+      }
+
+      // employeeHit: 割当従業員 × 選択カテゴリの specialty bonus 合計
+      const employeeHit = sumEmployeeCategoryBonus(
+        employees,
+        cur.assignedEmployeeIds,
+        cur.selectedCategories,
       );
+
+      // performance: タイピング指標から 0..20
+      const performance = computePerformanceScore(cur.perf);
+
+      // ad bonuses: marketing/debug は perf/category レバーに乗らないがブレイクダウンの ads に集約
+      let adBonus = 0;
+      if (opts?.marketingAd) adBonus += 5;
+      if (opts?.debugAd) adBonus += 5;
+
+      const { Q: quality, breakdown } = computeQuality({
+        scaleBase: def.baseQuality,
+        categoryHit,
+        employeeHit,
+        performance,
+        adBonus,
+      });
+
       const trend = get().trend;
       const meta = computeMetascore(quality, cur.genreId, cur.themeId, trend);
       const launchAdActive = !!opts?.launchAd;
@@ -362,6 +435,8 @@ export const useGameStore = create<GameState>()(
       const prevGhost = get().ghosts[cur.scale];
       const ghostBeaten = prevGhost !== null && developSec <= prevGhost;
 
+      const workBreakdown: WorkBreakdown = breakdown;
+
       const work: Work = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         title: cur.title,
@@ -384,12 +459,18 @@ export const useGameStore = create<GameState>()(
         pioneer,
         releasedAt: Date.now(),
         createdAt: Date.now(),
+        breakdown: workBreakdown,
+        selectedCategories: [...cur.selectedCategories],
       };
 
       const newLibrary = [work, ...get().library];
       const stageUnlock = computeStageUnlocks(
         get().unlockedGenres,
         get().unlockedThemes,
+        newLibrary.length,
+      );
+      const newCategoryUnlocks = computeNewlyUnlockedCategories(
+        get().unlockedCategories,
         newLibrary.length,
       );
 
@@ -419,6 +500,7 @@ export const useGameStore = create<GameState>()(
         newlyAchieved: [...get().newlyAchieved, ...newAch.newly],
         unlockedGenres: [...get().unlockedGenres, ...stageUnlock.newGenres],
         unlockedThemes: [...get().unlockedThemes, ...stageUnlock.newThemes],
+        unlockedCategories: [...get().unlockedCategories, ...newCategoryUnlocks],
         lastReleased: work,
         current: null,
         screen: 'release',
@@ -430,12 +512,6 @@ export const useGameStore = create<GameState>()(
       const cur = get().current;
       if (!cur || cur.finishedAt !== null) return;
       set({ current: { ...cur, devBoostRemainingSec: cur.devBoostRemainingSec + 30 } });
-    },
-
-    buyAdPolishBoost: () => {
-      const cur = get().current;
-      if (!cur) return;
-      set({ current: { ...cur, polishBoostRemainingSec: cur.polishBoostRemainingSec + 30 } });
     },
 
     buyAdSurvey: (g, t) => {
@@ -520,6 +596,7 @@ export const useGameStore = create<GameState>()(
         unlockedScales: d.unlockedScales,
         unlockedGenres: d.unlockedGenres,
         unlockedThemes: d.unlockedThemes,
+        unlockedCategories: d.unlockedCategories,
         ghosts: d.ghosts,
         library: d.library,
         trend: ensureTrend(null, now()),
@@ -545,6 +622,7 @@ useGameStore.subscribe(
     unlockedScales: s.unlockedScales,
     unlockedGenres: s.unlockedGenres,
     unlockedThemes: s.unlockedThemes,
+    unlockedCategories: s.unlockedCategories,
     ghosts: s.ghosts,
     library: s.library,
     trend: s.trend,
@@ -554,7 +632,7 @@ useGameStore.subscribe(
   }),
   (snap) => {
     storage.save({
-      version: 3,
+      version: 4,
       ...snap,
       lastSeenAt: now(),
     });
@@ -567,7 +645,7 @@ if (typeof window !== 'undefined') {
   setInterval(() => {
     const s = useGameStore.getState();
     storage.save({
-      version: 3,
+      version: 4,
       funds: s.funds,
       lifetimeRevenue: s.lifetimeRevenue,
       fans: s.fans,
@@ -575,6 +653,7 @@ if (typeof window !== 'undefined') {
       unlockedScales: s.unlockedScales,
       unlockedGenres: s.unlockedGenres,
       unlockedThemes: s.unlockedThemes,
+      unlockedCategories: s.unlockedCategories,
       ghosts: s.ghosts,
       library: s.library,
       trend: s.trend,

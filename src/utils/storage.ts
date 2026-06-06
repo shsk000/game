@@ -1,10 +1,13 @@
+import type { CategoryId } from '../data/categories';
+import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import type { GenreId } from '../data/genres';
 import type { Scale } from '../data/scales';
 import type { ThemeId } from '../data/themes';
 import type { Trend } from '../data/trend';
-import type { Achievement, Employee, Work } from '../state/types';
+import type { Achievement, Employee, Work, WorkBreakdown } from '../state/types';
 
-const KEY = 'typing-factory:v3';
+const KEY = 'typing-factory:v4';
+const LEGACY_KEY_V3 = 'typing-factory:v3';
 const LEGACY_KEY_V2 = 'typing-factory:v2';
 const LEGACY_KEY_V1 = 'typing-factory:v1';
 
@@ -16,7 +19,7 @@ export type Records = {
 };
 
 export type Persisted = {
-  version: 3;
+  version: 4;
   funds: number;
   lifetimeRevenue: number;
   fans: number;
@@ -24,6 +27,7 @@ export type Persisted = {
   unlockedScales: Scale[];
   unlockedGenres: GenreId[];
   unlockedThemes: ThemeId[];
+  unlockedCategories: CategoryId[];
   ghosts: Record<Scale, number | null>;
   library: Work[];
   trend: Trend | null;
@@ -41,15 +45,25 @@ const emptyGhostsRecord = (): Record<Scale, number | null> => ({
   aaa: null,
 });
 
+const defaultBreakdown = (): WorkBreakdown => ({
+  base: 30,
+  categories: 0,
+  employees: 0,
+  performance: 0,
+  ads: 0,
+  variance: 0,
+});
+
 export const defaults = (): Persisted => ({
-  version: 3,
-  funds: 0,
+  version: 4,
+  funds: 1500,
   lifetimeRevenue: 0,
   fans: 0,
   employees: [],
   unlockedScales: ['mini'],
   unlockedGenres: ['action', 'puzzle', 'rpg'],
   unlockedThemes: ['fantasy', 'sf', 'sushi', 'ninja', 'onsen'],
+  unlockedCategories: [...INITIAL_CATEGORY_IDS],
   ghosts: emptyGhostsRecord(),
   library: [],
   trend: null,
@@ -62,6 +76,11 @@ export const defaults = (): Persisted => ({
 type LegacyWork = Partial<Work> & {
   id: string;
   revenue?: number;
+};
+
+const ensureWorkBreakdown = (w: Work): Work => {
+  if (w.breakdown) return w;
+  return { ...w, breakdown: defaultBreakdown() };
 };
 
 const migrateWorkV2 = (w: LegacyWork): Work => {
@@ -89,7 +108,54 @@ const migrateWorkV2 = (w: LegacyWork): Work => {
     pioneer: false,
     releasedAt: w.createdAt ?? Date.now(),
     createdAt: w.createdAt ?? Date.now(),
+    breakdown: w.breakdown ?? defaultBreakdown(),
+    selectedCategories: w.selectedCategories,
   };
+};
+
+type LegacyEmployeeV3 = Omit<Employee, 'specialties'> & {
+  specialties?: Employee['specialties'];
+};
+
+const migrateEmployeeFromV3 = (e: LegacyEmployeeV3): Employee => ({
+  ...e,
+  specialties: e.specialties ?? [],
+});
+
+const migrateFromV3 = (raw: string): Persisted | null => {
+  try {
+    const old = JSON.parse(raw) as Partial<Persisted> & {
+      employees?: LegacyEmployeeV3[];
+      library?: LegacyWork[];
+    };
+    const base = defaults();
+    const employees: Employee[] = Array.isArray(old.employees)
+      ? old.employees.map(migrateEmployeeFromV3)
+      : [];
+    const library: Work[] = Array.isArray(old.library)
+      ? old.library.map((w) => ensureWorkBreakdown(migrateWorkV2(w)))
+      : [];
+    return {
+      ...base,
+      funds: old.funds ?? 0,
+      lifetimeRevenue: old.lifetimeRevenue ?? 0,
+      fans: old.fans ?? 0,
+      employees,
+      unlockedScales: (old.unlockedScales ?? base.unlockedScales) as Scale[],
+      unlockedGenres: (old.unlockedGenres ?? base.unlockedGenres) as GenreId[],
+      unlockedThemes: (old.unlockedThemes ?? base.unlockedThemes) as ThemeId[],
+      unlockedCategories: [...INITIAL_CATEGORY_IDS],
+      ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
+      library,
+      trend: old.trend ?? null,
+      records: old.records ?? base.records,
+      achievements: old.achievements ?? base.achievements,
+      tutorialDone: old.tutorialDone ?? false,
+      lastSeenAt: old.lastSeenAt ?? Date.now(),
+    };
+  } catch {
+    return null;
+  }
 };
 
 const migrateFromV2 = (raw: string): Persisted | null => {
@@ -99,7 +165,9 @@ const migrateFromV2 = (raw: string): Persisted | null => {
       library?: LegacyWork[];
     };
     const base = defaults();
-    const employees: Employee[] = Array.isArray(old.employees) ? (old.employees as Employee[]) : [];
+    const employees: Employee[] = Array.isArray(old.employees)
+      ? (old.employees as Employee[]).map((e) => ({ ...e, specialties: e.specialties ?? [] }))
+      : [];
     return {
       ...base,
       funds: old.funds ?? 0,
@@ -109,6 +177,7 @@ const migrateFromV2 = (raw: string): Persisted | null => {
       unlockedScales: (old.unlockedScales ?? ['mini']) as Scale[],
       unlockedGenres: (old.unlockedGenres ?? base.unlockedGenres) as GenreId[],
       unlockedThemes: (old.unlockedThemes ?? base.unlockedThemes) as ThemeId[],
+      unlockedCategories: [...INITIAL_CATEGORY_IDS],
       ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
       library: (old.library ?? []).map(migrateWorkV2),
       trend: old.trend ?? null,
@@ -133,6 +202,7 @@ const migrateFromV1 = (raw: string): Persisted | null => {
       ...base,
       funds: old.funds ?? 0,
       unlockedScales: (old.unlockedScales ?? ['mini']) as Scale[],
+      unlockedCategories: [...INITIAL_CATEGORY_IDS],
       ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
       library: (old.library ?? []).map(migrateWorkV2),
     };
@@ -146,9 +216,31 @@ export const load = (): Persisted | null => {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Persisted;
-      if (parsed && parsed.version === 3) {
-        // 旧セーブで achievements / tutorialDone が無い場合は補完
-        return { ...defaults(), ...parsed };
+      if (parsed && parsed.version === 4) {
+        const merged: Persisted = { ...defaults(), ...parsed };
+        merged.library = merged.library.map(ensureWorkBreakdown);
+        merged.employees = merged.employees.map((e) => ({
+          ...e,
+          specialties: e.specialties ?? [],
+        }));
+        merged.unlockedCategories =
+          parsed.unlockedCategories && parsed.unlockedCategories.length > 0
+            ? parsed.unlockedCategories
+            : [...INITIAL_CATEGORY_IDS];
+        return merged;
+      }
+    }
+    const v3 = localStorage.getItem(LEGACY_KEY_V3);
+    if (v3) {
+      const migrated = migrateFromV3(v3);
+      if (migrated) {
+        save(migrated);
+        try {
+          localStorage.removeItem(LEGACY_KEY_V3);
+        } catch {
+          /* ignore */
+        }
+        return migrated;
       }
     }
     const v2 = localStorage.getItem(LEGACY_KEY_V2);
@@ -194,6 +286,7 @@ export const save = (p: Persisted): void => {
 export const reset = (): void => {
   try {
     localStorage.removeItem(KEY);
+    localStorage.removeItem(LEGACY_KEY_V3);
     localStorage.removeItem(LEGACY_KEY_V2);
     localStorage.removeItem(LEGACY_KEY_V1);
   } catch {

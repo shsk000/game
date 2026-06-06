@@ -1,15 +1,9 @@
+import type { CategoryId } from '../data/categories';
 import type { GenreId } from '../data/genres';
 import type { Scale } from '../data/scales';
 import type { ThemeId } from '../data/themes';
 
-export type Screen =
-  | 'plan'
-  | 'develop'
-  | 'polish'
-  | 'release'
-  | 'office'
-  | 'library'
-  | 'collection';
+export type Screen = 'plan' | 'develop' | 'release' | 'office' | 'library' | 'collection';
 
 export type Achievement =
   | 'first-release'
@@ -23,6 +17,11 @@ export type Achievement =
 
 export type EmployeeRole = 'programmer' | 'designer' | 'pr';
 
+export type EmployeeSpecialty = {
+  categoryId: CategoryId;
+  bonus: number;
+};
+
 export type Employee = {
   id: string;
   name: string;
@@ -30,9 +29,19 @@ export type Employee = {
   /** 役職パラメータ：プログラマーはLoC/秒、デザイナーは品質基礎+、広報は売上%加算 */
   power: number;
   wage: number;
+  specialties: EmployeeSpecialty[];
 };
 
 export type Candidate = Employee;
+
+export type WorkBreakdown = {
+  base: number;
+  categories: number;
+  employees: number;
+  performance: number;
+  ads: number;
+  variance: number;
+};
 
 export type Work = {
   id: string;
@@ -63,6 +72,10 @@ export type Work = {
   pioneer: boolean;
   releasedAt: number;
   createdAt: number;
+  /** 品質の4レバー内訳 */
+  breakdown: WorkBreakdown;
+  /** ライブラリ表示用：このリリースで選んだカテゴリ */
+  selectedCategories?: CategoryId[];
 };
 
 export type CurrentProject = {
@@ -72,15 +85,10 @@ export type CurrentProject = {
   scale: Scale;
   requiredLoC: number;
   doneLoC: number;
-  polishLoC: number;
   /** ノリ／コンボ最大値（このプロジェクト内） */
   maxCombo: number;
-  /** ポリッシュ時の累積コンボボーナス（0〜0.5） */
-  comboBonus: number;
   /** 開発加速広告（生産速度2倍）の残り秒数 */
   devBoostRemainingSec: number;
-  /** ポリッシュ効率2倍広告の残り秒数 */
-  polishBoostRemainingSec: number;
   /** バグイベント中のフレーズ（赤行）。クリアで品質ボーナス */
   bugPhrase: string | null;
   startedAt: number;
@@ -89,4 +97,14 @@ export type CurrentProject = {
   adBoostActive: boolean;
   /** 市場調査広告で開示された相性 */
   surveyedCompat: number | null;
+  /** 今回開発で選ばれた3つのカテゴリ */
+  selectedCategories: CategoryId[];
+  /** 今回開発に割り当てた従業員 */
+  assignedEmployeeIds: string[];
+  /** タイピングのパフォーマンス指標 */
+  perf: {
+    wpm: number;
+    maxCombo: number;
+    accuracy: number;
+  };
 };

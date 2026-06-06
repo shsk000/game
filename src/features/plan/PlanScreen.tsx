@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ads } from '../../ads/AdProvider';
 import { JacketView } from '../../components/JacketView';
 import { Tutorial } from '../../components/Tutorial';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
+import type { CategoryId } from '../../data/categories';
+import { CATEGORIES, CATEGORY_BY_ID, categoryAffinity } from '../../data/categories';
 import { compatLabel, getCompat } from '../../data/compatibility';
 import type { GenreId } from '../../data/genres';
 import { GENRE_BY_ID, GENRES } from '../../data/genres';
@@ -19,6 +21,7 @@ export const PlanScreen = () => {
   const unlocked = useGameStore((s) => s.unlockedScales);
   const unlockedGenres = useGameStore((s) => s.unlockedGenres);
   const unlockedThemes = useGameStore((s) => s.unlockedThemes);
+  const unlockedCategories = useGameStore((s) => s.unlockedCategories);
   const funds = useGameStore((s) => s.funds);
   const fans = useGameStore((s) => s.fans);
   const employees = useGameStore((s) => s.employees);
@@ -36,6 +39,8 @@ export const PlanScreen = () => {
   const [genreId, setGenreId] = useState<GenreId>(firstGenre);
   const [themeId, setThemeId] = useState<ThemeId>(firstTheme);
   const [scale, setScale] = useState<Scale>('mini');
+  const [selectedCategories, setSelectedCategories] = useState<CategoryId[]>([]);
+  const [assignedEmployeeIds, setAssignedEmployeeIds] = useState<string[]>([]);
   const [surveyedCompat, setSurveyedCompat] = useState<number | null>(null);
   const [adRunning, setAdRunning] = useState(false);
 
@@ -50,11 +55,45 @@ export const PlanScreen = () => {
     setSurveyedCompat(null);
   }, [genreId, themeId]);
 
+  // 解放外カテゴリが選択に残っていたら除去
+  useEffect(() => {
+    setSelectedCategories((prev) => prev.filter((id) => unlockedCategories.includes(id)));
+  }, [unlockedCategories]);
+
+  // 退職などで存在しなくなった従業員が割当に残っていたら除去
+  useEffect(() => {
+    setAssignedEmployeeIds((prev) => prev.filter((id) => employees.some((e) => e.id === id)));
+  }, [employees]);
+
   const isTrendyGenre = trend && trend.genreId === genreId;
   const isTrendyTheme = trend && trend.themeId === themeId;
 
   const pioneer = !library.some((w) => w.genreId === genreId && w.themeId === themeId);
   const sellingCount = library.filter((w) => w.selling).length;
+
+  const categoryHitTotal = useMemo(() => {
+    return selectedCategories.reduce((sum, cid) => {
+      const cat = CATEGORY_BY_ID[cid];
+      if (!cat) return sum;
+      return sum + categoryAffinity(cat, genreId, themeId);
+    }, 0);
+  }, [selectedCategories, genreId, themeId]);
+
+  const toggleCategory = (id: CategoryId) => {
+    setSelectedCategories((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 3) return prev;
+      return [...prev, id];
+    });
+  };
+
+  const toggleEmployee = (id: string) => {
+    setAssignedEmployeeIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 3) return prev;
+      return [...prev, id];
+    });
+  };
 
   const handleSurvey = () => {
     if (adRunning) return;
@@ -67,6 +106,13 @@ export const PlanScreen = () => {
       },
       onFail: () => setAdRunning(false),
     });
+  };
+
+  const canStart = selectedCategories.length === 3 && assignedEmployeeIds.length >= 1;
+
+  const handleStart = () => {
+    if (!canStart) return;
+    startProject(genreId, themeId, scale, selectedCategories, assignedEmployeeIds);
   };
 
   return (
@@ -191,6 +237,81 @@ export const PlanScreen = () => {
         </div>
       </section>
 
+      <section className="card">
+        <h2>
+          開発カテゴリを選ぶ <span className="cat-meta">選択 {selectedCategories.length}/3</span>
+        </h2>
+        <div className="chip-row">
+          {CATEGORIES.filter((c) => unlockedCategories.includes(c.id)).map((c) => {
+            const isSelected = selectedCategories.includes(c.id);
+            const reachedMax = selectedCategories.length >= 3 && !isSelected;
+            return (
+              <button
+                key={c.id}
+                data-category-id={c.id}
+                className={`chip ${isSelected ? 'selected' : ''}`}
+                disabled={reachedMax}
+                onClick={() => toggleCategory(c.id)}
+                title={reachedMax ? '3つまで選択できます' : ''}
+              >
+                {c.emoji} {c.name}
+              </button>
+            );
+          })}
+        </div>
+        <p className="hint">
+          相性合計（推定）: <strong>{categoryHitTotal}</strong>
+        </p>
+      </section>
+
+      <section className="card">
+        <h2>
+          従業員アサイン <span className="cat-meta">アサイン {assignedEmployeeIds.length}/3</span>
+        </h2>
+        {employees.length === 0 ? (
+          <p className="hint">オフィスで従業員を雇うとアサインできます。</p>
+        ) : (
+          <ul className="assign-list">
+            {employees.map((e) => {
+              const isAssigned = assignedEmployeeIds.includes(e.id);
+              const reachedMax = assignedEmployeeIds.length >= 3 && !isAssigned;
+              const roleLabel =
+                e.role === 'programmer'
+                  ? 'プログラマー'
+                  : e.role === 'designer'
+                    ? 'デザイナー'
+                    : '広報';
+              return (
+                <li key={e.id} className={`assign-item ${isAssigned ? 'selected' : ''}`}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      data-employee-id={e.id}
+                      checked={isAssigned}
+                      disabled={reachedMax}
+                      onChange={() => toggleEmployee(e.id)}
+                    />
+                    <span>
+                      <strong>{e.name}</strong>{' '}
+                      <span className="cat-meta">
+                        {roleLabel} ／ power {e.power}
+                      </span>
+                    </span>
+                    {e.specialties.length > 0 && (
+                      <span className="cat-meta">
+                        {e.specialties
+                          .map((sp) => `${CATEGORY_BY_ID[sp.categoryId]?.emoji ?? ''}+${sp.bonus}`)
+                          .join(' ')}
+                      </span>
+                    )}
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       <section className="card plan-preview">
         <h2>企画プレビュー</h2>
         <div className="plan-preview-body">
@@ -204,6 +325,9 @@ export const PlanScreen = () => {
             </p>
             {pioneer && <p className="pioneer-pill">🌱 新規開拓ボーナス +30%</p>}
             <p className="hint">※相性は完成後に判明します（隠しパラメータ）</p>
+            <p className="hint">
+              選択カテゴリ × ジャンル/テーマ 相性合計: <strong>{categoryHitTotal}</strong>
+            </p>
             <div className="survey-row">
               {surveyedCompat !== null ? (
                 <p style={{ color: 'var(--warn)' }}>
@@ -217,9 +341,12 @@ export const PlanScreen = () => {
             </div>
           </div>
         </div>
-        <button className="primary-btn" onClick={() => startProject(genreId, themeId, scale)}>
+        <button className="primary-btn" onClick={handleStart} disabled={!canStart}>
           ▶ 開発開始
         </button>
+        {!canStart && (
+          <p className="hint">※ カテゴリを3つ選び、従業員を1人以上アサインしてください。</p>
+        )}
       </section>
 
       {!tutorialDone && <Tutorial />}

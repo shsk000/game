@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ads } from '../../ads/AdProvider';
 import { JacketView } from '../../components/JacketView';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
@@ -9,65 +9,191 @@ import { useGameStore } from '../../state/gameStore';
 import type { Achievement } from '../../state/types';
 import { scoreFlavor } from '../../utils/metascore';
 
+type RevealStage =
+  | 'pre-ads'
+  | 'reveal-base'
+  | 'reveal-categories'
+  | 'reveal-employees'
+  | 'reveal-performance'
+  | 'reveal-ads'
+  | 'reveal-variance'
+  | 'reveal-total'
+  | 'done';
+
+const STAGE_SEQUENCE: RevealStage[] = [
+  'reveal-base',
+  'reveal-categories',
+  'reveal-employees',
+  'reveal-performance',
+  'reveal-ads',
+  'reveal-variance',
+  'reveal-total',
+  'done',
+];
+
+const stageReached = (current: RevealStage, target: RevealStage): boolean => {
+  const order: RevealStage[] = ['pre-ads', ...STAGE_SEQUENCE];
+  return order.indexOf(current) >= order.indexOf(target);
+};
+
 export const ReleaseScreen = () => {
   const work = useGameStore((s) => s.lastReleased);
+  const current = useGameStore((s) => s.current);
+  const releaseWork = useGameStore((s) => s.releaseWork);
   const goTo = useGameStore((s) => s.goTo);
   const clearNewlyAchieved = useGameStore((s) => s.clearNewlyAchieved);
 
-  const [displayScore, setDisplayScore] = useState(0);
-  const [phase, setPhase] = useState<'count' | 'done'>('count');
+  const [stage, setStage] = useState<RevealStage>('pre-ads');
+  const [displayQ, setDisplayQ] = useState(0);
+  const [displayMeta, setDisplayMeta] = useState(0);
+  const [marketingApplied, setMarketingApplied] = useState(false);
+  const [debugApplied, setDebugApplied] = useState(false);
   const [launchAdApplied, setLaunchAdApplied] = useState(false);
-  const [adRunning, setAdRunning] = useState(false);
+  const [adRunning, setAdRunning] = useState<null | 'marketing' | 'debug' | 'launch'>(null);
   const [bonusRevenue, setBonusRevenue] = useState(0);
   const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
+  const timersRef = useRef<number[]>([]);
 
+  // 開発完了直後（lastReleased がまだ無く current が残っている）は ad ピッカーを表示
+  useEffect(() => {
+    if (!work && current) {
+      setStage('pre-ads');
+      setMarketingApplied(false);
+      setDebugApplied(false);
+      setLaunchAdApplied(false);
+      setBonusRevenue(0);
+      setDisplayQ(0);
+      setDisplayMeta(0);
+    }
+  }, [work, current]);
+
+  // work が確定したらブレイクダウン演出を順次再生
+  // ただし current がまだ残っている＝ユーザーがまだ「結果を発表」を押していない状態では発火させない
+  // （前回作のリリース直後に新作開発を完了した場合、lastReleased には前回作が残っているため
+  //  そのままだと前回作のreveal演出が再生され、新作の pre-ads 画面が出ない問題への対策）
   useEffect(() => {
     if (!work) return;
-    setDisplayScore(0);
-    setPhase('count');
-    setLaunchAdApplied(false);
-    setBonusRevenue(0);
+    if (current) return;
     setNewAchievements(useGameStore.getState().newlyAchieved);
-    const target = work.metascore;
-    const totalMs = 1600;
-    const start = performance.now();
-    let raf = 0;
-    const loop = () => {
-      const t = Math.min(1, (performance.now() - start) / totalMs);
-      const eased = 1 - (1 - t) ** 3;
-      setDisplayScore(Math.round(target * eased));
-      if (t < 1) raf = requestAnimationFrame(loop);
-      else setPhase('done');
+    setStage('reveal-base');
+    setDisplayQ(work.breakdown.base);
+
+    const timers: number[] = [];
+    const schedule = (ms: number, fn: () => void) => {
+      timers.push(window.setTimeout(fn, ms));
     };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [work?.id]);
 
-  if (!work) return null;
+    schedule(400, () => {
+      setStage('reveal-categories');
+      setDisplayQ((q) => q + work.breakdown.categories);
+    });
+    schedule(900, () => {
+      setStage('reveal-employees');
+      setDisplayQ((q) => q + work.breakdown.employees);
+    });
+    schedule(1400, () => {
+      setStage('reveal-performance');
+      setDisplayQ((q) => q + work.breakdown.performance);
+    });
+    schedule(1900, () => {
+      setStage('reveal-ads');
+      setDisplayQ((q) => q + work.breakdown.ads);
+    });
+    schedule(2400, () => {
+      setStage('reveal-variance');
+      setDisplayQ((q) => q + work.breakdown.variance);
+    });
+    schedule(2900, () => {
+      setStage('reveal-total');
+    });
+    schedule(3400, () => {
+      // メタスコアのカウントアップ
+      const target = work.metascore;
+      const start = performance.now();
+      const totalMs = 900;
+      let raf = 0;
+      const loop = () => {
+        const t = Math.min(1, (performance.now() - start) / totalMs);
+        const eased = 1 - (1 - t) ** 3;
+        setDisplayMeta(Math.round(target * eased));
+        if (t < 1) raf = requestAnimationFrame(loop);
+        else setStage('done');
+      };
+      raf = requestAnimationFrame(loop);
+      timers.push(raf);
+    });
 
-  const genre = GENRE_BY_ID[work.genreId];
-  const theme = THEME_BY_ID[work.themeId];
-  const compat = getCompat(work.genreId, work.themeId);
+    timersRef.current = timers;
+    return () => {
+      for (const t of timers) {
+        window.clearTimeout(t);
+      }
+    };
+  }, [work?.id, current]);
+
+  if (!work && !current) return null;
+
+  // pre-ads 段階は「いま開発を終えたばかりの作品」を表示するため current 優先。
+  // それ以外（既にreleaseWork済み）は work を表示する。
+  const showCurrent = stage === 'pre-ads' && !!current;
+  const planGenreId = showCurrent ? current?.genreId : (work?.genreId ?? current?.genreId);
+  const planThemeId = showCurrent ? current?.themeId : (work?.themeId ?? current?.themeId);
+  const planTitle = showCurrent
+    ? (current?.title ?? '')
+    : (work?.title ?? current?.title ?? '');
+  if (!planGenreId || !planThemeId) return null;
+  const genre = GENRE_BY_ID[planGenreId];
+  const theme = THEME_BY_ID[planThemeId];
+  const compat = getCompat(planGenreId, planThemeId);
+
+  const runMarketingAd = () => {
+    if (marketingApplied || adRunning) return;
+    setAdRunning('marketing');
+    ads.showRewarded({
+      label: 'marketing-ad',
+      onComplete: () => {
+        setMarketingApplied(true);
+        setAdRunning(null);
+      },
+      onFail: () => setAdRunning(null),
+    });
+  };
+
+  const runDebugAd = () => {
+    if (debugApplied || adRunning) return;
+    setAdRunning('debug');
+    ads.showRewarded({
+      label: 'debug-ad',
+      onComplete: () => {
+        setDebugApplied(true);
+        setAdRunning(null);
+      },
+      onFail: () => setAdRunning(null),
+    });
+  };
+
+  const revealResults = () => {
+    if (adRunning) return;
+    releaseWork({ marketingAd: marketingApplied, debugAd: debugApplied });
+  };
 
   const runLaunchAd = () => {
-    if (launchAdApplied || adRunning) return;
-    setAdRunning(true);
+    if (!work || launchAdApplied || adRunning) return;
+    setAdRunning('launch');
     ads.showRewarded({
       label: 'launch-ad',
       onComplete: () => {
         const extra = Math.round(work.initialRevenue * 0.5);
-        // 直接 store を編集せず売上補填のみ加算
         setBonusRevenue(extra);
         setLaunchAdApplied(true);
-        setAdRunning(false);
-        // 資金/累計売上にも反映（簡易：releaseWork は済んでいるのでここで上乗せ）
+        setAdRunning(null);
         const s = useGameStore.getState();
         useGameStore.setState({
           funds: s.funds + extra,
           lifetimeRevenue: s.lifetimeRevenue + extra,
         });
       },
-      onFail: () => setAdRunning(false),
+      onFail: () => setAdRunning(null),
     });
   };
 
@@ -75,6 +201,70 @@ export const ReleaseScreen = () => {
     clearNewlyAchieved();
     goTo('office');
   };
+
+  // pre-ads 段階の表示
+  if (stage === 'pre-ads' || !work) {
+    return (
+      <div className="screen release-screen">
+        <header className="topbar">
+          <h1>📰 リリース</h1>
+        </header>
+        <section className="card release-card">
+          <JacketView genreId={planGenreId} themeId={planThemeId} title={planTitle} size="lg" />
+          <div className="release-info">
+            <h2>{planTitle}</h2>
+            <div className="release-tags">
+              <span>
+                {genre.emoji} {genre.name}
+              </span>
+              <span>×</span>
+              <span>
+                {theme.emoji} {theme.name}
+              </span>
+            </div>
+            <p className="meta-flavor">発売前に広告でブーストできます。</p>
+            <div className="ad-row">
+              <button
+                className="primary-btn ad-btn"
+                disabled={marketingApplied || adRunning !== null}
+                onClick={runMarketingAd}
+              >
+                {marketingApplied
+                  ? '✅ マーケティング適用済 (+5 カテゴリ)'
+                  : adRunning === 'marketing'
+                    ? '広告再生中…'
+                    : '📺 マーケティング広告 +5 カテゴリ'}
+              </button>
+              <button
+                className="primary-btn ad-btn"
+                disabled={debugApplied || adRunning !== null}
+                onClick={runDebugAd}
+              >
+                {debugApplied
+                  ? '✅ デバッグチーム適用済 (+5 パフォ)'
+                  : adRunning === 'debug'
+                    ? '広告再生中…'
+                    : '📺 デバッグチーム広告 +5 パフォーマンス'}
+              </button>
+            </div>
+            <button className="primary-btn" disabled={adRunning !== null} onClick={revealResults}>
+              🎬 結果を発表
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  // ブレイクダウン演出後の表示
+  const total =
+    work.breakdown.base +
+    work.breakdown.categories +
+    work.breakdown.employees +
+    work.breakdown.performance +
+    work.breakdown.ads +
+    work.breakdown.variance;
+  const isDone = stage === 'done';
 
   return (
     <div className="screen release-screen">
@@ -96,12 +286,69 @@ export const ReleaseScreen = () => {
             </span>
             {work.pioneer && <span className="pioneer-pill">🌱 新規開拓ボーナス</span>}
           </div>
+
+          <div className="breakdown-list">
+            {stageReached(stage, 'reveal-base') && (
+              <div className="breakdown-row">
+                <span className="breakdown-emoji">🧱</span>
+                <span className="breakdown-label">ベース</span>
+                <span className="breakdown-value">{work.breakdown.base}</span>
+              </div>
+            )}
+            {stageReached(stage, 'reveal-categories') && (
+              <div className="breakdown-row">
+                <span className="breakdown-emoji">🎨</span>
+                <span className="breakdown-label">カテゴリ</span>
+                <span className="breakdown-value">+{work.breakdown.categories}</span>
+              </div>
+            )}
+            {stageReached(stage, 'reveal-employees') && (
+              <div className="breakdown-row">
+                <span className="breakdown-emoji">👥</span>
+                <span className="breakdown-label">従業員</span>
+                <span className="breakdown-value">+{work.breakdown.employees}</span>
+              </div>
+            )}
+            {stageReached(stage, 'reveal-performance') && (
+              <div className="breakdown-row">
+                <span className="breakdown-emoji">⚡</span>
+                <span className="breakdown-label">パフォーマンス</span>
+                <span className="breakdown-value">+{work.breakdown.performance}</span>
+              </div>
+            )}
+            {stageReached(stage, 'reveal-ads') && (
+              <div className="breakdown-row">
+                <span className="breakdown-emoji">📺</span>
+                <span className="breakdown-label">広告</span>
+                <span className="breakdown-value">+{work.breakdown.ads}</span>
+              </div>
+            )}
+            {stageReached(stage, 'reveal-variance') && (
+              <div className="breakdown-row">
+                <span className="breakdown-emoji">✨</span>
+                <span className="breakdown-label">バリアンス</span>
+                <span className="breakdown-value">
+                  {work.breakdown.variance >= 0 ? '+' : ''}
+                  {work.breakdown.variance}
+                </span>
+              </div>
+            )}
+            {stageReached(stage, 'reveal-total') && (
+              <div className="breakdown-row breakdown-total">
+                <span className="breakdown-emoji">🎯</span>
+                <span className="breakdown-label">品質 Q</span>
+                <span className="breakdown-value">{Math.max(0, Math.min(100, total))}</span>
+              </div>
+            )}
+          </div>
+
           <div className={`meta-score ${work.isMasterpiece ? 'masterpiece' : ''}`}>
             <span className="meta-label">メタスコア</span>
-            <span className="meta-value">{displayScore}</span>
+            <span className="meta-value">{displayMeta}</span>
             <span className="meta-max">/100</span>
           </div>
-          {phase === 'done' && (
+
+          {isDone && (
             <>
               <div className="meta-flavor">『{scoreFlavor(work.metascore)}』</div>
               {work.isMasterpiece && <div className="masterpiece-badge">🌟 神ゲー認定！</div>}
@@ -141,8 +388,12 @@ export const ReleaseScreen = () => {
                 {launchAdApplied ? (
                   <p className="ad-applied">✅ ローンチ広告キャンペーン適用済（売上 ×1.5）</p>
                 ) : (
-                  <button className="primary-btn ad-btn" disabled={adRunning} onClick={runLaunchAd}>
-                    {adRunning ? '広告再生中…' : '📺 広告を見て売上 +50%（ローンチキャンペーン）'}
+                  <button
+                    className="primary-btn ad-btn"
+                    disabled={adRunning !== null}
+                    onClick={runLaunchAd}
+                  >
+                    {adRunning === 'launch' ? '広告再生中…' : '📺 ローンチ広告 売上 +50%'}
                   </button>
                 )}
               </div>
@@ -152,6 +403,10 @@ export const ReleaseScreen = () => {
               </button>
             </>
           )}
+
+          <div className="release-debug-info" hidden>
+            displayQ={displayQ}
+          </div>
         </div>
       </section>
     </div>

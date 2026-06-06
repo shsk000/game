@@ -1,4 +1,5 @@
-import type { Candidate, Employee, EmployeeRole } from '../state/types';
+import type { Candidate, Employee, EmployeeRole, EmployeeSpecialty } from '../state/types';
+import type { CategoryId } from './categories';
 
 const SURNAMES = [
   '佐藤',
@@ -77,6 +78,36 @@ const wageFor = (role: EmployeeRole, power: number): number => {
   return Math.round(150 + power * 60);
 };
 
+const ALL_CATEGORY_IDS: CategoryId[] = [
+  'graphics',
+  'sound',
+  'story',
+  'gameplay',
+  'presentation',
+  'innovation',
+];
+
+const PRIMARY_CATEGORIES_BY_ROLE: Record<EmployeeRole, CategoryId[]> = {
+  programmer: ['gameplay', 'innovation'],
+  designer: ['graphics', 'sound'],
+  pr: ['story', 'presentation'],
+};
+
+const rollSpecialties = (role: EmployeeRole): EmployeeSpecialty[] => {
+  const result: EmployeeSpecialty[] = [];
+  const primaryPool = PRIMARY_CATEGORIES_BY_ROLE[role];
+  const primary = pick(primaryPool);
+  const primaryBonus = Math.round(3 + Math.random() * 7); // 3-10
+  result.push({ categoryId: primary, bonus: primaryBonus });
+  if (Math.random() < 0.4) {
+    const otherPool = ALL_CATEGORY_IDS.filter((c) => c !== primary);
+    const second = pick(otherPool);
+    const secondBonus = Math.round(1 + Math.random() * 3); // 1-4
+    result.push({ categoryId: second, bonus: secondBonus });
+  }
+  return result;
+};
+
 let counter = 0;
 
 export const newCandidate = (): Candidate => {
@@ -89,6 +120,7 @@ export const newCandidate = (): Candidate => {
     role,
     power,
     wage: wageFor(role, power),
+    specialties: rollSpecialties(role),
   };
 };
 
@@ -100,5 +132,25 @@ export const sumDesignerBonus = (employees: Employee[]): number =>
 
 export const sumPrBonus = (employees: Employee[]): number =>
   employees.filter((e) => e.role === 'pr').reduce((a, b) => a + b.power, 0) / 100;
+
+/**
+ * 割当従業員のうち、選択カテゴリにマッチする specialty.bonus の総和。
+ */
+export const sumEmployeeCategoryBonus = (
+  employees: Employee[],
+  selectedIds: string[],
+  categoryIds: CategoryId[],
+): number => {
+  const selectedSet = new Set(selectedIds);
+  const categorySet = new Set(categoryIds);
+  let total = 0;
+  for (const emp of employees) {
+    if (!selectedSet.has(emp.id)) continue;
+    for (const sp of emp.specialties ?? []) {
+      if (categorySet.has(sp.categoryId)) total += sp.bonus;
+    }
+  }
+  return total;
+};
 
 export const REFRESH_COST = 50;
