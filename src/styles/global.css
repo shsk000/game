@@ -1117,3 +1117,18 @@ body {
   cursor: not-allowed;
   opacity: 0.5;
 }
+
+/* ---- OfficeView (top-down sprite layout) ---- */
+.office-view-card { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.office-view-wrap {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  width: 100%;
+  padding: 8px 0;
+}
+.office-view {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}

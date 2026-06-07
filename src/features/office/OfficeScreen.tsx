@@ -1,3 +1,4 @@
+import { OfficeView } from '../../components/OfficeView';
 import { ACHIEVEMENTS } from '../../data/achievements';
 import { REFRESH_COST, roleLabel } from '../../data/employees';
 import { nextLockedScale, SCALES } from '../../data/scales';
@@ -46,6 +47,16 @@ export const OfficeScreen = () => {
           </button>
         </div>
       </header>
+
+      <section className="card office-view-card">
+        <h2>🏠 オフィス</h2>
+        <div className="office-view-wrap">
+          <OfficeView
+            scale={unlocked[unlocked.length - 1] ?? 'mini'}
+            employeeCount={employees.length}
+          />
+        </div>
+      </section>
 
       <section className="card">
         <h2>会社サマリ</h2>
