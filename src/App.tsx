@@ -22,6 +22,6 @@ export default function App() {
     case 'collection':
       return <CollectionScreen />;
     default:
-      return <PlanScreen />;
+      return <OfficeScreen />;
   }
 }

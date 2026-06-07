@@ -204,7 +204,7 @@ const initialTrend = ensureTrend(persisted.trend, now());
 
 export const useGameStore = create<GameState>()(
   subscribeWithSelector((set, get) => ({
-    screen: 'plan',
+    screen: 'office',
     funds: persisted.funds + (offlineCalc.report?.earned ?? 0),
     lifetimeRevenue: persisted.lifetimeRevenue + (offlineCalc.report?.earned ?? 0),
     fans: persisted.fans,

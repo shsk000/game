@@ -1132,3 +1132,22 @@ body {
   image-rendering: -moz-crisp-edges;
   image-rendering: crisp-edges;
 }
+
+/* ---- Pixel UI baseline (game-ui-design SKILL) ---- */
+/* Pixel fonts: DotGothic16 for JP text, PressStart2P for digits/EN */
+@import url("https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap");
+
+/* Force pixelated rendering on all sprites and UI images globally */
+img,
+canvas {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+/* Pixel-font-first body */
+body {
+  font-family:
+    "DotGothic16", "Press Start 2P", "Source Han Sans JP", "Noto Sans JP", "Hiragino Sans", "Meiryo",
+    ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
