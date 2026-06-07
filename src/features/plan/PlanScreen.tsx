@@ -16,11 +16,12 @@ import { compatLabel, getCompat } from '../../data/compatibility';
 import type { GenreId } from '../../data/genres';
 import { GENRE_BY_ID, GENRES } from '../../data/genres';
 import type { Scale } from '../../data/scales';
-import { SCALES } from '../../data/scales';
+import { SCALE_BY_ID, SCALES } from '../../data/scales';
 import type { ThemeId } from '../../data/themes';
 import { THEME_BY_ID, THEMES } from '../../data/themes';
 import { trendLabel } from '../../data/trend';
 import { useGameStore } from '../../state/gameStore';
+import { estimateRevenueRange, formatWeeks, formatYen } from '../../utils/format';
 
 /**
  * 企画会議画面：ピクセルアート UI 版。
@@ -88,6 +89,31 @@ const subMetaStyle: React.CSSProperties = {
   fontWeight: 400,
   marginLeft: 8,
 };
+
+type EstimateBoxProps = {
+  label: string;
+  value: string;
+  sub?: string;
+  accent: string;
+};
+
+const EstimateBox = ({ label, value, sub, accent }: EstimateBoxProps) => (
+  <div
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 2,
+      padding: '4px 6px',
+      borderLeft: `4px solid ${accent}`,
+    }}
+  >
+    <span style={{ fontSize: 10, color: COLORS.textSub, fontWeight: 700, letterSpacing: '0.06em' }}>
+      {label}
+    </span>
+    <span style={{ fontSize: 13, color: COLORS.textDark, fontWeight: 700 }}>{value}</span>
+    {sub && <span style={{ fontSize: 11, color: COLORS.textMid }}>{sub}</span>}
+  </div>
+);
 
 export const PlanScreen = () => {
   const startProject = useGameStore((s) => s.startProject);
@@ -369,25 +395,67 @@ export const PlanScreen = () => {
 
         {/* 規模 */}
         <PixelWindow title="規模を選ぶ" variant="standard">
-          <div style={chipRowStyle}>
-            {SCALES.map((s) => {
-              const isUnlocked = unlocked.includes(s.id);
-              const isSelected = scale === s.id;
+          <div style={sectionStyle}>
+            <div style={chipRowStyle}>
+              {SCALES.map((s) => {
+                const isUnlocked = unlocked.includes(s.id);
+                const isSelected = scale === s.id;
+                return (
+                  <PixelButton
+                    key={s.id}
+                    size="small"
+                    variant={isSelected ? 'primary' : 'secondary'}
+                    disabled={!isUnlocked}
+                    onClick={() => setScale(s.id)}
+                    ariaLabel={isUnlocked ? `${s.name} ${s.requiredLoC}LoC` : `${s.name}（未解放）`}
+                  >
+                    {s.name}（{s.requiredLoC}LoC）{!isUnlocked && ' 🔒'}
+                  </PixelButton>
+                );
+              })}
+            </div>
+            {(() => {
+              const def = SCALE_BY_ID[scale];
+              const range = estimateRevenueRange(def.baseUnit);
+              const monthCount = Math.round(def.neededWeeks / 4);
               return (
-                <PixelButton
-                  key={s.id}
-                  size="small"
-                  variant={isSelected ? 'primary' : 'secondary'}
-                  disabled={!isUnlocked}
-                  onClick={() => setScale(s.id)}
-                  ariaLabel={
-                    isUnlocked ? `${s.name} ${s.requiredLoC}LoC` : `${s.name}（未解放）`
-                  }
+                <div
+                  data-testid="scale-estimate"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                    gap: 8,
+                    padding: 10,
+                    background: COLORS.bgCreamLight,
+                    border: `3px solid ${COLORS.borderHard}`,
+                    boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.4)',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
                 >
-                  {s.name}（{s.requiredLoC}LoC）{!isUnlocked && ' 🔒'}
-                </PixelButton>
+                  <EstimateBox
+                    label="予想開発費"
+                    value={formatYen(def.baseCost)}
+                    accent={COLORS.accentRed}
+                  />
+                  <EstimateBox
+                    label="予想開発期間"
+                    value={`${formatWeeks(def.neededWeeks)}（${monthCount} ヶ月）`}
+                    accent={COLORS.accentOrange}
+                  />
+                  <EstimateBox
+                    label="予想売上レンジ"
+                    value={`${formatYen(range.low)} 〜 ${formatYen(range.high)}`}
+                    sub={`平均 ${formatYen(range.mid)}`}
+                    accent={COLORS.pioneer}
+                  />
+                  <EstimateBox
+                    label="月固定費（賃料）"
+                    value={`${formatYen(def.monthlyRent)}/月`}
+                    accent={COLORS.warn}
+                  />
+                </div>
               );
-            })}
+            })()}
           </div>
         </PixelWindow>
 
@@ -540,13 +608,13 @@ export const PlanScreen = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
               <JacketView genreId={genreId} themeId={themeId} size="md" />
-              <div style={{ flex: 1, minWidth: 200, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div
+                style={{ flex: 1, minWidth: 200, display: 'flex', flexDirection: 'column', gap: 6 }}
+              >
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: COLORS.textDark }}>
                   {GENRE_BY_ID[genreId].name} × {THEME_BY_ID[themeId].name}
                   {(isTrendyGenre || isTrendyTheme) && (
-                    <span style={{ color: COLORS.trendHot, marginLeft: 6 }}>
-                      🔥 トレンド合致！
-                    </span>
+                    <span style={{ color: COLORS.trendHot, marginLeft: 6 }}>🔥 トレンド合致！</span>
                   )}
                 </p>
                 {pioneer && (
@@ -589,7 +657,9 @@ export const PlanScreen = () => {
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}
+            >
               <PixelButton
                 size="large"
                 variant="primary"
@@ -599,13 +669,9 @@ export const PlanScreen = () => {
                 ▶ 開発開始
               </PixelButton>
               {!canStart && (
-                <p style={hintStyle}>
-                  ※ カテゴリを3つ選び、従業員を1人以上アサインしてください。
-                </p>
+                <p style={hintStyle}>※ カテゴリを3つ選び、従業員を1人以上アサインしてください。</p>
               )}
-              <p style={{ ...hintStyle, fontSize: 11 }}>
-                資金: ¥{funds.toLocaleString()}
-              </p>
+              <p style={{ ...hintStyle, fontSize: 11 }}>資金: ¥{funds.toLocaleString()}</p>
             </div>
           </div>
         </PixelWindow>

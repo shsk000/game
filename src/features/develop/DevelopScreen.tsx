@@ -5,10 +5,20 @@ import { ComboGauge } from '../../components/ComboGauge';
 import { GhostBar } from '../../components/GhostBar';
 import { JacketView } from '../../components/JacketView';
 import { TypingPanel } from '../../components/TypingPanel';
+import { PixelWindow } from '../../components/ui';
 import { buildLine } from '../../data/codeSnippets';
 import { getPhrases } from '../../data/genres';
+import { SCALE_BY_ID } from '../../data/scales';
 import { trendLabel, trendMultiplier } from '../../data/trend';
 import { useGameStore } from '../../state/gameStore';
+import {
+  addWeeks,
+  compareDate,
+  dateToWeekIndex,
+  formatGameDate,
+  type GameDate,
+} from '../../state/types';
+import { formatWeeks } from '../../utils/format';
 import { useTyping } from './useTyping';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -17,12 +27,17 @@ const ROLE_LABEL: Record<string, string> = {
   pr: '広報',
 };
 
+type Toast = { id: number; text: string; tone: 'warn' | 'good' | 'info' };
+
 export const DevelopScreen = () => {
   const current = useGameStore((s) => s.current);
   const ghosts = useGameStore((s) => s.ghosts);
   const employees = useGameStore((s) => s.employees);
   const trend = useGameStore((s) => s.trend);
+  const currentDate = useGameStore((s) => s.currentDate);
+  const lastFixedCost = useGameStore((s) => s.lastFixedCost);
   const tickAuto = useGameStore((s) => s.tickAuto);
+  const tickWeek = useGameStore((s) => s.tickWeek);
   const addDevelopLoC = useGameStore((s) => s.addDevelopLoC);
   const finishDevelopment = useGameStore((s) => s.finishDevelopment);
   const reportCombo = useGameStore((s) => s.reportCombo);
@@ -36,7 +51,19 @@ export const DevelopScreen = () => {
   const [adRunning, setAdRunning] = useState(false);
   const [codeLines, setCodeLines] = useState<string[]>([]);
   const [bugLineIdx, setBugLineIdx] = useState<number | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
   const lineCounterRef = useRef(0);
+  // 開発開始時点の日付。経過週数・必要週数の計算に使う
+  const startDateRef = useRef<GameDate | null>(null);
+  const projectScale = current?.scale;
+
+  const pushToast = (text: string, tone: Toast['tone']) => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, text, tone }]);
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 2000);
+  };
 
   const phrases = useMemo(() => {
     if (!current) return [];
@@ -75,13 +102,36 @@ export const DevelopScreen = () => {
     onAccuracy: (a) => reportAccuracy(a),
   });
 
-  // バグフレーズ発生時、最新行にバグマーク
+  // バグフレーズ発生時、最新行にバグマーク + 「+1 週」テロップ
   const bugPhrase = current?.bugPhrase ?? null;
   useEffect(() => {
     if (bugPhrase) {
       setBugLineIdx(codeLines.length > 0 ? codeLines.length - 1 : null);
+      // バグは「開発が +1 週遅延」する想定。tickWeek を 1 回追加発火
+      tickWeek();
+      pushToast('🐛 バグ発生：+1 週', 'warn');
     }
-  }, [bugPhrase]);
+  }, [bugPhrase, tickWeek]);
+
+  // プロジェクトが切り替わったら開始日付・経過状態をリセット
+  useEffect(() => {
+    if (!current) {
+      startDateRef.current = null;
+      lineCounterRef.current = 0;
+      setCodeLines([]);
+      setBugLineIdx(null);
+      setToasts([]);
+    } else if (startDateRef.current === null) {
+      startDateRef.current = currentDate;
+    }
+  }, [projectScale, current, currentDate]);
+
+  // 月初固定費の発生をテロップに変換
+  const lastFixedCostTotal = lastFixedCost?.total ?? null;
+  useEffect(() => {
+    if (lastFixedCostTotal === null) return;
+    pushToast(`💸 月初固定費 -¥${lastFixedCostTotal.toLocaleString()}`, 'warn');
+  }, [lastFixedCostTotal]);
 
   const startedAt = current?.startedAt ?? null;
   useEffect(() => {
@@ -101,6 +151,16 @@ export const DevelopScreen = () => {
     const t = setInterval(() => tickAuto(1), 1000);
     return () => clearInterval(t);
   }, [current?.scale, tickAuto]);
+
+  // v0.10：週進行タイマー（標準速度 7.5 秒 = 1週）
+  // 開発中は常に時間が流れる。月初には固定費イベントが発火（store 内 monthlyTick）。
+  useEffect(() => {
+    if (!current) return;
+    if (current.finishedAt !== null) return;
+    const WEEK_MS = 7500;
+    const t = setInterval(() => tickWeek(), WEEK_MS);
+    return () => clearInterval(t);
+  }, [current?.scale, current?.finishedAt, tickWeek]);
 
   // バグイベント抽選（10秒に1回）
   useEffect(() => {
@@ -133,6 +193,15 @@ export const DevelopScreen = () => {
   const tMul = trendMultiplier(trend, current.genreId, current.themeId);
   const isHot = combo >= 15;
 
+  // v0.10：週進行の進捗（ゲーム内時間）
+  const scaleDef = SCALE_BY_ID[current.scale];
+  const neededWeeks = scaleDef.neededWeeks;
+  const startDate = startDateRef.current ?? currentDate;
+  const elapsedWeeks = Math.max(0, dateToWeekIndex(currentDate) - dateToWeekIndex(startDate));
+  const weekPct = Math.min(100, (elapsedWeeks / Math.max(1, neededWeeks)) * 100);
+  const dueDate = addWeeks(startDate, neededWeeks);
+  const overdue = compareDate(currentDate, dueDate) > 0;
+
   const runDevBoost = () => {
     if (adRunning || boost) return;
     setAdRunning(true);
@@ -159,6 +228,103 @@ export const DevelopScreen = () => {
           />
         </div>
       </header>
+
+      {/* v0.10：ゲーム内時間カレンダー＋週進捗 */}
+      <div style={{ margin: '0 0 12px' }}>
+        <PixelWindow title="🗓 ゲーム内時間" variant="emphasis" bodyStyle={{ padding: 10 }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#1a0f08' }}>
+                {formatGameDate(currentDate)}
+              </span>
+              <span style={{ fontSize: 12, color: overdue ? '#a02828' : '#3a2a1e' }}>
+                経過 {elapsedWeeks} 週 / 予定 {neededWeeks} 週（{formatWeeks(neededWeeks)}）
+                {overdue && ' ⚠ 期日超過'}
+              </span>
+            </div>
+            <div
+              role="progressbar"
+              aria-label="開発期間プログレス"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(weekPct)}
+              style={{
+                height: 12,
+                background: '#2c1f15',
+                border: '2px solid #1a0f08',
+                boxShadow: 'inset 0 0 0 1px rgba(255,248,224,0.2)',
+                borderRadius: 2,
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  width: `${weekPct}%`,
+                  height: '100%',
+                  background: overdue
+                    ? 'repeating-linear-gradient(45deg,#a02828,#a02828 4px,#7a1c1c 4px,#7a1c1c 8px)'
+                    : '#f5c84a',
+                  transition: 'width 200ms linear',
+                }}
+              />
+            </div>
+            <div style={{ fontSize: 11, color: '#6b4f3a' }}>
+              標準速度 リアル 7.5 秒 = ゲーム内 1 週／月初に固定費が発生します
+            </div>
+          </div>
+        </PixelWindow>
+      </div>
+
+      {/* テロップ（バグ・固定費） */}
+      {toasts.length > 0 && (
+        <div
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            top: 80,
+            right: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            zIndex: 30,
+            pointerEvents: 'none',
+          }}
+        >
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              style={{
+                padding: '6px 12px',
+                background:
+                  t.tone === 'warn' ? '#a02828' : t.tone === 'good' ? '#308040' : '#3a2a1e',
+                color: '#fff8e0',
+                border: '3px solid #1a0f08',
+                boxShadow: '3px 3px 0 rgba(0,0,0,0.4)',
+                fontWeight: 700,
+                fontSize: 13,
+                letterSpacing: '0.06em',
+              }}
+            >
+              {t.text}
+            </div>
+          ))}
+        </div>
+      )}
 
       {assignedEmployees.length > 0 && (
         <section className="card assigned-strip">

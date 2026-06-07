@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { ads } from '../../ads/AdProvider';
 import { JacketView } from '../../components/JacketView';
+import { PixelWindow } from '../../components/ui';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
 import { compatLabel, getCompat } from '../../data/compatibility';
 import { GENRE_BY_ID } from '../../data/genres';
+import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
 import type { Achievement } from '../../state/types';
+import { formatRoi, formatYen } from '../../utils/format';
 import { scoreFlavor } from '../../utils/metascore';
 
 type RevealStage =
@@ -138,9 +141,7 @@ export const ReleaseScreen = () => {
   const showCurrent = stage === 'pre-ads' && !!current;
   const planGenreId = showCurrent ? current?.genreId : (work?.genreId ?? current?.genreId);
   const planThemeId = showCurrent ? current?.themeId : (work?.themeId ?? current?.themeId);
-  const planTitle = showCurrent
-    ? (current?.title ?? '')
-    : (work?.title ?? current?.title ?? '');
+  const planTitle = showCurrent ? (current?.title ?? '') : (work?.title ?? current?.title ?? '');
   if (!planGenreId || !planThemeId) return null;
   const genre = GENRE_BY_ID[planGenreId];
   const theme = THEME_BY_ID[planThemeId];
@@ -350,8 +351,31 @@ export const ReleaseScreen = () => {
 
           {isDone && (
             <>
+              {work.isMasterpiece && (
+                <PixelWindow variant="emphasis" style={{ marginBottom: 8 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: 6,
+                      background:
+                        'repeating-linear-gradient(45deg,#f5c84a,#f5c84a 6px,#fff4d0 6px,#fff4d0 12px)',
+                      border: '3px solid #1a0f08',
+                      animation: 'godgame-flash 800ms ease-out 1',
+                    }}
+                  >
+                    <div style={{ fontSize: 20, fontWeight: 700, color: '#a02828' }}>
+                      🌟 神ゲー認定！ 🌟
+                    </div>
+                    <div style={{ fontSize: 12, color: '#3a2a1e' }}>
+                      品質 ×1.5・売上 ×3 のジャックポット！
+                    </div>
+                  </div>
+                </PixelWindow>
+              )}
               <div className="meta-flavor">『{scoreFlavor(work.metascore)}』</div>
-              {work.isMasterpiece && <div className="masterpiece-badge">🌟 神ゲー認定！</div>}
               {work.ghostBeaten && <div className="ghost-update-badge">🏁 ゴースト記録更新！</div>}
               {newAchievements.length > 0 && (
                 <div className="achievement-badge-stack">
@@ -373,16 +397,81 @@ export const ReleaseScreen = () => {
                 <li>開発タイム {work.developSec.toFixed(2)}秒</li>
                 <li>👥 ファン +{work.fansGained}</li>
                 <li className="revenue">
-                  💰 初動売上 ¥{(work.initialRevenue + bonusRevenue).toLocaleString()}
+                  💰 初動売上 {formatYen(work.initialRevenue + bonusRevenue)}
                   {bonusRevenue > 0 && (
-                    <span className="revenue-bonus"> (+¥{bonusRevenue.toLocaleString()})</span>
+                    <span className="revenue-bonus"> (+{formatYen(bonusRevenue)})</span>
                   )}
                 </li>
                 <li className="sales-pool">
-                  📦 販売プール ¥{work.salesPool.toLocaleString()}
+                  📦 販売プール {formatYen(work.salesPool)}
                   <span className="sales-pool-note">（残りはオフィスで時間経過で売れる）</span>
                 </li>
               </ul>
+
+              {/* v0.10：利益ブレイクダウン */}
+              {(() => {
+                const scaleDef = SCALE_BY_ID[work.scale];
+                const devCost = scaleDef.baseCost;
+                // 開発期間（月数）= neededWeeks / 4 を四捨五入
+                const devMonths = Math.max(1, Math.round(scaleDef.neededWeeks / 4));
+                const monthlyRent = scaleDef.monthlyRent;
+                const fixedCostTotal = monthlyRent * devMonths;
+                const projectedTotal = work.initialRevenue + bonusRevenue + work.salesPool;
+                const profit = projectedTotal - devCost - fixedCostTotal;
+                const roi = formatRoi(profit, devCost + fixedCostTotal);
+                const positive = profit >= 0;
+                return (
+                  <PixelWindow
+                    title="💹 利益計算（見込）"
+                    variant="emphasis"
+                    style={{ marginTop: 10 }}
+                  >
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr auto',
+                        rowGap: 4,
+                        fontSize: 13,
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      <span>売上見込（初動＋販売プール）</span>
+                      <strong>{formatYen(projectedTotal)}</strong>
+                      <span>− 開発費（{scaleDef.name}）</span>
+                      <strong style={{ color: '#a02828' }}>-{formatYen(devCost)}</strong>
+                      <span>
+                        − 月固定費 × {devMonths} ヶ月（{formatYen(monthlyRent)}/月）
+                      </span>
+                      <strong style={{ color: '#a02828' }}>-{formatYen(fixedCostTotal)}</strong>
+                      <span
+                        style={{
+                          gridColumn: '1 / 3',
+                          height: 1,
+                          background: '#2c1f15',
+                          margin: '4px 0',
+                        }}
+                      />
+                      <span style={{ fontWeight: 700 }}>利益見込</span>
+                      <strong
+                        style={{
+                          color: positive ? '#308040' : '#a02828',
+                          fontSize: 16,
+                        }}
+                      >
+                        {formatYen(profit)}
+                      </strong>
+                      <span style={{ fontWeight: 700 }}>ROI</span>
+                      <strong
+                        style={{
+                          color: positive ? '#308040' : '#a02828',
+                        }}
+                      >
+                        {roi}
+                      </strong>
+                    </div>
+                  </PixelWindow>
+                );
+              })()}
 
               <div className="ad-block">
                 {launchAdApplied ? (

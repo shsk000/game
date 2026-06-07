@@ -123,6 +123,68 @@ export const computePerformanceScore = (perf: {
   return clamp(Math.round(wpmPart + comboPart + accPart), 0, 20);
 };
 
+/**
+ * v0.10：4要素ウェイト品質計算式。
+ *
+ *   quality_base = キャラ能力 × 0.50
+ *                + ジャンル相性 × 0.25
+ *                + タイピング演技 × 0.15
+ *                + 0.10（運の基底）
+ *   final_quality = quality_base × 運乱数(0.9〜1.1) × ガチャ(5%で×1.5)
+ *
+ * 各入力スコアは 0..100 で正規化されている前提。
+ * 出力 Q は 0..100 にクランプ。
+ *
+ * @param charPower      キャラ能力スコア 0..100（採用 × アサインの主ドライバー）
+ * @param genreAffinity  ジャンル相性スコア 0..100
+ * @param typingScore    タイピング演技スコア 0..100
+ * @param luck           運の基底に乗る揺らぎ要素 0..100（省略時は 50＝中庸）
+ */
+export type QualityV10Breakdown = {
+  charPower: number;
+  genreAffinity: number;
+  typingScore: number;
+  luck: number;
+  base: number;
+  luckMultiplier: number;
+  isGodGame: boolean;
+};
+
+export const computeQualityV10 = (args: {
+  charPower: number;
+  genreAffinity: number;
+  typingScore: number;
+  luck?: number;
+}): { Q: number; breakdown: QualityV10Breakdown } => {
+  const charPower = clamp(args.charPower, 0, 100);
+  const genreAffinity = clamp(args.genreAffinity, 0, 100);
+  const typingScore = clamp(args.typingScore, 0, 100);
+  const luck = clamp(args.luck ?? 50, 0, 100);
+
+  // ウェイトは spec.md §2-0 の通り（50/25/15/10）
+  const base = charPower * 0.5 + genreAffinity * 0.25 + typingScore * 0.15 + luck * 0.1;
+
+  // ±10% の運乱数
+  const luckMultiplier = 0.9 + Math.random() * 0.2;
+  // 5% で神ゲーガチャ（×1.5）
+  const isGodGame = Math.random() < 0.05;
+  const gachaMul = isGodGame ? 1.5 : 1.0;
+
+  const Q = clamp(Math.round(base * luckMultiplier * gachaMul), 0, 100);
+  return {
+    Q,
+    breakdown: {
+      charPower,
+      genreAffinity,
+      typingScore,
+      luck,
+      base: Math.round(base),
+      luckMultiplier: Math.round(luckMultiplier * 100) / 100,
+      isGodGame,
+    },
+  };
+};
+
 /** リリース時のファン増分。広報ボーナスで底上げ */
 export const fanDelta = (metascore: number, prBonus = 0): number => {
   let base: number;

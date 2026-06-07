@@ -7,6 +7,7 @@ import {
   newCandidate,
   REFRESH_COST,
   sumEmployeeCategoryBonus,
+  sumMonthlySalaries,
   sumPrBonus,
   sumProgrammerSpeed,
 } from '../data/employees';
@@ -33,10 +34,13 @@ import type {
   Candidate,
   CurrentProject,
   Employee,
+  GameDate,
+  MonthlyFixedCost,
   Screen,
   Work,
   WorkBreakdown,
 } from './types';
+import { addWeeks, INITIAL_GAME_DATE } from './types';
 
 const persisted = storage.load() ?? storage.defaults();
 
@@ -156,6 +160,16 @@ type Actions = {
   ) => void;
   tickAuto: (deltaSec: number) => void;
   tickSales: (deltaSec: number) => void;
+  /**
+   * v0.10：ゲーム内時間を1週進める。
+   * 月またぎ（次月第1週へ）になったときは monthlyTick も実行され、固定費が引かれる。
+   */
+  tickWeek: () => void;
+  /**
+   * v0.10：月初固定費（給与＋賃料）を funds から引く。
+   * 通常は tickWeek 内部から月またぎ時に呼ばれるが、テストや初期化のため公開。
+   */
+  monthlyTick: () => MonthlyFixedCost;
   addDevelopLoC: (n: number) => void;
   reportCombo: (combo: number) => void;
   reportWPM: (wpm: number) => void;
@@ -197,6 +211,10 @@ export type GameState = {
   current: CurrentProject | null;
   lastReleased: Work | null;
   offlineReport: OfflineReport | null;
+  /** v0.10：ゲーム内日付（週単位） */
+  currentDate: GameDate;
+  /** v0.10：直近に発生した月初固定費（UI 表示用。発生していなければ null） */
+  lastFixedCost: MonthlyFixedCost | null;
 } & Actions;
 
 const offlineCalc = computeOfflineEarnings(persisted.lastSeenAt, persisted.library);
@@ -227,6 +245,8 @@ export const useGameStore = create<GameState>()(
     current: null,
     lastReleased: null,
     offlineReport: offlineCalc.report,
+    currentDate: persisted.currentDate ?? INITIAL_GAME_DATE,
+    lastFixedCost: null,
 
     goTo: (screen) => set({ screen }),
 
@@ -274,6 +294,32 @@ export const useGameStore = create<GameState>()(
           },
         });
       }
+    },
+
+    tickWeek: () => {
+      const s = get();
+      const prev = s.currentDate;
+      const next = addWeeks(prev, 1);
+      // 月またぎ判定：month が変わったら固定費発生
+      const monthChanged = prev.month !== next.month || prev.year !== next.year;
+      set({ currentDate: next });
+      if (monthChanged) {
+        get().monthlyTick();
+      }
+    },
+
+    monthlyTick: () => {
+      const s = get();
+      const salaries = sumMonthlySalaries(s.employees);
+      const currentScale: Scale = s.unlockedScales[s.unlockedScales.length - 1] ?? 'mini';
+      const rent = SCALE_BY_ID[currentScale]?.monthlyRent ?? 0;
+      const total = salaries + rent;
+      const cost: MonthlyFixedCost = { salaries, rent, total };
+      set({
+        funds: s.funds - total,
+        lastFixedCost: cost,
+      });
+      return cost;
     },
 
     tickSales: (deltaSec) => {
@@ -607,6 +653,8 @@ export const useGameStore = create<GameState>()(
         current: null,
         lastReleased: null,
         offlineReport: null,
+        currentDate: d.currentDate,
+        lastFixedCost: null,
       });
     },
   })),
@@ -629,10 +677,11 @@ useGameStore.subscribe(
     records: s.records,
     achievements: s.achievements,
     tutorialDone: s.tutorialDone,
+    currentDate: s.currentDate,
   }),
   (snap) => {
     storage.save({
-      version: 4,
+      version: 5,
       ...snap,
       lastSeenAt: now(),
     });
@@ -645,7 +694,7 @@ if (typeof window !== 'undefined') {
   setInterval(() => {
     const s = useGameStore.getState();
     storage.save({
-      version: 4,
+      version: 5,
       funds: s.funds,
       lifetimeRevenue: s.lifetimeRevenue,
       fans: s.fans,
@@ -660,6 +709,7 @@ if (typeof window !== 'undefined') {
       records: s.records,
       achievements: s.achievements,
       tutorialDone: s.tutorialDone,
+      currentDate: s.currentDate,
       lastSeenAt: now(),
     });
   }, 5000);

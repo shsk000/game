@@ -5,6 +5,56 @@ import type { ThemeId } from '../data/themes';
 
 export type Screen = 'plan' | 'develop' | 'release' | 'office' | 'library' | 'collection';
 
+/**
+ * v0.10：ゲーム内時間。週単位で進行する。
+ *  - 1ヶ月 = 4週、1年 = 48週 として運用
+ *  - 表示形式：`20XX年 MM月 第 N週`
+ *  - month は 1..12、week は 1..4。
+ */
+export type GameDate = {
+  year: number;
+  month: number;
+  week: number;
+};
+
+export const INITIAL_GAME_DATE: GameDate = { year: 2026, month: 1, week: 1 };
+
+/** GameDate を週インデックスに変換（年単位の差を含む通算週）。比較・加算用 */
+export const dateToWeekIndex = (d: GameDate): number =>
+  d.year * 48 + (d.month - 1) * 4 + (d.week - 1);
+
+/** 週インデックスから GameDate へ復元 */
+export const weekIndexToDate = (i: number): GameDate => {
+  const year = Math.floor(i / 48);
+  const rem = i - year * 48;
+  const month = Math.floor(rem / 4) + 1;
+  const week = (rem % 4) + 1;
+  return { year, month, week };
+};
+
+/** GameDate を n 週進める（n が負なら戻る）。月またぎ・年またぎを正しく処理 */
+export const addWeeks = (d: GameDate, n: number): GameDate =>
+  weekIndexToDate(dateToWeekIndex(d) + n);
+
+/** 比較ヘルパ：a < b なら負、a == b なら 0、a > b なら正 */
+export const compareDate = (a: GameDate, b: GameDate): number =>
+  dateToWeekIndex(a) - dateToWeekIndex(b);
+
+/** 表示用のフォーマット（例：「2026年 4月 第3週」） */
+export const formatGameDate = (d: GameDate): string => `${d.year}年 ${d.month}月 第${d.week}週`;
+
+/**
+ * v0.10：月初（第1週）に発生する固定費の内訳。
+ *  - salaries：在籍社員の給与合計（円）
+ *  - rent：現在の規模のオフィス賃料（円）
+ *  - total：salaries + rent
+ */
+export type MonthlyFixedCost = {
+  salaries: number;
+  rent: number;
+  total: number;
+};
+
 export type Achievement =
   | 'first-release'
   | 'first-masterpiece'
