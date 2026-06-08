@@ -1,3 +1,4 @@
+import { GameOverModal } from './components/GameOverModal';
 import { CollectionScreen } from './features/collection/CollectionScreen';
 import { DevelopScreen } from './features/develop/DevelopScreen';
 import { LibraryScreen } from './features/library/LibraryScreen';
@@ -8,20 +9,29 @@ import { useGameStore } from './state/gameStore';
 
 export default function App() {
   const screen = useGameStore((s) => s.screen);
-  switch (screen) {
-    case 'plan':
-      return <PlanScreen />;
-    case 'develop':
-      return <DevelopScreen />;
-    case 'release':
-      return <ReleaseScreen />;
-    case 'office':
-      return <OfficeScreen />;
-    case 'library':
-      return <LibraryScreen />;
-    case 'collection':
-      return <CollectionScreen />;
-    default:
-      return <OfficeScreen />;
-  }
+  const gameOver = useGameStore((s) => s.gameOver);
+  const renderScreen = () => {
+    switch (screen) {
+      case 'plan':
+        return <PlanScreen />;
+      case 'develop':
+        return <DevelopScreen />;
+      case 'release':
+        return <ReleaseScreen />;
+      case 'office':
+        return <OfficeScreen />;
+      case 'library':
+        return <LibraryScreen />;
+      case 'collection':
+        return <CollectionScreen />;
+      default:
+        return <OfficeScreen />;
+    }
+  };
+  return (
+    <>
+      {renderScreen()}
+      {gameOver && <GameOverModal />}
+    </>
+  );
 }

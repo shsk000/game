@@ -40,14 +40,7 @@ const checkIcon = async (path: string): Promise<boolean> => {
   }
 };
 
-export const PixelIcon = ({
-  src,
-  emoji = '',
-  label,
-  size = 32,
-  className,
-  style,
-}: Props) => {
+export const PixelIcon = ({ src, emoji = '', label, size = 32, className, style }: Props) => {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {

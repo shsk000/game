@@ -72,11 +72,28 @@ const rollPower = (role: EmployeeRole): number => {
   return Math.round(5 + Math.random() * 15);
 };
 
+/**
+ * v0.10：月給（円）。power 値の桁感に応じてリスケール。
+ *  - programmer: power 1.0 で約 ¥200,000、3.0 で約 ¥500,000、5.0+ で ¥1,000,000+
+ *  - designer:   power 3 で約 ¥250,000、10 で約 ¥1,000,000
+ *  - pr:         power 10 で約 ¥300,000、20 で約 ¥600,000
+ */
 const wageFor = (role: EmployeeRole, power: number): number => {
-  if (role === 'programmer') return Math.round(150 + power * 600);
-  if (role === 'designer') return Math.round(150 + power * 90);
-  return Math.round(150 + power * 60);
+  if (role === 'programmer') return Math.round(100_000 + power * 200_000);
+  if (role === 'designer') return Math.round(100_000 + power * 100_000);
+  return Math.round(100_000 + power * 30_000);
 };
+
+/**
+ * v0.10：個別社員の月給を取得。
+ */
+export const employeeMonthlyWage = (e: Employee): number => wageFor(e.role, e.power);
+
+/**
+ * v0.10：全社員の月給合計（円）。
+ */
+export const sumMonthlySalaries = (employees: Employee[]): number =>
+  employees.reduce((sum, e) => sum + employeeMonthlyWage(e), 0);
 
 const ALL_CATEGORY_IDS: CategoryId[] = [
   'graphics',

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 
 /**
  * ピクセルアート風ボタン（3状態：idle / hover / press）。
@@ -37,7 +37,10 @@ const sizeTokens: Record<Size, { padX: number; padY: number; font: number }> = {
   large: { padX: 22, padY: 12, font: 18 },
 };
 
-const variantTokens: Record<Variant, { bg: string; bgHover: string; border: string; text: string }> = {
+const variantTokens: Record<
+  Variant,
+  { bg: string; bgHover: string; border: string; text: string }
+> = {
   primary: {
     bg: '#5aa84a',
     bgHover: '#6dbc5a',
@@ -80,19 +83,20 @@ export const PixelButton = ({
   // スプライト指定時の状態別位置：idle=0, hover=1, press=2
   const spriteState = disabled ? 0 : pressed ? 2 : hover ? 1 : 0;
 
-  const spriteBg: React.CSSProperties = spriteSrc && spriteFrameWidth && spriteFrameHeight
-    ? {
-        backgroundImage: `url("${spriteSrc}")`,
-        backgroundRepeat: 'no-repeat',
-        backgroundSize: `${spriteFrameWidth * 3}px ${spriteFrameHeight}px`,
-        backgroundPosition: `-${spriteState * spriteFrameWidth}px 0`,
-        width: spriteFrameWidth,
-        height: spriteFrameHeight,
-        imageRendering: 'pixelated',
-        border: 'none',
-        background: undefined,
-      }
-    : {};
+  const spriteBg: React.CSSProperties =
+    spriteSrc && spriteFrameWidth && spriteFrameHeight
+      ? {
+          backgroundImage: `url("${spriteSrc}")`,
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: `${spriteFrameWidth * 3}px ${spriteFrameHeight}px`,
+          backgroundPosition: `-${spriteState * spriteFrameWidth}px 0`,
+          width: spriteFrameWidth,
+          height: spriteFrameHeight,
+          imageRendering: 'pixelated',
+          border: 'none',
+          background: undefined,
+        }
+      : {};
 
   const cssBg: React.CSSProperties = spriteSrc
     ? {}

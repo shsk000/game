@@ -4,12 +4,24 @@ import type { GenreId } from '../data/genres';
 import type { Scale } from '../data/scales';
 import type { ThemeId } from '../data/themes';
 import type { Trend } from '../data/trend';
-import type { Achievement, Employee, Work, WorkBreakdown } from '../state/types';
+import type { Achievement, Employee, GameDate, Work, WorkBreakdown } from '../state/types';
+import { INITIAL_GAME_DATE } from '../state/types';
 
-const KEY = 'typing-factory:v4';
+/**
+ * v5 で導入：
+ *  - currentDate（ゲーム内日付・週単位）
+ *  - funds / lifetimeRevenue / library.totalRevenue / library.initialRevenue /
+ *    library.salesPool / library.initialSalesPool を v0.10 の桁感に合わせて ×10,000
+ *  - records.bestRevenue も ×10,000
+ */
+const KEY = 'typing-factory:v5';
+const LEGACY_KEY_V4 = 'typing-factory:v4';
 const LEGACY_KEY_V3 = 'typing-factory:v3';
 const LEGACY_KEY_V2 = 'typing-factory:v2';
 const LEGACY_KEY_V1 = 'typing-factory:v1';
+
+/** v0.9→v0.10 の桁変換係数。spec.md §6 参照 */
+const V10_MONEY_MULTIPLIER = 10_000;
 
 export type Records = {
   bestMetascore: number;
@@ -19,7 +31,7 @@ export type Records = {
 };
 
 export type Persisted = {
-  version: 4;
+  version: 5;
   funds: number;
   lifetimeRevenue: number;
   fans: number;
@@ -35,6 +47,7 @@ export type Persisted = {
   achievements: Achievement[];
   tutorialDone: boolean;
   lastSeenAt: number;
+  currentDate: GameDate;
 };
 
 const emptyGhostsRecord = (): Record<Scale, number | null> => ({
@@ -55,8 +68,9 @@ const defaultBreakdown = (): WorkBreakdown => ({
 });
 
 export const defaults = (): Persisted => ({
-  version: 4,
-  funds: 1500,
+  version: 5,
+  // v0.10 の桁感に合わせて初期資金を ¥15,000,000 に（v0.9 の ¥1,500 を ×10,000）
+  funds: 15_000_000,
   lifetimeRevenue: 0,
   fans: 0,
   employees: [],
@@ -71,6 +85,7 @@ export const defaults = (): Persisted => ({
   achievements: [],
   tutorialDone: false,
   lastSeenAt: Date.now(),
+  currentDate: { ...INITIAL_GAME_DATE },
 });
 
 type LegacyWork = Partial<Work> & {
@@ -122,7 +137,66 @@ const migrateEmployeeFromV3 = (e: LegacyEmployeeV3): Employee => ({
   specialties: e.specialties ?? [],
 });
 
+/** v0.9 → v0.10 用：work の金額を ×10,000 倍する */
+const rescaleWorkForV10 = (w: Work): Work => ({
+  ...w,
+  initialRevenue: Math.round(w.initialRevenue * V10_MONEY_MULTIPLIER),
+  salesPool: Math.round(w.salesPool * V10_MONEY_MULTIPLIER),
+  initialSalesPool: Math.round(w.initialSalesPool * V10_MONEY_MULTIPLIER),
+  totalRevenue: Math.round(w.totalRevenue * V10_MONEY_MULTIPLIER),
+});
+
+/** v0.9（version=4）→ v0.10（version=5）の移行。 */
+const migrateFromV4 = (raw: string): Persisted | null => {
+  try {
+    const old = JSON.parse(raw) as Partial<Persisted> & {
+      version?: number;
+      employees?: LegacyEmployeeV3[];
+      library?: LegacyWork[];
+    };
+    const base = defaults();
+    const employees: Employee[] = Array.isArray(old.employees)
+      ? (old.employees as LegacyEmployeeV3[]).map(migrateEmployeeFromV3)
+      : [];
+    const library: Work[] = Array.isArray(old.library)
+      ? (old.library as LegacyWork[])
+          .map((w) => ensureWorkBreakdown(migrateWorkV2(w)))
+          .map(rescaleWorkForV10)
+      : [];
+    const oldRecords = old.records ?? base.records;
+    const records: Records = {
+      ...oldRecords,
+      bestRevenue: Math.round((oldRecords.bestRevenue ?? 0) * V10_MONEY_MULTIPLIER),
+    };
+    return {
+      ...base,
+      funds: Math.round((old.funds ?? 0) * V10_MONEY_MULTIPLIER),
+      lifetimeRevenue: Math.round((old.lifetimeRevenue ?? 0) * V10_MONEY_MULTIPLIER),
+      fans: old.fans ?? 0,
+      employees,
+      unlockedScales: (old.unlockedScales ?? base.unlockedScales) as Scale[],
+      unlockedGenres: (old.unlockedGenres ?? base.unlockedGenres) as GenreId[],
+      unlockedThemes: (old.unlockedThemes ?? base.unlockedThemes) as ThemeId[],
+      unlockedCategories:
+        old.unlockedCategories && old.unlockedCategories.length > 0
+          ? (old.unlockedCategories as CategoryId[])
+          : [...INITIAL_CATEGORY_IDS],
+      ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
+      library,
+      trend: old.trend ?? null,
+      records,
+      achievements: old.achievements ?? base.achievements,
+      tutorialDone: old.tutorialDone ?? false,
+      lastSeenAt: old.lastSeenAt ?? Date.now(),
+      currentDate: { ...INITIAL_GAME_DATE },
+    };
+  } catch {
+    return null;
+  }
+};
+
 const migrateFromV3 = (raw: string): Persisted | null => {
+  // v3 はまず v4 形式へ寄せて、その後 v5 へ
   try {
     const old = JSON.parse(raw) as Partial<Persisted> & {
       employees?: LegacyEmployeeV3[];
@@ -133,12 +207,17 @@ const migrateFromV3 = (raw: string): Persisted | null => {
       ? old.employees.map(migrateEmployeeFromV3)
       : [];
     const library: Work[] = Array.isArray(old.library)
-      ? old.library.map((w) => ensureWorkBreakdown(migrateWorkV2(w)))
+      ? old.library.map((w) => ensureWorkBreakdown(migrateWorkV2(w))).map(rescaleWorkForV10)
       : [];
+    const oldRecords = old.records ?? base.records;
+    const records: Records = {
+      ...oldRecords,
+      bestRevenue: Math.round((oldRecords.bestRevenue ?? 0) * V10_MONEY_MULTIPLIER),
+    };
     return {
       ...base,
-      funds: old.funds ?? 0,
-      lifetimeRevenue: old.lifetimeRevenue ?? 0,
+      funds: Math.round((old.funds ?? 0) * V10_MONEY_MULTIPLIER),
+      lifetimeRevenue: Math.round((old.lifetimeRevenue ?? 0) * V10_MONEY_MULTIPLIER),
       fans: old.fans ?? 0,
       employees,
       unlockedScales: (old.unlockedScales ?? base.unlockedScales) as Scale[],
@@ -148,10 +227,11 @@ const migrateFromV3 = (raw: string): Persisted | null => {
       ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
       library,
       trend: old.trend ?? null,
-      records: old.records ?? base.records,
+      records,
       achievements: old.achievements ?? base.achievements,
       tutorialDone: old.tutorialDone ?? false,
       lastSeenAt: old.lastSeenAt ?? Date.now(),
+      currentDate: { ...INITIAL_GAME_DATE },
     };
   } catch {
     return null;
@@ -168,10 +248,16 @@ const migrateFromV2 = (raw: string): Persisted | null => {
     const employees: Employee[] = Array.isArray(old.employees)
       ? (old.employees as Employee[]).map((e) => ({ ...e, specialties: e.specialties ?? [] }))
       : [];
+    const library: Work[] = (old.library ?? []).map(migrateWorkV2).map(rescaleWorkForV10);
+    const oldRecords = old.records ?? base.records;
+    const records: Records = {
+      ...oldRecords,
+      bestRevenue: Math.round((oldRecords.bestRevenue ?? 0) * V10_MONEY_MULTIPLIER),
+    };
     return {
       ...base,
-      funds: old.funds ?? 0,
-      lifetimeRevenue: old.lifetimeRevenue ?? 0,
+      funds: Math.round((old.funds ?? 0) * V10_MONEY_MULTIPLIER),
+      lifetimeRevenue: Math.round((old.lifetimeRevenue ?? 0) * V10_MONEY_MULTIPLIER),
       fans: old.fans ?? 0,
       employees,
       unlockedScales: (old.unlockedScales ?? ['mini']) as Scale[],
@@ -179,9 +265,10 @@ const migrateFromV2 = (raw: string): Persisted | null => {
       unlockedThemes: (old.unlockedThemes ?? base.unlockedThemes) as ThemeId[],
       unlockedCategories: [...INITIAL_CATEGORY_IDS],
       ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
-      library: (old.library ?? []).map(migrateWorkV2),
+      library,
       trend: old.trend ?? null,
-      records: old.records ?? base.records,
+      records,
+      currentDate: { ...INITIAL_GAME_DATE },
     };
   } catch {
     return null;
@@ -200,11 +287,12 @@ const migrateFromV1 = (raw: string): Persisted | null => {
     const base = defaults();
     return {
       ...base,
-      funds: old.funds ?? 0,
+      funds: Math.round((old.funds ?? 0) * V10_MONEY_MULTIPLIER),
       unlockedScales: (old.unlockedScales ?? ['mini']) as Scale[],
       unlockedCategories: [...INITIAL_CATEGORY_IDS],
       ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
-      library: (old.library ?? []).map(migrateWorkV2),
+      library: (old.library ?? []).map(migrateWorkV2).map(rescaleWorkForV10),
+      currentDate: { ...INITIAL_GAME_DATE },
     };
   } catch {
     return null;
@@ -216,7 +304,7 @@ export const load = (): Persisted | null => {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Persisted;
-      if (parsed && parsed.version === 4) {
+      if (parsed && parsed.version === 5) {
         const merged: Persisted = { ...defaults(), ...parsed };
         merged.library = merged.library.map(ensureWorkBreakdown);
         merged.employees = merged.employees.map((e) => ({
@@ -227,7 +315,21 @@ export const load = (): Persisted | null => {
           parsed.unlockedCategories && parsed.unlockedCategories.length > 0
             ? parsed.unlockedCategories
             : [...INITIAL_CATEGORY_IDS];
+        merged.currentDate = parsed.currentDate ?? { ...INITIAL_GAME_DATE };
         return merged;
+      }
+    }
+    const v4 = localStorage.getItem(LEGACY_KEY_V4);
+    if (v4) {
+      const migrated = migrateFromV4(v4);
+      if (migrated) {
+        save(migrated);
+        try {
+          localStorage.removeItem(LEGACY_KEY_V4);
+        } catch {
+          /* ignore */
+        }
+        return migrated;
       }
     }
     const v3 = localStorage.getItem(LEGACY_KEY_V3);
@@ -286,6 +388,7 @@ export const save = (p: Persisted): void => {
 export const reset = (): void => {
   try {
     localStorage.removeItem(KEY);
+    localStorage.removeItem(LEGACY_KEY_V4);
     localStorage.removeItem(LEGACY_KEY_V3);
     localStorage.removeItem(LEGACY_KEY_V2);
     localStorage.removeItem(LEGACY_KEY_V1);

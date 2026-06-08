@@ -1119,7 +1119,12 @@ body {
 }
 
 /* ---- OfficeView (top-down sprite layout) ---- */
-.office-view-card { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.office-view-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
 .office-view-wrap {
   display: flex;
   justify-content: center;
@@ -1148,6 +1153,6 @@ canvas {
 /* Pixel-font-first body */
 body {
   font-family:
-    "DotGothic16", "Press Start 2P", "Source Han Sans JP", "Noto Sans JP", "Hiragino Sans", "Meiryo",
-    ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    "DotGothic16", "Press Start 2P", "Source Han Sans JP", "Noto Sans JP", "Hiragino Sans",
+    "Meiryo", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }

@@ -1,10 +1,5 @@
 import { useMemo } from 'react';
-import {
-  PixelMenuBar,
-  type PixelMenuItem,
-  PixelStatusBar,
-  PixelWindow,
-} from '../../components/ui';
+import { PixelMenuBar, type PixelMenuItem, PixelStatusBar, PixelWindow } from '../../components/ui';
 import { compatLabel, getCompat } from '../../data/compatibility';
 import { GENRE_BY_ID, GENRES } from '../../data/genres';
 import { THEME_BY_ID, THEMES } from '../../data/themes';
@@ -211,9 +206,7 @@ export const CollectionScreen = () => {
                   {THEMES.map((t) => (
                     <th key={t.id} style={HEADER_CELL} title={t.name}>
                       <div style={{ fontSize: 14, lineHeight: 1.2 }}>{t.emoji}</div>
-                      <div style={{ fontSize: 10, lineHeight: 1.2, marginTop: 2 }}>
-                        {t.name}
-                      </div>
+                      <div style={{ fontSize: 10, lineHeight: 1.2, marginTop: 2 }}>{t.name}</div>
                     </th>
                   ))}
                 </tr>
@@ -264,9 +257,7 @@ export const CollectionScreen = () => {
                           }}
                           title={`${GENRE_BY_ID[g.id].name} × ${THEME_BY_ID[t.id].name}`}
                         >
-                          <div style={{ fontSize: 11, lineHeight: 1.1 }}>
-                            {compatLabel(c)}
-                          </div>
+                          <div style={{ fontSize: 11, lineHeight: 1.1 }}>{compatLabel(c)}</div>
                           <div
                             style={{
                               fontSize: 10,
@@ -303,24 +294,19 @@ export const CollectionScreen = () => {
             }}
           >
             <span>
-              <span style={{ ...LEGEND_SWATCH, background: '#f0c020' }} />
-              🔥 神（1.7+）
+              <span style={{ ...LEGEND_SWATCH, background: '#f0c020' }} />🔥 神（1.7+）
             </span>
             <span>
-              <span style={{ ...LEGEND_SWATCH, background: '#5aa84a' }} />
-              👍 good（1.3+）
+              <span style={{ ...LEGEND_SWATCH, background: '#5aa84a' }} />👍 good（1.3+）
             </span>
             <span>
-              <span style={{ ...LEGEND_SWATCH, background: '#a0b85a' }} />
-              😐 普通（0.9+）
+              <span style={{ ...LEGEND_SWATCH, background: '#a0b85a' }} />😐 普通（0.9+）
             </span>
             <span>
-              <span style={{ ...LEGEND_SWATCH, background: '#a83a3a' }} />
-              💀 地雷（&lt;0.9）
+              <span style={{ ...LEGEND_SWATCH, background: '#a83a3a' }} />💀 地雷（&lt;0.9）
             </span>
             <span>
-              <span style={{ ...LEGEND_SWATCH, background: '#5c4a3a' }} />
-              ？ 未発見
+              <span style={{ ...LEGEND_SWATCH, background: '#5c4a3a' }} />？ 未発見
             </span>
           </div>
         </PixelWindow>

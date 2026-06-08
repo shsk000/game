@@ -1,14 +1,10 @@
 import { JacketView } from '../../components/JacketView';
-import {
-  PixelMenuBar,
-  type PixelMenuItem,
-  PixelStatusBar,
-  PixelWindow,
-} from '../../components/ui';
+import { PixelMenuBar, type PixelMenuItem, PixelStatusBar, PixelWindow } from '../../components/ui';
 import { GENRE_BY_ID } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
+import { formatYen } from '../../utils/format';
 
 /**
  * 作品ライブラリ画面：これまでリリースした作品一覧。
@@ -190,10 +186,9 @@ export const LibraryScreen = () => {
                         fontVariantNumeric: 'tabular-nums',
                       }}
                     >
-                      Q{w.quality} ／ ⏱ {w.developSec.toFixed(2)}秒
-                      <br />
-                      💰 初動 ¥{w.initialRevenue.toLocaleString()} ／ 累計 ¥
-                      {w.totalRevenue.toLocaleString()}
+                      Q{w.quality} ／ ⏱ {w.developSec.toFixed(1)}秒
+                      <br />💰 初動 {formatYen(w.initialRevenue)} ／ 累計{' '}
+                      {formatYen(w.totalRevenue)}
                     </div>
 
                     {w.selling ? (
@@ -227,7 +222,7 @@ export const LibraryScreen = () => {
                             fontVariantNumeric: 'tabular-nums',
                           }}
                         >
-                          販売中 残¥{Math.round(w.salesPool).toLocaleString()}
+                          販売中 残 {formatYen(w.salesPool)}
                         </div>
                       </div>
                     ) : (
@@ -244,7 +239,7 @@ export const LibraryScreen = () => {
                           fontVariantNumeric: 'tabular-nums',
                         }}
                       >
-                        完売 ¥{w.totalRevenue.toLocaleString()}
+                        完売 {formatYen(w.totalRevenue)}
                       </div>
                     )}
                   </PixelWindow>
