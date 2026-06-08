@@ -201,6 +201,25 @@
 - [x] **O-9** D-2 / D-5 / D-8（StatusBar に formatYen、Library 売上 formatYen、Release のレーダー）完成
 - [x] **O-10** F-5（-X 週テロップ）/ F-6（developWeeks 表示）完成。F-3/F-4 は既存実装で発火
 
+### O-11 以降：2026-06-08 評価レポート（notes/evaluation-post-p0.md）で発覚した追加課題
+
+- [ ] **O-11** ⚠ **localStorage シード読込問題**（評価 §2-2）：Playwright で `typing-factory:v5` キーに seed を入れても画面が defaults を表示する。storage.ts のロード時スキーマ検証 or マイグレ処理で seed が無効化される疑い。seed 構造を Persisted 型に厳密に合わせるテストを追加
+- [ ] **O-12** ⚠ **Library 画面への遷移失敗**（評価 §2-4）：PixelMenuBar の「作品」クリックが効かないかセレクタ問題。Playwright か実装側の判定見直し
+- [ ] **O-13** OfficeView の emoji fallback（O-4 で実装済とのこと）が**実機ブラウザで効いていないように見える**：スクショで黒い枠表示が残る。キャッシュか、CSS 適用範囲の問題か再確認
+- [ ] **O-14** 資金表示の桁数フォーマッタ統一：OfficeScreen は `¥1500万`、PlanScreen は `¥15,000,000` と混在。`formatYen` を全箇所に
+- [ ] **O-15** OfficeScreen の累計売上 ¥0 / 最高WPM 0 等の「未経験時サマリ」見直し：「—」「未挑戦」のような表示にする
+- [ ] **O-16** ピクセルフォント（DotGothic16）の数値 monospace 化：PlanScreen の `¥15,000,000` などで数字フォントが揺れる
+- [ ] **O-17** vitest 導入：A-11/J-5/C-8/K-3/K-4/K-5 をまとめて単体テスト化（package.json scripts 追加）
+
+---
+
+## 評価レポート
+
+- **2026-06-08 P0 完了直後**: [notes/evaluation-post-p0.md](./notes/evaluation-post-p0.md)
+  - 良点 5 件（時間 PixelWindow / 固定費パネル / 予想表示 / 桁数 / ピクセル UI 完成度）
+  - 問題点 5 件（スプライト 404 ※実機確認要 / シード読込 / 既存テスト / Library 遷移 / Collection 発見 0）
+  - プロデューサー判断：P0 のコアは ◎、表面の素材と CI が ×
+
 ---
 
 ## 実装順序の推奨（diagnosis §7 と spec §7 を統合）

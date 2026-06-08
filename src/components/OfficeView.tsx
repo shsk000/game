@@ -273,6 +273,9 @@ export const OfficeView = ({
             width={dw}
             height={dh}
             style={{ imageRendering: 'pixelated', display: 'block' }}
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
           />
         ) : (
           <div style={{ fontSize: dw * 0.7, textAlign: 'center' }}>

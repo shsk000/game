@@ -688,7 +688,7 @@ export const PlanScreen = () => {
               {!canStart && (
                 <p style={hintStyle}>※ カテゴリを3つ選び、従業員を1人以上アサインしてください。</p>
               )}
-              <p style={{ ...hintStyle, fontSize: 11 }}>資金: ¥{funds.toLocaleString()}</p>
+              <p style={{ ...hintStyle, fontSize: 11 }}>資金: {formatYen(funds)}</p>
             </div>
           </div>
         </PixelWindow>
