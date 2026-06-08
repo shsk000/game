@@ -2,11 +2,10 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { ACHIEVEMENTS } from '../data/achievements';
 import type { CategoryId } from '../data/categories';
-import { CATEGORY_BY_ID, categoryAffinity, INITIAL_CATEGORY_IDS } from '../data/categories';
+import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import {
   newCandidate,
   REFRESH_COST,
-  sumEmployeeCategoryBonus,
   sumMonthlySalaries,
   sumPrBonus,
   sumProgrammerSpeed,
@@ -18,11 +17,13 @@ import { nextLockedScale, SCALE_BY_ID, SCALES } from '../data/scales';
 import type { ThemeId } from '../data/themes';
 import { THEMES } from '../data/themes';
 import { generateTitle } from '../data/titleGenerator';
-import { ensureTrend, type Trend } from '../data/trend';
+import { ensureTrend, type Trend, trendMultiplier } from '../data/trend';
+import { computeGenreAffinityScore } from '../utils/affinity';
+import { computeCharacterScore } from '../utils/character';
 import {
   computeMetascore,
   computePerformanceScore,
-  computeQuality,
+  computeQualityV10,
   computeRevenue,
   fanDelta,
 } from '../utils/metascore';
@@ -187,6 +188,11 @@ type Actions = {
   clearOfflineReport: () => void;
   finishTutorial: () => void;
   clearNewlyAchieved: () => void;
+  /** v0.10 §9-2：資金不足でゲームオーバー状態に入る。borrow 機構ができたら条件を緩める */
+  triggerGameOver: () => void;
+  clearGameOver: () => void;
+  /** v0.10 F-5：WPM しきい値クロスで -X 週短縮した記録（重複防止）。週短縮も即時反映 */
+  applyTimeShortcut: (thresholdWpm: number, weeksDelta: number) => boolean;
   reset: () => void;
 };
 
@@ -215,6 +221,8 @@ export type GameState = {
   currentDate: GameDate;
   /** v0.10：直近に発生した月初固定費（UI 表示用。発生していなければ null） */
   lastFixedCost: MonthlyFixedCost | null;
+  /** v0.10 §9-2：資金枯渇でゲームオーバー */
+  gameOver: boolean;
 } & Actions;
 
 const offlineCalc = computeOfflineEarnings(persisted.lastSeenAt, persisted.library);
@@ -247,6 +255,7 @@ export const useGameStore = create<GameState>()(
     offlineReport: offlineCalc.report,
     currentDate: persisted.currentDate ?? INITIAL_GAME_DATE,
     lastFixedCost: null,
+    gameOver: false,
 
     goTo: (screen) => set({ screen }),
 
@@ -270,6 +279,8 @@ export const useGameStore = create<GameState>()(
         selectedCategories: [...selectedCategories],
         assignedEmployeeIds: [...assignedEmployeeIds],
         perf: { wpm: 0, maxCombo: 0, accuracy: 1 },
+        startDate: get().currentDate,
+        timeShortcutsUnlocked: [],
       };
       set({
         current: project,
@@ -315,11 +326,39 @@ export const useGameStore = create<GameState>()(
       const rent = SCALE_BY_ID[currentScale]?.monthlyRent ?? 0;
       const total = salaries + rent;
       const cost: MonthlyFixedCost = { salaries, rent, total };
+      const newFunds = s.funds - total;
       set({
-        funds: s.funds - total,
+        funds: newFunds,
         lastFixedCost: cost,
       });
+      // v0.10 §9-2：資金 0 でゲームオーバー（Phase 3 で借金枠ロジックで上書き予定）
+      if (newFunds < 0) {
+        get().triggerGameOver();
+      }
       return cost;
+    },
+
+    triggerGameOver: () => {
+      if (get().gameOver) return;
+      set({ gameOver: true });
+    },
+
+    clearGameOver: () => set({ gameOver: false }),
+
+    applyTimeShortcut: (thresholdWpm, _weeksDelta) => {
+      const cur = get().current;
+      if (!cur) return false;
+      const list = cur.timeShortcutsUnlocked ?? [];
+      if (list.includes(thresholdWpm)) return false;
+      // 期間短縮の実態は DevelopScreen 側の表示（経過 / 必要週数）に反映する。
+      // ここではフラグだけ立てて重複通知を防ぐ。
+      set({
+        current: {
+          ...cur,
+          timeShortcutsUnlocked: [...list, thresholdWpm],
+        },
+      });
+      return true;
     },
 
     tickSales: (deltaSec) => {
@@ -419,39 +458,36 @@ export const useGameStore = create<GameState>()(
     releaseWork: (opts) => {
       const cur = get().current;
       if (!cur) throw new Error('no current project');
-      const def = SCALE_BY_ID[cur.scale];
       const employees = get().employees;
       const prBonus = sumPrBonus(employees);
+      const assignedEmployees = employees.filter((e) => cur.assignedEmployeeIds.includes(e.id));
 
-      // categoryHit: 選択カテゴリの affinity 合計
-      let categoryHit = 0;
-      for (const cid of cur.selectedCategories) {
-        const cat = CATEGORY_BY_ID[cid];
-        if (!cat) continue;
-        categoryHit += categoryAffinity(cat, cur.genreId, cur.themeId);
-      }
-
-      // employeeHit: 割当従業員 × 選択カテゴリの specialty bonus 合計
-      const employeeHit = sumEmployeeCategoryBonus(
-        employees,
-        cur.assignedEmployeeIds,
-        cur.selectedCategories,
+      // === v0.10 §2-0 4 要素品質 ===
+      // 1) キャラ能力スコア（0..100）— spec §2-1
+      const charResult = computeCharacterScore({
+        assignedEmployees,
+        scale: cur.scale,
+        selectedCategories: cur.selectedCategories,
+      });
+      // 2) ジャンル相性スコア（0..100）— spec §2-3
+      const affResult = computeGenreAffinityScore({
+        genreId: cur.genreId,
+        themeId: cur.themeId,
+        selectedCategories: cur.selectedCategories,
+      });
+      // 3) タイピング演技スコア（0..100）— spec §2-2
+      // 広告ボーナス（既存仕様）はパフォーマンス側に +5 ずつ寄せる
+      const adPerfBoost = (opts?.marketingAd ? 5 : 0) + (opts?.debugAd ? 5 : 0);
+      const performance = Math.min(
+        100,
+        computePerformanceScore({ ...cur.perf, noBugs: !cur.bugPhrase }) + adPerfBoost,
       );
 
-      // performance: タイピング指標から 0..20
-      const performance = computePerformanceScore(cur.perf);
-
-      // ad bonuses: marketing/debug は perf/category レバーに乗らないがブレイクダウンの ads に集約
-      let adBonus = 0;
-      if (opts?.marketingAd) adBonus += 5;
-      if (opts?.debugAd) adBonus += 5;
-
-      const { Q: quality, breakdown } = computeQuality({
-        scaleBase: def.baseQuality,
-        categoryHit,
-        employeeHit,
-        performance,
-        adBonus,
+      // 4) computeQualityV10 で合成（運の基底 50 ± 揺らぎ、神ゲーガチャ）
+      const { Q: quality, breakdown: qBreakdown } = computeQualityV10({
+        charPower: charResult.score,
+        genreAffinity: affResult.score,
+        typingScore: performance,
       });
 
       const trend = get().trend;
@@ -481,7 +517,23 @@ export const useGameStore = create<GameState>()(
       const prevGhost = get().ghosts[cur.scale];
       const ghostBeaten = prevGhost !== null && developSec <= prevGhost;
 
-      const workBreakdown: WorkBreakdown = breakdown;
+      // ゲーム内週数：開始日 → 現在日 の差
+      const startDate = cur.startDate ?? get().currentDate;
+      const developWeeks = Math.max(
+        0,
+        // dateToWeekIndex は types.ts から、ここでは差分のみ必要
+        // import 済みなのは addWeeks のみなので、直接計算
+        (get().currentDate.year - startDate.year) * 48 +
+          (get().currentDate.month - startDate.month) * 4 +
+          (get().currentDate.week - startDate.week),
+      );
+
+      const trendMul = trendMultiplier(trend, cur.genreId, cur.themeId);
+      const workBreakdown: WorkBreakdown = {
+        ...qBreakdown,
+        trendMul,
+        pioneer,
+      };
 
       const work: Work = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -507,6 +559,7 @@ export const useGameStore = create<GameState>()(
         createdAt: Date.now(),
         breakdown: workBreakdown,
         selectedCategories: [...cur.selectedCategories],
+        developWeeks,
       };
 
       const newLibrary = [work, ...get().library];
@@ -655,6 +708,7 @@ export const useGameStore = create<GameState>()(
         offlineReport: null,
         currentDate: d.currentDate,
         lastFixedCost: null,
+        gameOver: false,
       });
     },
   })),

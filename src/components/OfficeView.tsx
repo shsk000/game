@@ -1,11 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  CHAIRS,
-  DEFAULT_EQUIPMENT,
-  DESKS,
-  EQUIPMENT_BY_ID,
-  MONITORS,
-} from '../data/equipment';
+import { CHAIRS, DEFAULT_EQUIPMENT, DESKS, EQUIPMENT_BY_ID, MONITORS } from '../data/equipment';
 import type { Scale } from '../data/scales';
 import { SpriteAnimation } from './SpriteAnimation';
 
@@ -117,8 +111,8 @@ const cellPx = TILE * SCALE; // 96px
 const SPRITE_BASE = '/sprites/office';
 
 /** 1ステーションのセル単位サイズ */
-const STATION_W_CELLS = 2;     // 横2セル = 192px
-const STATION_H_CELLS = 2.5;   // 縦2.5セル = 240px
+const STATION_W_CELLS = 2; // 横2セル = 192px
+const STATION_H_CELLS = 2.5; // 縦2.5セル = 240px
 
 /** スプライト存在キャッシュ */
 const spriteCache = new Map<string, boolean>();
@@ -216,7 +210,8 @@ export const OfficeView = ({
           top: 0,
           width: w,
           height: wallH,
-          background: 'linear-gradient(to bottom, #f5e8c8 0%, #e8d8b0 85%, #6b4f3a 85%, #6b4f3a 100%)',
+          background:
+            'linear-gradient(to bottom, #f5e8c8 0%, #e8d8b0 85%, #6b4f3a 85%, #6b4f3a 100%)',
           borderBottom: '2px solid #2c1f15',
           zIndex: 1,
         }}
@@ -311,17 +306,17 @@ export const OfficeView = ({
     const baseY = station.row * cellPx;
 
     // §5-2 office-visual-design 確定サイズ
-    const deskW = STATION_W_CELLS * cellPx;  // 192px
-    const deskH = cellPx * 0.85;              // 82px
-    const monitorSize = cellPx * 0.6;         // 58px
-    const workerSize = cellPx * 1.4;          // 134px
-    const chairSize = cellPx * 1.0;           // 96px
+    const deskW = STATION_W_CELLS * cellPx; // 192px
+    const deskH = cellPx * 0.85; // 82px
+    const monitorSize = cellPx * 0.6; // 58px
+    const workerSize = cellPx * 1.4; // 134px
+    const chairSize = cellPx * 1.0; // 96px
 
     // §7-1 office-visual-design の縦配置目安に従う
-    const yDesk = 0;                          // 北端起点
-    const yMonitor = cellPx * 0.15;           // 机上の少し南寄り
-    const yWorker = cellPx * 0.7;             // 机の南エッジに被る位置（人の上半身が机にかぶる）
-    const yChair = cellPx * 1.2;              // 人の腰下に椅子背が立ち上がる
+    const yDesk = 0; // 北端起点
+    const yMonitor = cellPx * 0.15; // 机上の少し南寄り
+    const yWorker = cellPx * 0.7; // 机の南エッジに被る位置（人の上半身が机にかぶる）
+    const yChair = cellPx * 1.2; // 人の腰下に椅子背が立ち上がる
 
     // §6-1 全員 south 向き
     const sitSheet = `${SPRITE_BASE}/worker_sit_south.png`;

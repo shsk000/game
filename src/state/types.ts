@@ -84,13 +84,30 @@ export type Employee = {
 
 export type Candidate = Employee;
 
+/**
+ * v0.10：4 要素ウェイト品質計算（spec §2-0）のブレイクダウン。
+ *  - charPower / genreAffinity / performance / luck は 0..100 スケール
+ *  - base = 加重和（運10含む）
+ *  - luckMultiplier / isGodGame は final_quality 段階の補正
+ *  - trendMul / pioneer はメタスコア/売上に乗る別系統
+ *  - 旧 v0.9 4 レバー（categories/employees/ads/variance）は互換用に optional 残置
+ */
 export type WorkBreakdown = {
-  base: number;
-  categories: number;
-  employees: number;
-  performance: number;
-  ads: number;
-  variance: number;
+  // v0.10 新ブレイクダウン
+  charPower?: number;
+  genreAffinity?: number;
+  performance?: number;
+  luck?: number;
+  base?: number;
+  luckMultiplier?: number;
+  isGodGame?: boolean;
+  trendMul?: number;
+  pioneer?: boolean;
+  // v0.9 互換
+  categories?: number;
+  employees?: number;
+  ads?: number;
+  variance?: number;
 };
 
 export type Work = {
@@ -126,6 +143,8 @@ export type Work = {
   breakdown: WorkBreakdown;
   /** ライブラリ表示用：このリリースで選んだカテゴリ */
   selectedCategories?: CategoryId[];
+  /** v0.10：開発に要したゲーム内週数（カレンダー差分。リリース時に確定） */
+  developWeeks?: number;
 };
 
 export type CurrentProject = {
@@ -157,4 +176,8 @@ export type CurrentProject = {
     maxCombo: number;
     accuracy: number;
   };
+  /** v0.10：開発開始時のゲーム内日付（F-6 完成サマリ用） */
+  startDate?: GameDate;
+  /** v0.10：WPM しきい値クロスで -X 週テロップを出した一覧（重複防止） */
+  timeShortcutsUnlocked?: number[];
 };

@@ -13,6 +13,9 @@ dist-ssr
 *.local
 .vite
 
+# Patch files (ultraplan の中間成果物等)
+*.patch
+
 # Playwright
 test-results/
 playwright-report/

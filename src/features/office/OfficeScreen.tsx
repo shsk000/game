@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { OfficeView } from '../../components/OfficeView';
 import {
   PixelButton,
@@ -12,6 +12,7 @@ import { ACHIEVEMENTS } from '../../data/achievements';
 import { REFRESH_COST, roleLabel, sumMonthlySalaries } from '../../data/employees';
 import { nextLockedScale, SCALE_BY_ID, SCALES } from '../../data/scales';
 import { useGameStore } from '../../state/gameStore';
+import { formatGameDate } from '../../state/types';
 import { formatYen } from '../../utils/format';
 
 /**
@@ -46,6 +47,8 @@ export const OfficeScreen = () => {
   const records = useGameStore((s) => s.records);
   const achievements = useGameStore((s) => s.achievements);
   const lastFixedCost = useGameStore((s) => s.lastFixedCost);
+  const currentDate = useGameStore((s) => s.currentDate);
+  const tickWeek = useGameStore((s) => s.tickWeek);
   const hireCandidate = useGameStore((s) => s.hireCandidate);
   const refreshCandidate = useGameStore((s) => s.refreshCandidate);
   const fireEmployee = useGameStore((s) => s.fireEmployee);
@@ -55,6 +58,14 @@ export const OfficeScreen = () => {
 
   const [modal, setModal] = useState<ModalKind>(null);
   const closeModal = () => setModal(null);
+  // A-10: 連打防止スロットル
+  const lastIdleTickRef = useRef(0);
+  const advanceOneWeek = () => {
+    const now = Date.now();
+    if (now - lastIdleTickRef.current < 300) return;
+    lastIdleTickRef.current = now;
+    tickWeek();
+  };
 
   const next = nextLockedScale(unlocked);
   const sellingWorks = library.filter((w) => w.selling);
@@ -187,6 +198,21 @@ export const OfficeScreen = () => {
               <li>最高コンボ: {records.bestCombo}</li>
               <li>最高WPM: {records.bestWPM}</li>
             </ul>
+          </PixelWindow>
+
+          {/* v0.10 A-10：ゲーム内時間。開発外でも 1 週進められる */}
+          <PixelWindow title="🗓 ゲーム内時間" variant="standard">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#1a0f08' }}>
+                {formatGameDate(currentDate)}
+              </div>
+              <PixelButton size="small" variant="secondary" onClick={advanceOneWeek}>
+                ⏩ 1 週進める
+              </PixelButton>
+              <p style={{ margin: 0, fontSize: 11, color: '#6b4f3a' }}>
+                ※開発中は自動で時間が進みます。アイドル中の月初固定費もここで進められます。
+              </p>
+            </div>
           </PixelWindow>
 
           {/* v0.10：月固定費パネル＋先月の収支 */}

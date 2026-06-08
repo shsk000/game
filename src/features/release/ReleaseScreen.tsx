@@ -9,27 +9,24 @@ import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
 import type { Achievement } from '../../state/types';
-import { formatRoi, formatYen } from '../../utils/format';
+import { formatRoi, formatWeeks, formatYen } from '../../utils/format';
 import { scoreFlavor } from '../../utils/metascore';
+import { computeProfitForScale } from '../../utils/profit';
 
 type RevealStage =
   | 'pre-ads'
-  | 'reveal-base'
-  | 'reveal-categories'
-  | 'reveal-employees'
+  | 'reveal-character'
+  | 'reveal-affinity'
   | 'reveal-performance'
-  | 'reveal-ads'
-  | 'reveal-variance'
+  | 'reveal-luck'
   | 'reveal-total'
   | 'done';
 
 const STAGE_SEQUENCE: RevealStage[] = [
-  'reveal-base',
-  'reveal-categories',
-  'reveal-employees',
+  'reveal-character',
+  'reveal-affinity',
   'reveal-performance',
-  'reveal-ads',
-  'reveal-variance',
+  'reveal-luck',
   'reveal-total',
   'done',
 ];
@@ -38,6 +35,9 @@ const stageReached = (current: RevealStage, target: RevealStage): boolean => {
   const order: RevealStage[] = ['pre-ads', ...STAGE_SEQUENCE];
   return order.indexOf(current) >= order.indexOf(target);
 };
+
+/** v0.10 §2-0 4 要素ウェイト */
+const WEIGHTS = { charPower: 0.5, genreAffinity: 0.25, performance: 0.15, luck: 0.1 };
 
 export const ReleaseScreen = () => {
   const work = useGameStore((s) => s.lastReleased);
@@ -78,38 +78,33 @@ export const ReleaseScreen = () => {
     if (!work) return;
     if (current) return;
     setNewAchievements(useGameStore.getState().newlyAchieved);
-    setStage('reveal-base');
-    setDisplayQ(work.breakdown.base);
+    const charContrib = (work.breakdown.charPower ?? 0) * WEIGHTS.charPower;
+    setStage('reveal-character');
+    setDisplayQ(Math.round(charContrib));
 
     const timers: number[] = [];
     const schedule = (ms: number, fn: () => void) => {
       timers.push(window.setTimeout(fn, ms));
     };
 
-    schedule(400, () => {
-      setStage('reveal-categories');
-      setDisplayQ((q) => q + work.breakdown.categories);
+    schedule(500, () => {
+      setStage('reveal-affinity');
+      setDisplayQ(
+        (q) => q + Math.round((work.breakdown.genreAffinity ?? 0) * WEIGHTS.genreAffinity),
+      );
     });
-    schedule(900, () => {
-      setStage('reveal-employees');
-      setDisplayQ((q) => q + work.breakdown.employees);
-    });
-    schedule(1400, () => {
+    schedule(1100, () => {
       setStage('reveal-performance');
-      setDisplayQ((q) => q + work.breakdown.performance);
+      setDisplayQ((q) => q + Math.round((work.breakdown.performance ?? 0) * WEIGHTS.performance));
     });
-    schedule(1900, () => {
-      setStage('reveal-ads');
-      setDisplayQ((q) => q + work.breakdown.ads);
+    schedule(1700, () => {
+      setStage('reveal-luck');
+      setDisplayQ((q) => q + Math.round((work.breakdown.luck ?? 50) * WEIGHTS.luck));
     });
-    schedule(2400, () => {
-      setStage('reveal-variance');
-      setDisplayQ((q) => q + work.breakdown.variance);
-    });
-    schedule(2900, () => {
+    schedule(2300, () => {
       setStage('reveal-total');
     });
-    schedule(3400, () => {
+    schedule(2900, () => {
       // メタスコアのカウントアップ
       const target = work.metascore;
       const start = performance.now();
@@ -258,13 +253,14 @@ export const ReleaseScreen = () => {
   }
 
   // ブレイクダウン演出後の表示
-  const total =
-    work.breakdown.base +
-    work.breakdown.categories +
-    work.breakdown.employees +
-    work.breakdown.performance +
-    work.breakdown.ads +
-    work.breakdown.variance;
+  const charContrib = (work.breakdown.charPower ?? 0) * WEIGHTS.charPower;
+  const affContrib = (work.breakdown.genreAffinity ?? 0) * WEIGHTS.genreAffinity;
+  const perfContrib = (work.breakdown.performance ?? 0) * WEIGHTS.performance;
+  const luckContrib = (work.breakdown.luck ?? 50) * WEIGHTS.luck;
+  const total = Math.max(
+    0,
+    Math.min(100, Math.round(charContrib + affContrib + perfContrib + luckContrib)),
+  );
   const isDone = stage === 'done';
 
   return (
@@ -289,48 +285,39 @@ export const ReleaseScreen = () => {
           </div>
 
           <div className="breakdown-list">
-            {stageReached(stage, 'reveal-base') && (
+            {stageReached(stage, 'reveal-character') && (
               <div className="breakdown-row">
-                <span className="breakdown-emoji">🧱</span>
-                <span className="breakdown-label">ベース</span>
-                <span className="breakdown-value">{work.breakdown.base}</span>
+                <span className="breakdown-emoji">🧑‍💻</span>
+                <span className="breakdown-label">キャラ能力 (×50%)</span>
+                <span className="breakdown-value">
+                  {work.breakdown.charPower ?? 0} → +{Math.round(charContrib)}
+                </span>
               </div>
             )}
-            {stageReached(stage, 'reveal-categories') && (
+            {stageReached(stage, 'reveal-affinity') && (
               <div className="breakdown-row">
-                <span className="breakdown-emoji">🎨</span>
-                <span className="breakdown-label">カテゴリ</span>
-                <span className="breakdown-value">+{work.breakdown.categories}</span>
-              </div>
-            )}
-            {stageReached(stage, 'reveal-employees') && (
-              <div className="breakdown-row">
-                <span className="breakdown-emoji">👥</span>
-                <span className="breakdown-label">従業員</span>
-                <span className="breakdown-value">+{work.breakdown.employees}</span>
+                <span className="breakdown-emoji">🧩</span>
+                <span className="breakdown-label">ジャンル相性 (×25%)</span>
+                <span className="breakdown-value">
+                  {work.breakdown.genreAffinity ?? 0} → +{Math.round(affContrib)}
+                </span>
               </div>
             )}
             {stageReached(stage, 'reveal-performance') && (
               <div className="breakdown-row">
                 <span className="breakdown-emoji">⚡</span>
-                <span className="breakdown-label">パフォーマンス</span>
-                <span className="breakdown-value">+{work.breakdown.performance}</span>
-              </div>
-            )}
-            {stageReached(stage, 'reveal-ads') && (
-              <div className="breakdown-row">
-                <span className="breakdown-emoji">📺</span>
-                <span className="breakdown-label">広告</span>
-                <span className="breakdown-value">+{work.breakdown.ads}</span>
-              </div>
-            )}
-            {stageReached(stage, 'reveal-variance') && (
-              <div className="breakdown-row">
-                <span className="breakdown-emoji">✨</span>
-                <span className="breakdown-label">バリアンス</span>
+                <span className="breakdown-label">タイピング演技 (×15%)</span>
                 <span className="breakdown-value">
-                  {work.breakdown.variance >= 0 ? '+' : ''}
-                  {work.breakdown.variance}
+                  {work.breakdown.performance ?? 0} → +{Math.round(perfContrib)}
+                </span>
+              </div>
+            )}
+            {stageReached(stage, 'reveal-luck') && (
+              <div className="breakdown-row">
+                <span className="breakdown-emoji">🎲</span>
+                <span className="breakdown-label">運 (×10%)</span>
+                <span className="breakdown-value">
+                  {work.breakdown.luck ?? 50} → +{Math.round(luckContrib)}
                 </span>
               </div>
             )}
@@ -338,10 +325,29 @@ export const ReleaseScreen = () => {
               <div className="breakdown-row breakdown-total">
                 <span className="breakdown-emoji">🎯</span>
                 <span className="breakdown-label">品質 Q</span>
-                <span className="breakdown-value">{Math.max(0, Math.min(100, total))}</span>
+                <span className="breakdown-value">{total}</span>
               </div>
             )}
+            {stageReached(stage, 'reveal-total') &&
+              work.breakdown.luckMultiplier !== undefined &&
+              work.breakdown.luckMultiplier !== 1 && (
+                <div className="breakdown-row" style={{ fontSize: 11, opacity: 0.85 }}>
+                  <span className="breakdown-emoji">✨</span>
+                  <span className="breakdown-label">運揺らぎ ×{work.breakdown.luckMultiplier}</span>
+                  <span className="breakdown-value">適用済</span>
+                </div>
+              )}
           </div>
+
+          {/* v0.10 D-8: 4 要素ウェイトの簡易レーダー（SVG） */}
+          {stageReached(stage, 'reveal-total') && (
+            <RadarChart
+              charPower={work.breakdown.charPower ?? 0}
+              genreAffinity={work.breakdown.genreAffinity ?? 0}
+              performance={work.breakdown.performance ?? 0}
+              luck={work.breakdown.luck ?? 50}
+            />
+          )}
 
           <div className={`meta-score ${work.isMasterpiece ? 'masterpiece' : ''}`}>
             <span className="meta-label">メタスコア</span>
@@ -394,7 +400,14 @@ export const ReleaseScreen = () => {
                 <li>
                   相性 {compatLabel(compat)} ({compat.toFixed(2)}x)
                 </li>
-                <li>開発タイム {work.developSec.toFixed(2)}秒</li>
+                <li>
+                  ⏱ 開発タイム {work.developSec.toFixed(1)}秒
+                  {work.developWeeks !== undefined && (
+                    <span style={{ marginLeft: 6, color: '#6b4f3a' }}>
+                      ／ ゲーム内 {formatWeeks(work.developWeeks)}（{work.developWeeks} 週）
+                    </span>
+                  )}
+                </li>
                 <li>👥 ファン +{work.fansGained}</li>
                 <li className="revenue">
                   💰 初動売上 {formatYen(work.initialRevenue + bonusRevenue)}
@@ -411,13 +424,20 @@ export const ReleaseScreen = () => {
               {/* v0.10：利益ブレイクダウン */}
               {(() => {
                 const scaleDef = SCALE_BY_ID[work.scale];
-                const devCost = scaleDef.baseCost;
-                // 開発期間（月数）= neededWeeks / 4 を四捨五入
-                const devMonths = Math.max(1, Math.round(scaleDef.neededWeeks / 4));
-                const monthlyRent = scaleDef.monthlyRent;
-                const fixedCostTotal = monthlyRent * devMonths;
                 const projectedTotal = work.initialRevenue + bonusRevenue + work.salesPool;
-                const profit = projectedTotal - devCost - fixedCostTotal;
+                const result = computeProfitForScale({
+                  totalRevenue: projectedTotal,
+                  scale: work.scale,
+                  developWeeks: work.developWeeks,
+                });
+                const devCost = result.devCost;
+                const fixedCostTotal = result.fixedCostTotal;
+                const devMonths = Math.max(
+                  1,
+                  Math.round((work.developWeeks ?? scaleDef.neededWeeks) / 4),
+                );
+                const monthlyRent = scaleDef.monthlyRent;
+                const profit = result.profit;
                 const roi = formatRoi(profit, devCost + fixedCostTotal);
                 const positive = profit >= 0;
                 return (
@@ -498,6 +518,93 @@ export const ReleaseScreen = () => {
           </div>
         </div>
       </section>
+    </div>
+  );
+};
+
+/**
+ * v0.10 D-8：4 要素ウェイトの簡易レーダー。
+ * 4 軸（キャラ/相性/演技/運）を 0..100 で正方形領域内にプロット。
+ */
+type RadarProps = {
+  charPower: number;
+  genreAffinity: number;
+  performance: number;
+  luck: number;
+};
+
+const RadarChart = ({ charPower, genreAffinity, performance, luck }: RadarProps) => {
+  const size = 160;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size / 2 - 12;
+  // 4 軸（北・東・南・西）
+  const pt = (axis: number, val: number): [number, number] => {
+    const ratio = Math.max(0, Math.min(100, val)) / 100;
+    const angles = [-Math.PI / 2, 0, Math.PI / 2, Math.PI]; // N, E, S, W
+    const a = angles[axis];
+    return [cx + Math.cos(a) * r * ratio, cy + Math.sin(a) * r * ratio];
+  };
+  const points = [pt(0, charPower), pt(1, genreAffinity), pt(2, performance), pt(3, luck)];
+  const polygon = points.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const guideRings = [0.25, 0.5, 0.75, 1.0];
+  const labels = [
+    { axis: 0, text: 'キャラ', sub: `${charPower}` },
+    { axis: 1, text: '相性', sub: `${genreAffinity}` },
+    { axis: 2, text: '演技', sub: `${performance}` },
+    { axis: 3, text: '運', sub: `${luck}` },
+  ];
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        margin: '8px 0 4px',
+        background: '#fff4d0',
+        border: '3px solid #1a0f08',
+        padding: 8,
+        imageRendering: 'pixelated',
+      }}
+    >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <title>4 要素ウェイト レーダー</title>
+        {guideRings.map((g) => (
+          <polygon
+            key={g}
+            points={[pt(0, g * 100), pt(1, g * 100), pt(2, g * 100), pt(3, g * 100)]
+              .map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`)
+              .join(' ')}
+            fill="none"
+            stroke="#6b4f3a"
+            strokeWidth={1}
+            opacity={0.3}
+          />
+        ))}
+        <polygon
+          points={polygon}
+          fill="#5aa84a"
+          fillOpacity={0.45}
+          stroke="#308040"
+          strokeWidth={2}
+        />
+        {labels.map((l) => {
+          const [x, y] = pt(l.axis, 110);
+          return (
+            <text
+              key={l.text}
+              x={x}
+              y={y}
+              fontSize={9}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fill="#1a0f08"
+              fontWeight={700}
+            >
+              {l.text}:{l.sub}
+            </text>
+          );
+        })}
+      </svg>
     </div>
   );
 };

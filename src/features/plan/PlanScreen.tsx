@@ -22,6 +22,7 @@ import { THEME_BY_ID, THEMES } from '../../data/themes';
 import { trendLabel } from '../../data/trend';
 import { useGameStore } from '../../state/gameStore';
 import { estimateRevenueRange, formatWeeks, formatYen } from '../../utils/format';
+import { computeProfitForScale } from '../../utils/profit';
 
 /**
  * 企画会議画面：ピクセルアート UI 版。
@@ -418,6 +419,16 @@ export const PlanScreen = () => {
               const def = SCALE_BY_ID[scale];
               const range = estimateRevenueRange(def.baseUnit);
               const monthCount = Math.round(def.neededWeeks / 4);
+              // E-4: 中央値売上で見込み利益。赤字なら赤色で警告
+              const profitMid = computeProfitForScale({
+                totalRevenue: range.mid,
+                scale,
+              });
+              const profitHigh = computeProfitForScale({
+                totalRevenue: range.high,
+                scale,
+              });
+              const profitColor = profitMid.profit >= 0 ? COLORS.pioneer : COLORS.accentRed;
               return (
                 <div
                   data-testid="scale-estimate"
@@ -452,6 +463,12 @@ export const PlanScreen = () => {
                     label="月固定費（賃料）"
                     value={`${formatYen(def.monthlyRent)}/月`}
                     accent={COLORS.warn}
+                  />
+                  <EstimateBox
+                    label="予想利益（中央値）"
+                    value={formatYen(profitMid.profit)}
+                    sub={`大ヒット時 ${formatYen(profitHigh.profit)}`}
+                    accent={profitColor}
                   />
                 </div>
               );

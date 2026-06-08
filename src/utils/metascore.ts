@@ -32,7 +32,22 @@ export const computeMetascore = (
 };
 
 /**
+ * v0.10 §4-3：メタスコア帯による売上倍率（ヒット帯ステップ）。
+ *  - m < 70  → 1.0
+ *  - m ≥ 70  → 4.0   ヒット
+ *  - m ≥ 85  → 10.0  大ヒット
+ *  - m ≥ 95  → 30.0  神ゲー帯
+ */
+export const hitTierMultiplier = (metascore: number): number => {
+  if (metascore >= 95) return 30;
+  if (metascore >= 85) return 10;
+  if (metascore >= 70) return 4;
+  return 1;
+};
+
+/**
  * 売上計算。広報ボーナス・新規開拓ボーナスを加味。
+ * v0.10：従来の `metascore / 50` 線形項を `hitTierMultiplier` のステップに置換。
  */
 export const computeRevenue = (
   metascore: number,
@@ -53,16 +68,9 @@ export const computeRevenue = (
   const launchMul = launchAdActive ? 1.5 : 1.0;
   const prMul = 1 + prBonus;
   const pioneerMul = 1 + pioneerBonus;
+  const tierMul = hitTierMultiplier(metascore);
   const v =
-    def.baseUnit *
-    locMul *
-    (metascore / 50) *
-    compat *
-    trendMul *
-    fanMul *
-    launchMul *
-    prMul *
-    pioneerMul;
+    def.baseUnit * locMul * tierMul * compat * trendMul * fanMul * launchMul * prMul * pioneerMul;
   return Math.max(0, Math.round(v));
 };
 
@@ -109,18 +117,48 @@ export const computeQuality = (args: {
 };
 
 /**
- * タイピングパフォーマンスから 0..20 のスコアを算出。
- *   wpm/10 (0..7) + maxCombo/15 (0..7) + accuracy*6 (0..6 → cap 7) → 合計を 0..20 にクランプ
+ * v0.10 §2-2：タイピング演技スコア（0..100）。
+ *
+ *   base = 50（中庸プレイヤー）
+ *   ± WPM 寄与（100 を基準に ±20 程度）
+ *   ± コンボ寄与（30+ で +5, 100+ で +10, 200+ で +15, 500+ で +25）
+ *   ± 精度ペナルティ（95% 未満で線形に -20 まで）
+ *   + バグなし完走 +5
+ *
+ * 旧 0..20 スケール版は廃止（呼び出し側は `releaseWork` のみで、こちらに移行）。
  */
 export const computePerformanceScore = (perf: {
   wpm: number;
   maxCombo: number;
   accuracy: number;
+  bugsCleared?: number;
+  noBugs?: boolean;
 }): number => {
-  const wpmPart = clamp(perf.wpm / 10, 0, 7);
-  const comboPart = clamp(perf.maxCombo / 15, 0, 7);
-  const accPart = clamp(perf.accuracy * 6, 0, 7);
-  return clamp(Math.round(wpmPart + comboPart + accPart), 0, 20);
+  let score = 50;
+
+  // WPM 寄与（100 基準 ±20）
+  if (perf.wpm <= 0) score -= 5;
+  else {
+    const wpmDelta = clamp((perf.wpm - 100) / 100, -1, 1) * 20;
+    score += wpmDelta;
+  }
+
+  // コンボ寄与
+  if (perf.maxCombo >= 500) score += 25;
+  else if (perf.maxCombo >= 200) score += 15;
+  else if (perf.maxCombo >= 100) score += 10;
+  else if (perf.maxCombo >= 30) score += 5;
+
+  // 精度ペナルティ
+  if (perf.accuracy < 0.95) {
+    const def = (0.95 - perf.accuracy) / 0.95; // 0..1
+    score -= clamp(def * 40, 0, 20);
+  }
+
+  // バグなし完走
+  if (perf.noBugs) score += 5;
+
+  return clamp(Math.round(score), 0, 100);
 };
 
 /**

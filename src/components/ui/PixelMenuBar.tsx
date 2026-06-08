@@ -56,11 +56,7 @@ export const PixelMenuBar = ({ items, activeId, children, className, style }: Pr
       }}
     >
       {items?.map((item) => (
-        <PixelMenuBarItem
-          key={item.id}
-          item={item}
-          active={item.id === activeId}
-        />
+        <PixelMenuBarItem key={item.id} item={item} active={item.id === activeId} />
       ))}
       {children}
     </nav>

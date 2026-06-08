@@ -46,6 +46,7 @@ export const DevelopScreen = () => {
   const triggerBugIfDue = useGameStore((s) => s.triggerBugIfDue);
   const clearBug = useGameStore((s) => s.clearBug);
   const buyAdDevBoost = useGameStore((s) => s.buyAdDevBoost);
+  const applyTimeShortcut = useGameStore((s) => s.applyTimeShortcut);
 
   const [elapsed, setElapsed] = useState(0);
   const [adRunning, setAdRunning] = useState(false);
@@ -133,6 +134,26 @@ export const DevelopScreen = () => {
     pushToast(`💸 月初固定費 -¥${lastFixedCostTotal.toLocaleString()}`, 'warn');
   }, [lastFixedCostTotal]);
 
+  // F-5: WPM のしきい値クロスで「-X 週」テロップ
+  const wpmReached = current?.perf.wpm ?? 0;
+  useEffect(() => {
+    if (!current) return;
+    // spec §3-3 を簡略化：WPM 100/150/200 でそれぞれ -1/-2/-3 週
+    const thresholds: { wpm: number; weeks: number }[] = [
+      { wpm: 100, weeks: 1 },
+      { wpm: 150, weeks: 2 },
+      { wpm: 200, weeks: 3 },
+    ];
+    for (const t of thresholds) {
+      if (wpmReached >= t.wpm) {
+        const applied = applyTimeShortcut(t.wpm, t.weeks);
+        if (applied) {
+          pushToast(`⚡ WPM ${t.wpm}+ で -${t.weeks} 週短縮！`, 'good');
+        }
+      }
+    }
+  }, [wpmReached, current, applyTimeShortcut]);
+
   const startedAt = current?.startedAt ?? null;
   useEffect(() => {
     if (startedAt === null) return;
@@ -195,7 +216,13 @@ export const DevelopScreen = () => {
 
   // v0.10：週進行の進捗（ゲーム内時間）
   const scaleDef = SCALE_BY_ID[current.scale];
-  const neededWeeks = scaleDef.neededWeeks;
+  const shortcutWeeks = (current.timeShortcutsUnlocked ?? []).reduce((sum, wpm) => {
+    if (wpm >= 200) return sum + 3;
+    if (wpm >= 150) return sum + 2;
+    if (wpm >= 100) return sum + 1;
+    return sum;
+  }, 0);
+  const neededWeeks = Math.max(1, scaleDef.neededWeeks - shortcutWeeks);
   const startDate = startDateRef.current ?? currentDate;
   const elapsedWeeks = Math.max(0, dateToWeekIndex(currentDate) - dateToWeekIndex(startDate));
   const weekPct = Math.min(100, (elapsedWeeks / Math.max(1, neededWeeks)) * 100);

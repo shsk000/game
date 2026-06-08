@@ -1,4 +1,5 @@
 import { useGameStore } from '../../state/gameStore';
+import { formatYen } from '../../utils/format';
 import { PixelIcon } from './PixelIcon';
 
 /**
@@ -49,7 +50,7 @@ export const PixelStatusBar = ({ className, style }: Props) => {
         ...style,
       }}
     >
-      <StatusItem emoji="💰" label="資金" value={`¥${formatNumber(funds)}`} color="#f5c84a" />
+      <StatusItem emoji="💰" label="資金" value={formatYen(funds)} color="#f5c84a" />
       <Divider />
       <StatusItem emoji="👥" label="ファン" value={formatNumber(fans)} color="#7adfff" />
       <Divider />

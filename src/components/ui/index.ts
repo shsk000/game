@@ -8,10 +8,10 @@
  * 詳細は SKILL `office-visual-design` を参照。
  */
 
-export { PixelWindow } from './PixelWindow';
 export { PixelButton } from './PixelButton';
-export { PixelMenuBar } from './PixelMenuBar';
-export type { PixelMenuItem } from './PixelMenuBar';
-export { PixelStatusBar } from './PixelStatusBar';
-export { PixelModal } from './PixelModal';
 export { PixelIcon } from './PixelIcon';
+export type { PixelMenuItem } from './PixelMenuBar';
+export { PixelMenuBar } from './PixelMenuBar';
+export { PixelModal } from './PixelModal';
+export { PixelStatusBar } from './PixelStatusBar';
+export { PixelWindow } from './PixelWindow';
