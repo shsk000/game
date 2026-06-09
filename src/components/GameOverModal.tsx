@@ -3,14 +3,17 @@ import { formatYen } from '../utils/format';
 import { PixelButton, PixelModal } from './ui';
 
 /**
- * v0.10 §9-2：資金枯渇によるゲームオーバー画面。
+ * v0.10 仕上げ §6-7：借入上限超過によるゲームオーバー画面。
  *
- *  - `funds < 0` で `gameStore.triggerGameOver()` が立てた gameOver フラグを描画契機にする
- *  - Phase 0 では「資金 0 = 即ゲームオーバー」とだけ表示
- *  - Phase 3-E の借金 UI 完成後は「借入上限超過」ケースだけがここに来る
+ *  発火条件は `monthlyTick`：
+ *    - 月初固定費で資金がマイナス → 借金へ自動振替
+ *    - 借金残高が借入上限（月固定費 × 12）を超え、かつ funds <= 0 で `triggerGameOver()`
+ *
+ *  単に資金が一時的に 0 だけではゲームオーバーにならない（借金枠で耐える）。
  */
 export const GameOverModal = () => {
   const funds = useGameStore((s) => s.funds);
+  const debt = useGameStore((s) => s.debt);
   const reset = useGameStore((s) => s.reset);
   const clearGameOver = useGameStore((s) => s.clearGameOver);
 
@@ -18,7 +21,6 @@ export const GameOverModal = () => {
     <PixelModal
       open={true}
       onClose={() => {
-        // 閉じるだけでは復活しない。リセットボタン経由のみ。
         clearGameOver();
       }}
       title="💀 ゲームオーバー"
@@ -26,9 +28,11 @@ export const GameOverModal = () => {
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
-          資金が尽きました。
+          借入上限を超え、これ以上資金繰りができません。
           <br />
-          現在の残高: <strong style={{ color: '#a02828' }}>{formatYen(funds)}</strong>
+          残高: <strong style={{ color: '#a02828' }}>{formatYen(funds)}</strong>
+          <br />
+          借金: <strong style={{ color: '#a02828' }}>{formatYen(debt)}</strong>
         </p>
         <p style={{ margin: 0, fontSize: 12, color: '#6b4f3a' }}>
           セーブデータをリセットして新規に再開してください。

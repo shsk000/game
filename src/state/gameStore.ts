@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { ACHIEVEMENTS } from '../data/achievements';
+import { DEBT_CONFIG, computeBorrowingLimit } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import {
@@ -51,15 +52,32 @@ type StageUnlock = {
   newThemes: ThemeId[];
 };
 
+/**
+ * v0.10 仕上げ §6-8：解放テンポ（ハイブリッド）。
+ *   - 基本軸：累計売上（駄作量産では解放されない）
+ *   - 加速軸：ヒット作（メタ 70+）の本数
+ *   - 段階的に：stage 2/3/4 へ進める
+ *
+ * stage しきい値（balance-design §6-8 解放テーブル準拠）：
+ *   - stage 2：累計売上 ¥1000 万 OR ヒット作 1 本
+ *   - stage 3：累計売上 ¥5000 万 OR ヒット作 3 本
+ *   - stage 4：累計売上 ¥1 億 OR ヒット作 5 本
+ *
+ * 「累計売上だけ」「ヒット作だけ」のどちらでも解放できる二段構え。
+ */
+const HIT_METASCORE_THRESHOLD = 70;
+
 const computeStageUnlocks = (
   currentGenres: GenreId[],
   currentThemes: ThemeId[],
-  libraryCount: number,
+  library: Work[],
+  lifetimeRevenue: number,
 ): StageUnlock => {
+  const hitCount = library.filter((w) => w.metascore >= HIT_METASCORE_THRESHOLD).length;
   let stage: 1 | 2 | 3 | 4 = 1;
-  if (libraryCount >= 3) stage = 2;
-  if (libraryCount >= 8) stage = 3;
-  if (libraryCount >= 15) stage = 4;
+  if (lifetimeRevenue >= 10_000_000 || hitCount >= 1) stage = 2;
+  if (lifetimeRevenue >= 50_000_000 || hitCount >= 3) stage = 3;
+  if (lifetimeRevenue >= 100_000_000 || hitCount >= 5) stage = 4;
   const newGenres = GENRES.filter(
     (g) => g.unlockStage <= stage && !currentGenres.includes(g.id),
   ).map((g) => g.id);
@@ -69,24 +87,49 @@ const computeStageUnlocks = (
   return { unlocked: newGenres.length + newThemes.length, newGenres, newThemes };
 };
 
-const CATEGORY_UNLOCK_THRESHOLDS: { count: number; id: CategoryId }[] = [
-  { count: 5, id: 'story' },
-  { count: 10, id: 'presentation' },
-  { count: 20, id: 'innovation' },
-];
-
+/**
+ * v0.10 仕上げ §6-8：カテゴリ解放（ハイブリッド条件）。
+ *  - story: 初期 3 カテゴリ（graphics, sound, gameplay）全てで作品リリース
+ *  - presentation: ヒット作 5 本（メタ 70+）
+ *  - innovation: 累計売上 ¥1 億
+ */
 const computeNewlyUnlockedCategories = (
   current: CategoryId[],
-  libraryCount: number,
+  library: Work[],
+  lifetimeRevenue: number,
 ): CategoryId[] => {
   const set = new Set(current);
   const added: CategoryId[] = [];
-  for (const { count, id } of CATEGORY_UNLOCK_THRESHOLDS) {
-    if (libraryCount >= count && !set.has(id)) {
-      set.add(id);
-      added.push(id);
+
+  // story: 初期 3 カテゴリで作品リリース済み
+  if (!set.has('story')) {
+    const used = new Set<CategoryId>();
+    for (const w of library) {
+      for (const cid of w.selectedCategories ?? []) used.add(cid as CategoryId);
+    }
+    if (used.has('graphics') && used.has('sound') && used.has('gameplay')) {
+      set.add('story');
+      added.push('story');
     }
   }
+
+  // presentation: ヒット作 5 本
+  if (!set.has('presentation')) {
+    const hits = library.filter((w) => w.metascore >= HIT_METASCORE_THRESHOLD).length;
+    if (hits >= 5) {
+      set.add('presentation');
+      added.push('presentation');
+    }
+  }
+
+  // innovation: 累計売上 ¥1 億
+  if (!set.has('innovation')) {
+    if (lifetimeRevenue >= 100_000_000) {
+      set.add('innovation');
+      added.push('innovation');
+    }
+  }
+
   return added;
 };
 
@@ -193,6 +236,10 @@ type Actions = {
   clearGameOver: () => void;
   /** v0.10 F-5：WPM しきい値クロスで -X 週短縮した記録（重複防止）。週短縮も即時反映 */
   applyTimeShortcut: (thresholdWpm: number, weeksDelta: number) => boolean;
+  /** v0.10 仕上げ §6-7：借入。borrowing limit 内なら成立。 */
+  borrowMoney: (amount: number) => boolean;
+  /** v0.10 仕上げ §6-7：返済。funds の範囲で debt を返す。 */
+  repayDebt: (amount: number) => boolean;
   reset: () => void;
 };
 
@@ -223,6 +270,12 @@ export type GameState = {
   lastFixedCost: MonthlyFixedCost | null;
   /** v0.10 §9-2：資金枯渇でゲームオーバー */
   gameOver: boolean;
+  /**
+   * v0.10 仕上げ §6-7：借金残高（円）。
+   * 月初の固定費で資金がマイナスになった分は自動的に借金へ振替。
+   * 月利は monthlyTick 時に乗る。借入上限超 + 資金 0 でゲームオーバー。
+   */
+  debt: number;
 } & Actions;
 
 const offlineCalc = computeOfflineEarnings(persisted.lastSeenAt, persisted.library);
@@ -256,6 +309,7 @@ export const useGameStore = create<GameState>()(
     currentDate: persisted.currentDate ?? INITIAL_GAME_DATE,
     lastFixedCost: null,
     gameOver: false,
+    debt: 0,
 
     goTo: (screen) => set({ screen }),
 
@@ -324,15 +378,31 @@ export const useGameStore = create<GameState>()(
       const salaries = sumMonthlySalaries(s.employees);
       const currentScale: Scale = s.unlockedScales[s.unlockedScales.length - 1] ?? 'mini';
       const rent = SCALE_BY_ID[currentScale]?.monthlyRent ?? 0;
-      const total = salaries + rent;
+      // v0.10 仕上げ §6-7：借金月利
+      const interest = Math.round(s.debt * DEBT_CONFIG.monthlyInterestRate);
+      const total = salaries + rent + interest;
       const cost: MonthlyFixedCost = { salaries, rent, total };
-      const newFunds = s.funds - total;
+
+      // funds から固定費を引く → マイナスになったら借金に振替
+      const rawFunds = s.funds - total;
+      let newFunds = rawFunds;
+      let newDebt = s.debt;
+      if (rawFunds < 0) {
+        newDebt = s.debt + -rawFunds;
+        newFunds = 0;
+      }
+
+      // 借入上限：月固定費 × 12 ヶ月
+      const borrowingLimit = computeBorrowingLimit(salaries + rent);
+
       set({
         funds: newFunds,
+        debt: newDebt,
         lastFixedCost: cost,
       });
-      // v0.10 §9-2：資金 0 でゲームオーバー（Phase 3 で借金枠ロジックで上書き予定）
-      if (newFunds < 0) {
+
+      // 借入上限超 + 資金 0 でゲームオーバー
+      if (newDebt > borrowingLimit && newFunds <= 0) {
         get().triggerGameOver();
       }
       return cost;
@@ -483,7 +553,7 @@ export const useGameStore = create<GameState>()(
         computePerformanceScore({ ...cur.perf, noBugs: !cur.bugPhrase }) + adPerfBoost,
       );
 
-      // 4) computeQualityV10 で合成（運の基底 50 ± 揺らぎ、神ゲーガチャ）
+      // 4) computeQualityV10 で合成（運の基底 50 ± 揺らぎ）。神ゲーガチャは v0.10 で廃止。
       const { Q: quality, breakdown: qBreakdown } = computeQualityV10({
         charPower: charResult.score,
         genreAffinity: affResult.score,
@@ -563,14 +633,18 @@ export const useGameStore = create<GameState>()(
       };
 
       const newLibrary = [work, ...get().library];
+      // v0.10 仕上げ §6-8：累計売上 + ヒット作のハイブリッドで解放判定
+      const projectedLifetimeRevenue = get().lifetimeRevenue + initialRevenue;
       const stageUnlock = computeStageUnlocks(
         get().unlockedGenres,
         get().unlockedThemes,
-        newLibrary.length,
+        newLibrary,
+        projectedLifetimeRevenue,
       );
       const newCategoryUnlocks = computeNewlyUnlockedCategories(
         get().unlockedCategories,
-        newLibrary.length,
+        newLibrary,
+        projectedLifetimeRevenue,
       );
 
       const rec = get().records;
@@ -682,6 +756,27 @@ export const useGameStore = create<GameState>()(
     finishTutorial: () => set({ tutorialDone: true }),
     clearNewlyAchieved: () => set({ newlyAchieved: [] }),
 
+    borrowMoney: (amount) => {
+      if (amount <= 0) return false;
+      const s = get();
+      const salaries = sumMonthlySalaries(s.employees);
+      const currentScale: Scale = s.unlockedScales[s.unlockedScales.length - 1] ?? 'mini';
+      const rent = SCALE_BY_ID[currentScale]?.monthlyRent ?? 0;
+      const limit = computeBorrowingLimit(salaries + rent);
+      if (s.debt + amount > limit) return false;
+      set({ funds: s.funds + amount, debt: s.debt + amount });
+      return true;
+    },
+
+    repayDebt: (amount) => {
+      if (amount <= 0) return false;
+      const s = get();
+      const pay = Math.min(amount, s.funds, s.debt);
+      if (pay <= 0) return false;
+      set({ funds: s.funds - pay, debt: s.debt - pay });
+      return true;
+    },
+
     reset: () => {
       storage.reset();
       const d = storage.defaults();
@@ -709,6 +804,7 @@ export const useGameStore = create<GameState>()(
         currentDate: d.currentDate,
         lastFixedCost: null,
         gameOver: false,
+        debt: 0,
       });
     },
   })),
@@ -742,6 +838,11 @@ useGameStore.subscribe(
   },
   { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
 );
+
+// テスト用：window.__gs() で現在のストア state を取得（dev / e2e のみで使用）
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
+  (window as unknown as { __gs: () => GameState }).__gs = () => useGameStore.getState();
+}
 
 // 離席時刻更新
 if (typeof window !== 'undefined') {

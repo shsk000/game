@@ -366,17 +366,12 @@ export const ReleaseScreen = () => {
                       alignItems: 'center',
                       gap: 4,
                       padding: 6,
-                      background:
-                        'repeating-linear-gradient(45deg,#f5c84a,#f5c84a 6px,#fff4d0 6px,#fff4d0 12px)',
+                      background: '#fff4d0',
                       border: '3px solid #1a0f08',
-                      animation: 'godgame-flash 800ms ease-out 1',
                     }}
                   >
-                    <div style={{ fontSize: 20, fontWeight: 700, color: '#a02828' }}>
-                      🌟 神ゲー認定！ 🌟
-                    </div>
-                    <div style={{ fontSize: 12, color: '#3a2a1e' }}>
-                      品質 ×1.5・売上 ×3 のジャックポット！
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#a85a28' }}>
+                      🏆 名作認定！（メタ {work.metascore}）
                     </div>
                   </div>
                 </PixelWindow>

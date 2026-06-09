@@ -90,7 +90,19 @@ const LEGEND_SWATCH: React.CSSProperties = {
 
 export const CollectionScreen = () => {
   const library = useGameStore((s) => s.library);
+  const unlockedGenres = useGameStore((s) => s.unlockedGenres);
+  const unlockedThemes = useGameStore((s) => s.unlockedThemes);
   const goTo = useGameStore((s) => s.goTo);
+
+  // v0.10 仕上げ：未解放ジャンル / テーマは図鑑にも出さない（何があるか分からない設計）。
+  const visibleGenres = useMemo(
+    () => GENRES.filter((g) => unlockedGenres.includes(g.id)),
+    [unlockedGenres],
+  );
+  const visibleThemes = useMemo(
+    () => THEMES.filter((t) => unlockedThemes.includes(t.id)),
+    [unlockedThemes],
+  );
 
   const stats = useMemo(() => {
     const map = new Map<string, Cell>();
@@ -112,7 +124,7 @@ export const CollectionScreen = () => {
     return map;
   }, [library]);
 
-  const totalCells = GENRES.length * THEMES.length;
+  const totalCells = visibleGenres.length * visibleThemes.length;
   const discoveredCount = stats.size;
 
   const menuItems: PixelMenuItem[] = [
@@ -203,7 +215,7 @@ export const CollectionScreen = () => {
                   >
                     ジャンル ＼ テーマ
                   </th>
-                  {THEMES.map((t) => (
+                  {visibleThemes.map((t) => (
                     <th key={t.id} style={HEADER_CELL} title={t.name}>
                       <div style={{ fontSize: 14, lineHeight: 1.2 }}>{t.emoji}</div>
                       <div style={{ fontSize: 10, lineHeight: 1.2, marginTop: 2 }}>{t.name}</div>
@@ -212,7 +224,7 @@ export const CollectionScreen = () => {
                 </tr>
               </thead>
               <tbody>
-                {GENRES.map((g) => (
+                {visibleGenres.map((g) => (
                   <tr key={g.id}>
                     <th style={ROW_HEADER_CELL} title={g.name}>
                       <div
@@ -226,7 +238,7 @@ export const CollectionScreen = () => {
                         <span style={{ fontSize: 11 }}>{g.name}</span>
                       </div>
                     </th>
-                    {THEMES.map((t) => {
+                    {visibleThemes.map((t) => {
                       const key = `${g.id}|${t.id}`;
                       const cell = stats.get(key);
                       if (!cell) {

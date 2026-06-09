@@ -1,3 +1,4 @@
+import { SCORE_BASE } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { CATEGORY_BY_ID, categoryAffinity } from '../data/categories';
 import { getCompat } from '../data/compatibility';
@@ -5,12 +6,14 @@ import type { GenreId } from '../data/genres';
 import type { ThemeId } from '../data/themes';
 
 /**
- * v0.10 §2-3：ジャンル相性スコア（0..100）。
+ * v0.10 仕上げ §6-3：ジャンル相性スコア（0..100）。
  *
- *   score = compat_norm(0..60) + category_hit_norm(0..40)
+ *   score = SCORE_BASE(30)
+ *         + ジャンル一致ボーナス（compat>=1.3 で +15）
+ *         + テーマ一致ボーナス（compat>=1.7 で +15）
+ *         + 3 カテゴリの categoryAffinity 正規化（0..40）
  *
- *   compat       … getCompat(g, t) の 0.7..2.0 を 0..60 に再マップ
- *   category_hit … 選択 3 カテゴリの categoryAffinity 合計（最大 ~54）を 0..40 に正規化
+ * 「全部揃った時のみ高スコア」設計。何も考えずに選ぶと base 30 のみで致命的失敗予備軍。
  *
  * spec.md §2-0 で `final_quality = quality_base × トレンド × 運 × ガチャ`。
  * トレンド倍率と新規開拓ボーナスは **affinity スコア内では掛けず**、`releaseWork` で乗算する。
@@ -26,7 +29,9 @@ export type AffinityScoreInput = {
 
 export type AffinityScoreBreakdown = {
   compat: number;
-  compatPart: number;
+  base: number;
+  genreMatch: number;
+  themeMatch: number;
   categoryHitSum: number;
   categoryPart: number;
 };
@@ -36,11 +41,14 @@ export const computeGenreAffinityScore = (
 ): { score: number; breakdown: AffinityScoreBreakdown } => {
   const { genreId, themeId, selectedCategories } = input;
 
-  // compat (0.7..2.0) → 0..60
   const compat = getCompat(genreId, themeId);
-  const compatPart = clamp(((compat - 0.7) / (2.0 - 0.7)) * 60, 0, 60);
 
-  // category_hit_sum 最大 = 3 × 17 (=base2 + g4 + t3 + both8) = 51。0..40 に正規化
+  // ジャンル一致：compat 1.3 以上で +15
+  const genreMatch = compat >= 1.3 ? 15 : 0;
+  // テーマ一致：compat 1.7 以上で +15（更に良い相性）
+  const themeMatch = compat >= 1.7 ? 15 : 0;
+
+  // categoryAffinity 合計 最大 = 3 × 17 ≈ 51 → 0..40 に正規化
   let categoryHitSum = 0;
   for (const cid of selectedCategories) {
     const cat = CATEGORY_BY_ID[cid];
@@ -49,11 +57,14 @@ export const computeGenreAffinityScore = (
   }
   const categoryPart = clamp((categoryHitSum / 51) * 40, 0, 40);
 
+  const raw = SCORE_BASE + genreMatch + themeMatch + categoryPart;
   return {
-    score: Math.round(compatPart + categoryPart),
+    score: Math.round(clamp(raw, 0, 100)),
     breakdown: {
       compat,
-      compatPart: Math.round(compatPart),
+      base: SCORE_BASE,
+      genreMatch,
+      themeMatch,
       categoryHitSum,
       categoryPart: Math.round(categoryPart),
     },

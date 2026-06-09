@@ -344,11 +344,10 @@ export const PlanScreen = () => {
           </div>
         </PixelWindow>
 
-        {/* ジャンル */}
+        {/* ジャンル — v0.10 仕上げ：未解放は何があるか見せない */}
         <PixelWindow title="ジャンルを選ぶ" variant="standard">
           <div style={chipRowStyle}>
-            {GENRES.map((g) => {
-              const isUnlocked = unlockedGenres.includes(g.id);
+            {GENRES.filter((g) => unlockedGenres.includes(g.id)).map((g) => {
               const isSelected = genreId === g.id;
               const hot = trend?.genreId === g.id;
               return (
@@ -356,24 +355,26 @@ export const PlanScreen = () => {
                   key={g.id}
                   size="small"
                   variant={isSelected ? 'primary' : 'secondary'}
-                  disabled={!isUnlocked}
                   onClick={() => setGenreId(g.id)}
-                  ariaLabel={isUnlocked ? g.name : `${g.name}（未解放）`}
+                  ariaLabel={g.name}
                 >
                   {g.emoji} {g.name}
                   {hot && ' 🔥'}
-                  {!isUnlocked && ' 🔒'}
                 </PixelButton>
               );
             })}
+            {GENRES.length > unlockedGenres.length && (
+              <span style={{ fontSize: 11, color: '#6b4f3a', alignSelf: 'center' }}>
+                + ? 種類（未解放）
+              </span>
+            )}
           </div>
         </PixelWindow>
 
-        {/* テーマ */}
+        {/* テーマ — v0.10 仕上げ：未解放は何があるか見せない */}
         <PixelWindow title="テーマを選ぶ" variant="standard">
           <div style={chipRowStyle}>
-            {THEMES.map((t) => {
-              const isUnlocked = unlockedThemes.includes(t.id);
+            {THEMES.filter((t) => unlockedThemes.includes(t.id)).map((t) => {
               const isSelected = themeId === t.id;
               const hot = trend?.themeId === t.id;
               return (
@@ -381,16 +382,19 @@ export const PlanScreen = () => {
                   key={t.id}
                   size="small"
                   variant={isSelected ? 'primary' : 'secondary'}
-                  disabled={!isUnlocked}
                   onClick={() => setThemeId(t.id)}
-                  ariaLabel={isUnlocked ? t.name : `${t.name}（未解放）`}
+                  ariaLabel={t.name}
                 >
                   {t.emoji} {t.name}
                   {hot && ' 🔥'}
-                  {!isUnlocked && ' 🔒'}
                 </PixelButton>
               );
             })}
+            {THEMES.length > unlockedThemes.length && (
+              <span style={{ fontSize: 11, color: '#6b4f3a', alignSelf: 'center' }}>
+                + ? 種類（未解放）
+              </span>
+            )}
           </div>
         </PixelWindow>
 

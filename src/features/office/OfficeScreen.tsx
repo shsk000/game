@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { OfficeView } from '../../components/OfficeView';
 import {
   PixelButton,
@@ -9,6 +9,7 @@ import {
   PixelWindow,
 } from '../../components/ui';
 import { ACHIEVEMENTS } from '../../data/achievements';
+import { DEBT_CONFIG, computeBorrowingLimit } from '../../data/balance';
 import { REFRESH_COST, roleLabel, sumMonthlySalaries } from '../../data/employees';
 import { nextLockedScale, SCALE_BY_ID, SCALES } from '../../data/scales';
 import { useGameStore } from '../../state/gameStore';
@@ -29,7 +30,7 @@ import { formatYen } from '../../utils/format';
 
 const ICON_BASE = '/sprites/ui';
 
-type ModalKind = 'hire' | 'scale' | 'achievements' | 'settings' | null;
+type ModalKind = 'hire' | 'scale' | 'achievements' | 'settings' | 'debt' | null;
 
 const formatPower = (role: string, power: number) => {
   if (role === 'programmer') return `+${power.toFixed(1)} LoC/秒`;
@@ -48,24 +49,36 @@ export const OfficeScreen = () => {
   const achievements = useGameStore((s) => s.achievements);
   const lastFixedCost = useGameStore((s) => s.lastFixedCost);
   const currentDate = useGameStore((s) => s.currentDate);
-  const tickWeek = useGameStore((s) => s.tickWeek);
+  const debt = useGameStore((s) => s.debt);
   const hireCandidate = useGameStore((s) => s.hireCandidate);
   const refreshCandidate = useGameStore((s) => s.refreshCandidate);
   const fireEmployee = useGameStore((s) => s.fireEmployee);
   const unlockNextScale = useGameStore((s) => s.unlockNextScale);
+  const borrowMoney = useGameStore((s) => s.borrowMoney);
+  const repayDebt = useGameStore((s) => s.repayDebt);
   const goTo = useGameStore((s) => s.goTo);
   const reset = useGameStore((s) => s.reset);
 
   const [modal, setModal] = useState<ModalKind>(null);
+  const [debtAmountInput, setDebtAmountInput] = useState<string>('');
   const closeModal = () => setModal(null);
-  // A-10: 連打防止スロットル
-  const lastIdleTickRef = useRef(0);
-  const advanceOneWeek = () => {
-    const now = Date.now();
-    if (now - lastIdleTickRef.current < 300) return;
-    lastIdleTickRef.current = now;
-    tickWeek();
-  };
+
+  // 次の週まで何 % 進んだかを 250ms ごとに更新（GlobalTicker の 30s/週 が体感できない問題対策）
+  const [weekProgress, setWeekProgress] = useState(0);
+  const weekStartRef = useRef<number>(performance.now());
+  useEffect(() => {
+    // currentDate が変わった瞬間が「新しい週の開始」
+    weekStartRef.current = performance.now();
+    setWeekProgress(0);
+  }, [currentDate]);
+  useEffect(() => {
+    const IDLE_MS_PER_WEEK = 30_000; // GlobalTicker と揃える
+    const t = setInterval(() => {
+      const elapsed = performance.now() - weekStartRef.current;
+      setWeekProgress(Math.min(100, (elapsed / IDLE_MS_PER_WEEK) * 100));
+    }, 250);
+    return () => clearInterval(t);
+  }, []);
 
   const next = nextLockedScale(unlocked);
   const sellingWorks = library.filter((w) => w.selling);
@@ -73,7 +86,10 @@ export const OfficeScreen = () => {
   const currentScaleDef = SCALE_BY_ID[currentScale];
   const monthlySalaries = sumMonthlySalaries(employees);
   const monthlyRent = currentScaleDef.monthlyRent;
-  const monthlyTotal = monthlySalaries + monthlyRent;
+  const monthlyInterest = Math.round(debt * DEBT_CONFIG.monthlyInterestRate);
+  const monthlyTotal = monthlySalaries + monthlyRent + monthlyInterest;
+  const borrowingLimit = computeBorrowingLimit(monthlySalaries + monthlyRent);
+  const borrowingAvailable = Math.max(0, borrowingLimit - debt);
 
   const menuItems: PixelMenuItem[] = [
     {
@@ -200,17 +216,35 @@ export const OfficeScreen = () => {
             </ul>
           </PixelWindow>
 
-          {/* v0.10 A-10：ゲーム内時間。開発外でも 1 週進められる */}
+          {/* v0.10 仕上げ T-6：ゲーム内時間（GlobalTicker で自動進行）
+              旧「⏩ 1 週進める」ボタンは GlobalTicker 導入で不要になったため廃止。 */}
           <PixelWindow title="🗓 ゲーム内時間" variant="standard">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#1a0f08' }}>
                 {formatGameDate(currentDate)}
               </div>
-              <PixelButton size="small" variant="secondary" onClick={advanceOneWeek}>
-                ⏩ 1 週進める
-              </PixelButton>
+              <div
+                style={{
+                  height: 6,
+                  background: '#1a0f08',
+                  border: '2px solid #2c1f15',
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                }}
+                aria-label="次の週まで"
+              >
+                <div
+                  style={{
+                    width: `${weekProgress}%`,
+                    height: '100%',
+                    background: '#5aa84a',
+                    transition: 'width 250ms linear',
+                  }}
+                />
+              </div>
               <p style={{ margin: 0, fontSize: 11, color: '#6b4f3a' }}>
-                ※開発中は自動で時間が進みます。アイドル中の月初固定費もここで進められます。
+                ※リアル 7.5 秒 = ゲーム内 1 週（タイピング中）／30 秒 = 1 週（アイドル中）。
+                月初に固定費が発生します。
               </p>
             </div>
           </PixelWindow>
@@ -235,6 +269,12 @@ export const OfficeScreen = () => {
               <li>
                 オフィス賃料（{currentScaleDef.name}）: <strong>{formatYen(monthlyRent)}</strong>/月
               </li>
+              {monthlyInterest > 0 && (
+                <li>
+                  借金月利（{Math.round(DEBT_CONFIG.monthlyInterestRate * 100)}%）:{' '}
+                  <strong>{formatYen(monthlyInterest)}</strong>/月
+                </li>
+              )}
               <li
                 style={{
                   marginTop: 4,
@@ -252,6 +292,46 @@ export const OfficeScreen = () => {
                 ) : (
                   <span>—（まだ月初を迎えていません）</span>
                 )}
+              </li>
+            </ul>
+          </PixelWindow>
+
+          {/* v0.10 仕上げ T-23：借金パネル */}
+          <PixelWindow
+            title="🏦 借金"
+            variant={debt > 0 ? 'emphasis' : 'standard'}
+          >
+            <ul
+              style={{
+                listStyle: 'none',
+                margin: 0,
+                padding: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+                fontSize: 13,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              <li>
+                残債:{' '}
+                <strong style={{ color: debt > 0 ? '#a02828' : '#3a2a1e' }}>
+                  {formatYen(debt)}
+                </strong>
+              </li>
+              <li>
+                月利息（3%）: <strong>{formatYen(monthlyInterest)}</strong>/月
+              </li>
+              <li>
+                借入上限: <strong>{formatYen(borrowingLimit)}</strong>
+              </li>
+              <li style={{ fontSize: 11, color: '#6b4f3a' }}>
+                残り借入可能: {formatYen(borrowingAvailable)}
+              </li>
+              <li style={{ marginTop: 6 }}>
+                <PixelButton size="small" onClick={() => setModal('debt')}>
+                  借入 / 返済
+                </PixelButton>
               </li>
             </ul>
           </PixelWindow>
@@ -509,6 +589,78 @@ export const OfficeScreen = () => {
             );
           })}
         </ul>
+      </PixelModal>
+
+      {/* ── 借入 / 返済モーダル（T-24） ── */}
+      <PixelModal open={modal === 'debt'} onClose={closeModal} title="🏦 借入 / 返済" maxWidth={460}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 13 }}>
+          <ul
+            style={{
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            <li>残債: <strong>{formatYen(debt)}</strong></li>
+            <li>所持金: <strong>{formatYen(funds)}</strong></li>
+            <li>借入上限: <strong>{formatYen(borrowingLimit)}</strong>（月固定費 × 12）</li>
+            <li>残り借入可能: <strong>{formatYen(borrowingAvailable)}</strong></li>
+            <li style={{ fontSize: 11, color: '#6b4f3a' }}>
+              月利 {Math.round(DEBT_CONFIG.monthlyInterestRate * 100)}%（残債に対し毎月発生）
+            </li>
+          </ul>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 12, fontWeight: 700 }}>金額（円）</span>
+            <input
+              type="number"
+              min={0}
+              value={debtAmountInput}
+              onChange={(e) => setDebtAmountInput(e.target.value)}
+              style={{
+                padding: '4px 6px',
+                fontSize: 14,
+                fontFamily: 'inherit',
+                border: '2px solid #2c1f15',
+                background: '#fff8e0',
+              }}
+            />
+          </label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <PixelButton
+              variant="primary"
+              disabled={
+                !debtAmountInput ||
+                Number(debtAmountInput) <= 0 ||
+                Number(debtAmountInput) > borrowingAvailable
+              }
+              onClick={() => {
+                const n = Number(debtAmountInput);
+                if (borrowMoney(n)) setDebtAmountInput('');
+              }}
+            >
+              借入
+            </PixelButton>
+            <PixelButton
+              variant="secondary"
+              disabled={
+                !debtAmountInput ||
+                Number(debtAmountInput) <= 0 ||
+                debt <= 0 ||
+                funds <= 0
+              }
+              onClick={() => {
+                const n = Number(debtAmountInput);
+                if (repayDebt(n)) setDebtAmountInput('');
+              }}
+            >
+              返済
+            </PixelButton>
+          </div>
+        </div>
       </PixelModal>
 
       {/* ── 設定モーダル ── */}

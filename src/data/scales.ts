@@ -1,3 +1,5 @@
+import { MONTHLY_RENT, SCALE_BALANCE } from './balance';
+
 export type Scale = 'mini' | 'mobile' | 'indie' | 'hit' | 'aaa';
 
 export type ScaleDef = {
@@ -7,96 +9,52 @@ export type ScaleDef = {
   baseQuality: number;
   baseUnit: number;
   unlockCost: number;
-  /**
-   * v0.10：標準必要週数。タイピング/能力/広告で前後する。
-   * 1ヶ月=4週、1年=48週。
-   *  - mini   8週(2ヶ月)
-   *  - mobile 12週(3ヶ月)
-   *  - indie  20週(5ヶ月)
-   *  - hit    28週(7ヶ月)
-   *  - aaa    36週(9ヶ月)
-   */
+  /** v0.10：標準必要週数。balance.ts から引く */
   neededWeeks: number;
-  /**
-   * v0.10：開発の基本開発費（円）。
-   *  - mini   ¥100,000
-   *  - mobile ¥1,000,000
-   *  - indie  ¥10,000,000
-   *  - hit    ¥100,000,000
-   *  - aaa    ¥1,000,000,000
-   */
+  /** v0.10：開発の基本開発費（円）。balance.ts から引く（旧 baseCost） */
   baseCost: number;
-  /**
-   * v0.10：オフィス賃料（月額・円）。
-   * 規模が大きい開発を抱えるほど月々の固定費が膨らむ。
-   */
+  /** v0.10 仕上げ：賃料は規模に関係なく一律（balance.ts MONTHLY_RENT）。
+   *  互換のため ScaleDef にも残す（全規模で同じ値）。 */
   monthlyRent: number;
 };
 
 /**
- * 数値は設計書 7-E ベース。MVP の打鍵単位（1フレーズ = 1LoC）に合わせて 1/10 スケール。
- * 設計上の 80/200/500/1000/2000 を 8/20/50/100/200 にリスケール。
+ * v0.10 仕上げ：balance.ts に集約された数値を SCALES に展開する。
  *
- * v0.10：neededWeeks / baseCost / monthlyRent を追加。
- * baseUnit は v0.10 で × 10,000 倍にリスケール（売上規模の現実化のため）。
+ * 旧バージョンでは scales.ts に数値が直接書かれていたが、ゲームバランス調整を
+ * 1 ファイルに集約するため balance.ts に移行。ScaleDef の型は互換維持。
+ *
+ * - requiredLoC, baseQuality, baseUnit は scales.ts ローカルで保持（balance に未含）
+ *   ※ requiredLoC は時間ベース完了の現在は副指標、進捗バー表示用
+ * - neededWeeks, baseCost, monthlyRent は balance.ts から引く
+ * - unlockCost は balance.ts の unlockCost を踏襲
  */
-export const SCALES: ScaleDef[] = [
-  {
-    id: 'mini',
-    name: 'ミニゲーム',
-    requiredLoC: 8,
-    baseQuality: 30,
-    baseUnit: 1_000_000,
-    unlockCost: 0,
-    neededWeeks: 8,
-    baseCost: 100_000,
-    monthlyRent: 50_000,
-  },
-  {
-    id: 'mobile',
-    name: 'スマホゲーム',
-    requiredLoC: 20,
-    baseQuality: 35,
-    baseUnit: 3_000_000,
-    unlockCost: 10_000_000,
-    neededWeeks: 12,
-    baseCost: 1_000_000,
-    monthlyRent: 150_000,
-  },
-  {
-    id: 'indie',
-    name: 'インディー大作',
-    requiredLoC: 50,
-    baseQuality: 40,
-    baseUnit: 8_000_000,
-    unlockCost: 50_000_000,
-    neededWeeks: 20,
-    baseCost: 10_000_000,
-    monthlyRent: 150_000,
-  },
-  {
-    id: 'hit',
-    name: '話題作',
-    requiredLoC: 100,
-    baseQuality: 45,
-    baseUnit: 18_000_000,
-    unlockCost: 200_000_000,
-    neededWeeks: 28,
-    baseCost: 100_000_000,
-    monthlyRent: 500_000,
-  },
-  {
-    id: 'aaa',
-    name: 'AAAタイトル',
-    requiredLoC: 200,
-    baseQuality: 50,
-    baseUnit: 40_000_000,
-    unlockCost: 800_000_000,
-    neededWeeks: 36,
-    baseCost: 1_000_000_000,
-    monthlyRent: 2_000_000,
-  },
-];
+export const SCALES: ScaleDef[] = (
+  ['mini', 'mobile', 'indie', 'hit', 'aaa'] as Scale[]
+).map((id) => {
+  const b = SCALE_BALANCE[id];
+  const meta: Record<
+    Scale,
+    { name: string; requiredLoC: number; baseQuality: number; baseUnit: number }
+  > = {
+    mini: { name: 'ミニゲーム', requiredLoC: 8, baseQuality: 30, baseUnit: 1_000_000 },
+    mobile: { name: 'スマホゲーム', requiredLoC: 20, baseQuality: 35, baseUnit: 3_000_000 },
+    indie: { name: 'インディー大作', requiredLoC: 50, baseQuality: 40, baseUnit: 8_000_000 },
+    hit: { name: '話題作', requiredLoC: 100, baseQuality: 45, baseUnit: 18_000_000 },
+    aaa: { name: 'AAAタイトル', requiredLoC: 200, baseQuality: 50, baseUnit: 40_000_000 },
+  };
+  return {
+    id,
+    name: meta[id].name,
+    requiredLoC: meta[id].requiredLoC,
+    baseQuality: meta[id].baseQuality,
+    baseUnit: meta[id].baseUnit,
+    unlockCost: b.unlockCost,
+    neededWeeks: b.neededWeeks,
+    baseCost: b.devCost,
+    monthlyRent: MONTHLY_RENT, // 一律
+  };
+});
 
 export const SCALE_BY_ID: Record<Scale, ScaleDef> = SCALES.reduce(
   (acc, s) => {

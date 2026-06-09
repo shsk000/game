@@ -100,7 +100,6 @@ export type WorkBreakdown = {
   luck?: number;
   base?: number;
   luckMultiplier?: number;
-  isGodGame?: boolean;
   trendMul?: number;
   pioneer?: boolean;
   // v0.9 互換

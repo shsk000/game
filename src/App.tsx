@@ -1,4 +1,5 @@
 import { GameOverModal } from './components/GameOverModal';
+import { GlobalTicker } from './components/GlobalTicker';
 import { CollectionScreen } from './features/collection/CollectionScreen';
 import { DevelopScreen } from './features/develop/DevelopScreen';
 import { LibraryScreen } from './features/library/LibraryScreen';
@@ -30,6 +31,7 @@ export default function App() {
   };
   return (
     <>
+      <GlobalTicker />
       {renderScreen()}
       {gameOver && <GameOverModal />}
     </>

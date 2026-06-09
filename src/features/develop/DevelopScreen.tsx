@@ -36,17 +36,14 @@ export const DevelopScreen = () => {
   const trend = useGameStore((s) => s.trend);
   const currentDate = useGameStore((s) => s.currentDate);
   const lastFixedCost = useGameStore((s) => s.lastFixedCost);
-  const tickAuto = useGameStore((s) => s.tickAuto);
   const tickWeek = useGameStore((s) => s.tickWeek);
   const addDevelopLoC = useGameStore((s) => s.addDevelopLoC);
   const finishDevelopment = useGameStore((s) => s.finishDevelopment);
   const reportCombo = useGameStore((s) => s.reportCombo);
   const reportWPM = useGameStore((s) => s.reportWPM);
   const reportAccuracy = useGameStore((s) => s.reportAccuracy);
-  const triggerBugIfDue = useGameStore((s) => s.triggerBugIfDue);
   const clearBug = useGameStore((s) => s.clearBug);
   const buyAdDevBoost = useGameStore((s) => s.buyAdDevBoost);
-  const applyTimeShortcut = useGameStore((s) => s.applyTimeShortcut);
 
   const [elapsed, setElapsed] = useState(0);
   const [adRunning, setAdRunning] = useState(false);
@@ -134,25 +131,10 @@ export const DevelopScreen = () => {
     pushToast(`💸 月初固定費 -¥${lastFixedCostTotal.toLocaleString()}`, 'warn');
   }, [lastFixedCostTotal]);
 
-  // F-5: WPM のしきい値クロスで「-X 週」テロップ
-  const wpmReached = current?.perf.wpm ?? 0;
-  useEffect(() => {
-    if (!current) return;
-    // spec §3-3 を簡略化：WPM 100/150/200 でそれぞれ -1/-2/-3 週
-    const thresholds: { wpm: number; weeks: number }[] = [
-      { wpm: 100, weeks: 1 },
-      { wpm: 150, weeks: 2 },
-      { wpm: 200, weeks: 3 },
-    ];
-    for (const t of thresholds) {
-      if (wpmReached >= t.wpm) {
-        const applied = applyTimeShortcut(t.wpm, t.weeks);
-        if (applied) {
-          pushToast(`⚡ WPM ${t.wpm}+ で -${t.weeks} 週短縮！`, 'good');
-        }
-      }
-    }
-  }, [wpmReached, current, applyTimeShortcut]);
+  // v0.10 仕上げ：WPM ショートカット（-1/-2/-3 週）は廃止。
+  //   設計（balance-design §1-3）で「タイピングは指定期間中ずっと打ち続けるもの」と定義。
+  //   時間ベース完了と組み合わせると数語で完了してしまう（B-Crit-2 再発）ので削除。
+  //   早く打てた場合は WPM 記録としてリリース時の品質（performance）寄与に反映される。
 
   const startedAt = current?.startedAt ?? null;
   useEffect(() => {
@@ -166,36 +148,33 @@ export const DevelopScreen = () => {
     return () => cancelAnimationFrame(raf);
   }, [startedAt]);
 
-  // 自動生産 tick
-  useEffect(() => {
-    if (!current) return;
-    const t = setInterval(() => tickAuto(1), 1000);
-    return () => clearInterval(t);
-  }, [current?.scale, tickAuto]);
+  // v0.10：週進行の進捗（ゲーム内時間）— 完了判定 useEffect から参照されるため先に算出。
+  const scaleDef = current ? SCALE_BY_ID[current.scale] : null;
+  const shortcutWeeks = (current?.timeShortcutsUnlocked ?? []).reduce((sum, wpm) => {
+    if (wpm >= 200) return sum + 3;
+    if (wpm >= 150) return sum + 2;
+    if (wpm >= 100) return sum + 1;
+    return sum;
+  }, 0);
+  const neededWeeks = scaleDef ? Math.max(1, scaleDef.neededWeeks - shortcutWeeks) : 1;
+  const startDate = startDateRef.current ?? currentDate;
+  const elapsedWeeks = Math.max(0, dateToWeekIndex(currentDate) - dateToWeekIndex(startDate));
 
-  // v0.10：週進行タイマー（標準速度 7.5 秒 = 1週）
-  // 開発中は常に時間が流れる。月初には固定費イベントが発火（store 内 monthlyTick）。
+  // v0.10 仕上げ T-3：自動 LoC tick / 時間進行 / バグ抽選は <GlobalTicker /> に移譲。
+  // ここでは「開発完了判定」のみ責任を持つ。
+  //
+  // v0.10 仕上げ T-4：完了判定を時間ベースに変更。
+  // 旧仕様：`doneLoC >= requiredLoC` で即完了 → 速い人だと 5 秒で 1 本完成（B-Crit-2）
+  // 新仕様：`elapsedWeeks >= neededWeeks` で完了（時間ベース）
+  // タイピングは「指定された開発期間中ずっと打ち続けるもの」として位置付け、
+  // doneLoC は進捗の副指標に降格（達成しても自動完了しない）。
   useEffect(() => {
     if (!current) return;
     if (current.finishedAt !== null) return;
-    const WEEK_MS = 7500;
-    const t = setInterval(() => tickWeek(), WEEK_MS);
-    return () => clearInterval(t);
-  }, [current?.scale, current?.finishedAt, tickWeek]);
-
-  // バグイベント抽選（10秒に1回）
-  useEffect(() => {
-    if (!current) return;
-    const t = setInterval(() => triggerBugIfDue(), 10000);
-    return () => clearInterval(t);
-  }, [current?.scale, triggerBugIfDue]);
-
-  useEffect(() => {
-    if (!current) return;
-    if (current.finishedAt === null && current.doneLoC >= current.requiredLoC) {
+    if (elapsedWeeks >= neededWeeks) {
       finishDevelopment();
     }
-  }, [current?.doneLoC, current?.requiredLoC, current?.finishedAt, finishDevelopment]);
+  }, [current, elapsedWeeks, neededWeeks, finishDevelopment]);
 
   const assignedEmployees = useMemo(() => {
     if (!current) return [];
@@ -203,7 +182,7 @@ export const DevelopScreen = () => {
     return employees.filter((e) => set.has(e.id));
   }, [current?.assignedEmployeeIds, employees]);
 
-  if (!current) return null;
+  if (!current || !scaleDef) return null;
 
   const progressPct = Math.min(100, (current.doneLoC / current.requiredLoC) * 100);
   const progSpeed = employees
@@ -214,17 +193,6 @@ export const DevelopScreen = () => {
   const tMul = trendMultiplier(trend, current.genreId, current.themeId);
   const isHot = combo >= 15;
 
-  // v0.10：週進行の進捗（ゲーム内時間）
-  const scaleDef = SCALE_BY_ID[current.scale];
-  const shortcutWeeks = (current.timeShortcutsUnlocked ?? []).reduce((sum, wpm) => {
-    if (wpm >= 200) return sum + 3;
-    if (wpm >= 150) return sum + 2;
-    if (wpm >= 100) return sum + 1;
-    return sum;
-  }, 0);
-  const neededWeeks = Math.max(1, scaleDef.neededWeeks - shortcutWeeks);
-  const startDate = startDateRef.current ?? currentDate;
-  const elapsedWeeks = Math.max(0, dateToWeekIndex(currentDate) - dateToWeekIndex(startDate));
   const weekPct = Math.min(100, (elapsedWeeks / Math.max(1, neededWeeks)) * 100);
   const dueDate = addWeeks(startDate, neededWeeks);
   const overdue = compareDate(currentDate, dueDate) > 0;
