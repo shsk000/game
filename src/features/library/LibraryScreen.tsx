@@ -1,7 +1,15 @@
+import { useMemo, useState } from 'react';
 import { JacketView } from '../../components/JacketView';
-import { PixelMenuBar, type PixelMenuItem, PixelStatusBar, PixelWindow } from '../../components/ui';
+import {
+  PixelButton,
+  PixelMenuBar,
+  type PixelMenuItem,
+  PixelStatusBar,
+  PixelWindow,
+} from '../../components/ui';
 import { GENRE_BY_ID } from '../../data/genres';
-import { SCALE_BY_ID } from '../../data/scales';
+import type { Scale } from '../../data/scales';
+import { SCALE_BY_ID, SCALES } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
 import { formatYen } from '../../utils/format';
@@ -23,9 +31,31 @@ import { formatYen } from '../../utils/format';
 
 const ICON_BASE = '/sprites/ui';
 
+type SortKey = 'newest' | 'revenue' | 'metascore';
+const PAGE_SIZE = 12;
+
 export const LibraryScreen = () => {
   const library = useGameStore((s) => s.library);
   const goTo = useGameStore((s) => s.goTo);
+
+  // フィルタ・ソート・ページング状態
+  const [scaleFilter, setScaleFilter] = useState<Scale | 'all'>('all');
+  const [sortKey, setSortKey] = useState<SortKey>('newest');
+  const [page, setPage] = useState(0);
+
+  const filteredSorted = useMemo(() => {
+    const filtered =
+      scaleFilter === 'all' ? library : library.filter((w) => w.scale === scaleFilter);
+    const sorted = [...filtered];
+    if (sortKey === 'newest') sorted.sort((a, b) => b.releasedAt - a.releasedAt);
+    else if (sortKey === 'revenue') sorted.sort((a, b) => b.totalRevenue - a.totalRevenue);
+    else if (sortKey === 'metascore') sorted.sort((a, b) => b.metascore - a.metascore);
+    return sorted;
+  }, [library, scaleFilter, sortKey]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSorted.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const paged = filteredSorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
   const menuItems: PixelMenuItem[] = [
     {
@@ -54,17 +84,7 @@ export const LibraryScreen = () => {
   const sellingCount = library.filter((w) => w.selling).length;
 
   return (
-    <div
-      className="screen library-screen"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        minHeight: '100dvh',
-        padding: 12,
-        background: '#2a1a0e',
-      }}
-    >
+    <div className="screen library-screen">
       <PixelStatusBar />
 
       <main
@@ -73,11 +93,95 @@ export const LibraryScreen = () => {
           display: 'flex',
           flexDirection: 'column',
           gap: 12,
+          padding: 12,
           minHeight: 0,
+          overflow: 'auto',
         }}
       >
+        {/* フィルタ + ソート + ページャ */}
+        {library.length > 0 && (
+          <PixelWindow variant="standard" bodyStyle={{ padding: 8 }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 12,
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                fontSize: 12,
+              }}
+            >
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                規模:
+                <select
+                  value={scaleFilter}
+                  onChange={(e) => {
+                    setScaleFilter(e.target.value as Scale | 'all');
+                    setPage(0);
+                  }}
+                  style={{
+                    padding: '2px 6px',
+                    fontFamily: 'inherit',
+                    fontSize: 12,
+                    border: '2px solid #2c1f15',
+                    background: '#fff8e0',
+                  }}
+                >
+                  <option value="all">全て</option>
+                  {SCALES.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                ソート:
+                <select
+                  value={sortKey}
+                  onChange={(e) => {
+                    setSortKey(e.target.value as SortKey);
+                    setPage(0);
+                  }}
+                  style={{
+                    padding: '2px 6px',
+                    fontFamily: 'inherit',
+                    fontSize: 12,
+                    border: '2px solid #2c1f15',
+                    background: '#fff8e0',
+                  }}
+                >
+                  <option value="newest">新しい順</option>
+                  <option value="revenue">売上順</option>
+                  <option value="metascore">メタスコア順</option>
+                </select>
+              </label>
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <PixelButton
+                  size="small"
+                  variant="secondary"
+                  disabled={currentPage === 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  ◀
+                </PixelButton>
+                <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
+                  {currentPage + 1} / {totalPages}
+                </span>
+                <PixelButton
+                  size="small"
+                  variant="secondary"
+                  disabled={currentPage >= totalPages - 1}
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                >
+                  ▶
+                </PixelButton>
+              </div>
+            </div>
+          </PixelWindow>
+        )}
+
         <PixelWindow
-          title={`📚 作品ライブラリ（${library.length}本 / 販売中 ${sellingCount}本）`}
+          title={`📚 作品ライブラリ（${filteredSorted.length}本表示 / 販売中 ${sellingCount}本 / 累計 ${library.length}本）`}
           variant="standard"
           bodyStyle={{ padding: 12 }}
         >
@@ -103,7 +207,7 @@ export const LibraryScreen = () => {
                 gap: 12,
               }}
             >
-              {library.map((w) => {
+              {paged.map((w) => {
                 const genre = GENRE_BY_ID[w.genreId];
                 const theme = THEME_BY_ID[w.themeId];
                 const scale = SCALE_BY_ID[w.scale];

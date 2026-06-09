@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ads } from '../../ads/AdProvider';
 import { JacketView } from '../../components/JacketView';
-import { PixelWindow } from '../../components/ui';
+import { PixelStatusBar, PixelWindow } from '../../components/ui';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
 import { compatLabel, getCompat } from '../../data/compatibility';
 import { GENRE_BY_ID } from '../../data/genres';
@@ -202,9 +202,19 @@ export const ReleaseScreen = () => {
   if (stage === 'pre-ads' || !work) {
     return (
       <div className="screen release-screen">
-        <header className="topbar">
-          <h1>📰 リリース</h1>
-        </header>
+        <PixelStatusBar />
+        <main
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+            padding: 12,
+            minHeight: 0,
+            overflow: 'auto',
+          }}
+        >
+        <h1 style={{ margin: 0, fontSize: 18, color: '#fff8e0' }}>📰 リリース</h1>
         <section className="card release-card">
           <JacketView genreId={planGenreId} themeId={planThemeId} title={planTitle} size="lg" />
           <div className="release-info">
@@ -248,6 +258,7 @@ export const ReleaseScreen = () => {
             </button>
           </div>
         </section>
+        </main>
       </div>
     );
   }
@@ -265,9 +276,19 @@ export const ReleaseScreen = () => {
 
   return (
     <div className="screen release-screen">
-      <header className="topbar">
-        <h1>📰 リリース</h1>
-      </header>
+      <PixelStatusBar />
+      <main
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          padding: 12,
+          minHeight: 0,
+          overflow: 'auto',
+        }}
+      >
+      <h1 style={{ margin: 0, fontSize: 18, color: '#fff8e0' }}>📰 リリース</h1>
 
       <section className="card release-card">
         <JacketView genreId={work.genreId} themeId={work.themeId} title={work.title} size="lg" />
@@ -513,6 +534,7 @@ export const ReleaseScreen = () => {
           </div>
         </div>
       </section>
+      </main>
     </div>
   );
 };

@@ -30,10 +30,10 @@ export default function App() {
     }
   };
   return (
-    <>
+    <div className="game-root">
       <GlobalTicker />
       {renderScreen()}
       {gameOver && <GameOverModal />}
-    </>
+    </div>
   );
 }

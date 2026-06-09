@@ -1,3 +1,13 @@
+/* ---- v0.11 UI 刷新：ローカルピクセルフォント ---- */
+/* x0y0pxFreeFont (hicchicc 製) - SIL OFL ライセンス・商用可・表記不要 */
+@font-face {
+  font-family: "DenkiChip";
+  src: url("/font/x8y12pxDenkiChip.woff2") format("woff2");
+  font-display: swap;
+  font-weight: normal;
+  font-style: normal;
+}
+
 :root {
   color-scheme: dark;
   --bg: #0e1116;
@@ -10,9 +20,12 @@
   --warn: #ffb454;
   --danger: #ff6b6b;
   --border: #2a3445;
+  /* v0.11：ピクセルフォント優先、絵文字は OS のカラー絵文字フォントに任せる、
+   * 日本語の漢字広域カバーは JP フォントにフォールバック */
   font-family:
-    "Source Han Sans JP", "Noto Sans JP", "Hiragino Sans", "Meiryo", ui-monospace, "SF Mono", Menlo,
-    Consolas, monospace;
+    "DenkiChip", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
+    "Source Han Sans JP", "Noto Sans JP", "Hiragino Sans", "Meiryo", ui-monospace,
+    "SF Mono", Menlo, Consolas, monospace;
   font-size: 16px;
 }
 
@@ -1139,8 +1152,7 @@ body {
 }
 
 /* ---- Pixel UI baseline (game-ui-design SKILL) ---- */
-/* Pixel fonts: DotGothic16 for JP text, PressStart2P for digits/EN */
-@import url("https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap");
+/* v0.11：Google Fonts CDN は廃止、ローカル x8y12pxDenkiChip に統一（CSS 先頭の @font-face で定義済み） */
 
 /* Force pixelated rendering on all sprites and UI images globally */
 img,
@@ -1153,6 +1165,60 @@ canvas {
 /* Pixel-font-first body */
 body {
   font-family:
-    "DotGothic16", "Press Start 2P", "Source Han Sans JP", "Noto Sans JP", "Hiragino Sans",
-    "Meiryo", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    "DenkiChip", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
+    "Source Han Sans JP", "Noto Sans JP", "Hiragino Sans", "Meiryo", ui-monospace,
+    "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ---- v0.11 UI 刷新：固定ビューポート 1280×720 ---- */
+/*
+ * .game-root は CSS scale で 1280×720 を画面に合わせて拡縮表示。
+ * PC 横 ≥ 1280×720 ならそのまま、それより小さい場合は scale で縮小（両端に余白）。
+ * これにより全画面 1 画面で完結（スクロール禁止）の設計を実現。
+ */
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.game-root {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1280px;
+  height: 720px;
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  background: #2a1a0e;
+  overflow: hidden;
+}
+
+/* JS で scale を計算して .game-root に当てるが、SSR や初期描画用の保険として */
+@media (min-aspect-ratio: 16 / 9) {
+  .game-root {
+    transform: translate(-50%, -50%) scale(calc(100vh / 720));
+  }
+}
+@media (max-aspect-ratio: 16 / 9) {
+  .game-root {
+    transform: translate(-50%, -50%) scale(calc(100vw / 1280));
+  }
+}
+
+/* v0.11：全画面 .screen は固定 1280×720 内で完結、スクロール禁止 */
+.screen {
+  width: 1280px;
+  height: 720px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #2a1a0e;
+  padding: 0;
+  margin: 0;
 }

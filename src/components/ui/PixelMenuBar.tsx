@@ -45,13 +45,15 @@ export const PixelMenuBar = ({ items, activeId, children, className, style }: Pr
       aria-label="オフィスメニュー"
       style={{
         display: 'flex',
-        gap: 6,
-        padding: '8px 10px',
+        justifyContent: 'center',
+        gap: 8,
+        padding: '10px 16px',
+        height: 84,
         background: '#3a2a1e',
-        border: '4px solid #1a0f08',
-        borderRadius: 2,
-        boxShadow: 'inset 0 0 0 2px #6b4f3a, 4px 4px 0 rgba(0,0,0,0.4)',
+        borderTop: '4px solid #1a0f08',
+        boxShadow: 'inset 0 2px 0 #6b4f3a',
         imageRendering: 'pixelated',
+        flexShrink: 0,
         ...style,
       }}
     >

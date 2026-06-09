@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PixelMenuBar, type PixelMenuItem, PixelStatusBar, PixelWindow } from '../../components/ui';
 import { compatLabel, getCompat } from '../../data/compatibility';
+import type { GenreId } from '../../data/genres';
 import { GENRE_BY_ID, GENRES } from '../../data/genres';
 import { THEME_BY_ID, THEMES } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
@@ -46,38 +47,6 @@ const compatFg = (c: number): string => {
   return '#fff8e0';
 };
 
-const HEADER_CELL: React.CSSProperties = {
-  background: '#3a2a1e',
-  color: '#fff8e0',
-  border: '2px solid #1a0f08',
-  padding: '4px 6px',
-  fontSize: 12,
-  textAlign: 'center',
-  lineHeight: 1.2,
-  fontWeight: 700,
-  minWidth: 60,
-};
-
-const ROW_HEADER_CELL: React.CSSProperties = {
-  ...HEADER_CELL,
-  textAlign: 'left',
-  minWidth: 100,
-  position: 'sticky',
-  left: 0,
-  zIndex: 1,
-};
-
-const BASE_CELL: React.CSSProperties = {
-  border: '2px solid #8b6f47',
-  padding: '4px 4px',
-  fontSize: 11,
-  textAlign: 'center',
-  lineHeight: 1.2,
-  minWidth: 60,
-  height: 48,
-  fontVariantNumeric: 'tabular-nums',
-};
-
 const LEGEND_SWATCH: React.CSSProperties = {
   display: 'inline-block',
   width: 16,
@@ -103,6 +72,21 @@ export const CollectionScreen = () => {
     () => THEMES.filter((t) => unlockedThemes.includes(t.id)),
     [unlockedThemes],
   );
+
+  // v0.11 L7：選択中ジャンルのタブ
+  const [activeGenre, setActiveGenre] = useState<GenreId | null>(
+    visibleGenres[0]?.id ?? null,
+  );
+  // 解放ジャンルが変わった時のフェイルセーフ
+  useEffect(() => {
+    if (visibleGenres.length === 0) {
+      setActiveGenre(null);
+      return;
+    }
+    if (!activeGenre || !visibleGenres.some((g) => g.id === activeGenre)) {
+      setActiveGenre(visibleGenres[0].id);
+    }
+  }, [visibleGenres, activeGenre]);
 
   const stats = useMemo(() => {
     const map = new Map<string, Cell>();
@@ -152,17 +136,7 @@ export const CollectionScreen = () => {
   ];
 
   return (
-    <div
-      className="screen collection-screen"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        minHeight: '100dvh',
-        padding: 12,
-        background: '#2a1a0e',
-      }}
-    >
+    <div className="screen collection-screen">
       <PixelStatusBar />
 
       <main
@@ -171,7 +145,9 @@ export const CollectionScreen = () => {
           display: 'flex',
           flexDirection: 'column',
           gap: 12,
+          padding: 12,
           minHeight: 0,
+          overflow: 'auto',
         }}
       >
         <PixelWindow
@@ -187,111 +163,112 @@ export const CollectionScreen = () => {
               lineHeight: 1.5,
             }}
           >
-            作品をリリースするとマスが解放されます。発見済みは相性ランクと最高記録（Q・🎯）を表示。
+            選択中ジャンルと解放済テーマの相性を表示。発見済は相性ランク + 最高記録（Q・🎯）。
           </p>
 
+          {/* v0.11 L7：ジャンルタブ */}
           <div
             style={{
-              overflowX: 'auto',
-              border: '3px solid #1a0f08',
+              display: 'flex',
+              gap: 4,
+              flexWrap: 'wrap',
+              marginBottom: 10,
+              padding: 4,
               background: '#5c4a3a',
-              imageRendering: 'pixelated',
+              border: '2px solid #1a0f08',
             }}
           >
-            <table
+            {visibleGenres.map((g) => {
+              const isActive = g.id === activeGenre;
+              return (
+                <button
+                  key={g.id}
+                  type="button"
+                  onClick={() => setActiveGenre(g.id)}
+                  style={{
+                    padding: '4px 10px',
+                    fontFamily: 'inherit',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    background: isActive ? '#f5c84a' : '#3a2a1e',
+                    color: isActive ? '#1a0f08' : '#fff8e0',
+                    border: '2px solid #1a0f08',
+                    cursor: 'pointer',
+                    imageRendering: 'pixelated',
+                  }}
+                >
+                  {g.emoji} {g.name}
+                </button>
+              );
+            })}
+            {GENRES.length > visibleGenres.length && (
+              <span style={{ fontSize: 11, color: '#c8b58a', alignSelf: 'center', padding: '0 6px' }}>
+                + ? 種類（未解放）
+              </span>
+            )}
+          </div>
+
+          {/* v0.11 L7：選択中ジャンル × 解放済テーマ グリッド（5×3） */}
+          {activeGenre && (
+            <div
               style={{
-                borderCollapse: 'collapse',
-                width: '100%',
-                tableLayout: 'fixed',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(5, 1fr)',
+                gap: 6,
+                padding: 6,
+                background: '#5c4a3a',
+                border: '2px solid #1a0f08',
+                imageRendering: 'pixelated',
               }}
             >
-              <thead>
-                <tr>
-                  <th
+              {visibleThemes.map((t) => {
+                const key = `${activeGenre}|${t.id}`;
+                const cell = stats.get(key);
+                if (!cell) {
+                  return (
+                    <div
+                      key={t.id}
+                      style={{
+                        padding: 8,
+                        background: '#3a2a1e',
+                        color: '#f0c020',
+                        textAlign: 'center',
+                        border: '2px solid #1a0f08',
+                        minHeight: 70,
+                      }}
+                    >
+                      <div style={{ fontSize: 16 }}>{t.emoji}</div>
+                      <div style={{ fontSize: 10, color: '#c8b58a' }}>{t.name}</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>？</div>
+                    </div>
+                  );
+                }
+                const c = getCompat(activeGenre, t.id);
+                return (
+                  <div
+                    key={t.id}
                     style={{
-                      ...ROW_HEADER_CELL,
-                      background: '#1a0f08',
+                      padding: 8,
+                      background: compatBg(c),
+                      color: compatFg(c),
+                      textAlign: 'center',
+                      border: '2px solid #1a0f08',
+                      fontWeight: 700,
+                      minHeight: 70,
                     }}
+                    title={`${GENRE_BY_ID[activeGenre].name} × ${THEME_BY_ID[t.id].name}`}
                   >
-                    ジャンル ＼ テーマ
-                  </th>
-                  {visibleThemes.map((t) => (
-                    <th key={t.id} style={HEADER_CELL} title={t.name}>
-                      <div style={{ fontSize: 14, lineHeight: 1.2 }}>{t.emoji}</div>
-                      <div style={{ fontSize: 10, lineHeight: 1.2, marginTop: 2 }}>{t.name}</div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {visibleGenres.map((g) => (
-                  <tr key={g.id}>
-                    <th style={ROW_HEADER_CELL} title={g.name}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                        }}
-                      >
-                        <span style={{ fontSize: 14 }}>{g.emoji}</span>
-                        <span style={{ fontSize: 11 }}>{g.name}</span>
-                      </div>
-                    </th>
-                    {visibleThemes.map((t) => {
-                      const key = `${g.id}|${t.id}`;
-                      const cell = stats.get(key);
-                      if (!cell) {
-                        return (
-                          <td
-                            key={t.id}
-                            style={{
-                              ...BASE_CELL,
-                              background: '#5c4a3a',
-                              color: '#f0c020',
-                              fontSize: 20,
-                              fontWeight: 700,
-                            }}
-                          >
-                            ？
-                          </td>
-                        );
-                      }
-                      const c = getCompat(g.id, t.id);
-                      return (
-                        <td
-                          key={t.id}
-                          style={{
-                            ...BASE_CELL,
-                            background: compatBg(c),
-                            color: compatFg(c),
-                            fontWeight: 700,
-                          }}
-                          title={`${GENRE_BY_ID[g.id].name} × ${THEME_BY_ID[t.id].name}`}
-                        >
-                          <div style={{ fontSize: 11, lineHeight: 1.1 }}>{compatLabel(c)}</div>
-                          <div
-                            style={{
-                              fontSize: 10,
-                              marginTop: 2,
-                              lineHeight: 1.1,
-                              display: 'flex',
-                              justifyContent: 'center',
-                              gap: 4,
-                              flexWrap: 'wrap',
-                            }}
-                          >
-                            <span>Q{cell.bestQ}</span>
-                            <span>🎯{cell.bestMeta}</span>
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    <div style={{ fontSize: 16 }}>{t.emoji}</div>
+                    <div style={{ fontSize: 10 }}>{t.name}</div>
+                    <div style={{ fontSize: 11, marginTop: 2 }}>{compatLabel(c)}</div>
+                    <div style={{ fontSize: 9, marginTop: 1 }}>
+                      Q{cell.bestQ} 🎯{cell.bestMeta}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* 凡例 */}
           <div

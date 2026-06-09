@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { OfficeView } from '../../components/OfficeView';
 import {
   PixelButton,
@@ -13,7 +13,6 @@ import { DEBT_CONFIG, computeBorrowingLimit } from '../../data/balance';
 import { REFRESH_COST, roleLabel, sumMonthlySalaries } from '../../data/employees';
 import { nextLockedScale, SCALE_BY_ID, SCALES } from '../../data/scales';
 import { useGameStore } from '../../state/gameStore';
-import { formatGameDate } from '../../state/types';
 import { formatYen } from '../../utils/format';
 
 /**
@@ -48,7 +47,6 @@ export const OfficeScreen = () => {
   const records = useGameStore((s) => s.records);
   const achievements = useGameStore((s) => s.achievements);
   const lastFixedCost = useGameStore((s) => s.lastFixedCost);
-  const currentDate = useGameStore((s) => s.currentDate);
   const debt = useGameStore((s) => s.debt);
   const hireCandidate = useGameStore((s) => s.hireCandidate);
   const refreshCandidate = useGameStore((s) => s.refreshCandidate);
@@ -62,23 +60,6 @@ export const OfficeScreen = () => {
   const [modal, setModal] = useState<ModalKind>(null);
   const [debtAmountInput, setDebtAmountInput] = useState<string>('');
   const closeModal = () => setModal(null);
-
-  // 次の週まで何 % 進んだかを 250ms ごとに更新（GlobalTicker の 30s/週 が体感できない問題対策）
-  const [weekProgress, setWeekProgress] = useState(0);
-  const weekStartRef = useRef<number>(performance.now());
-  useEffect(() => {
-    // currentDate が変わった瞬間が「新しい週の開始」
-    weekStartRef.current = performance.now();
-    setWeekProgress(0);
-  }, [currentDate]);
-  useEffect(() => {
-    const IDLE_MS_PER_WEEK = 30_000; // GlobalTicker と揃える
-    const t = setInterval(() => {
-      const elapsed = performance.now() - weekStartRef.current;
-      setWeekProgress(Math.min(100, (elapsed / IDLE_MS_PER_WEEK) * 100));
-    }, 250);
-    return () => clearInterval(t);
-  }, []);
 
   const next = nextLockedScale(unlocked);
   const sellingWorks = library.filter((w) => w.selling);
@@ -144,113 +125,127 @@ export const OfficeScreen = () => {
   ];
 
   return (
-    <div
-      className="screen office-screen"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        minHeight: '100dvh',
-        padding: 12,
-        background: '#2a1a0e',
-      }}
-    >
+    <div className="screen office-screen" style={{ gap: 0 }}>
       <PixelStatusBar />
 
       <main
         style={{
           flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
+          display: 'grid',
+          gridTemplateColumns: '760px 460px',
           gap: 12,
+          padding: 12,
           minHeight: 0,
+          overflow: 'hidden',
         }}
       >
-        <PixelWindow title="🏠 オフィス" variant="standard" bodyStyle={{ padding: 8 }}>
+        {/* 左パネル：オフィスビュー 760×580 */}
+        <PixelWindow
+          title="🏠 オフィス"
+          variant="standard"
+          bodyStyle={{ padding: 8, height: '100%', display: 'flex' }}
+          style={{ height: '100%' }}
+        >
           <div
             style={{
+              flex: 1,
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
               background: '#1a0f08',
               padding: 8,
-              borderRadius: 2,
+              overflow: 'hidden',
             }}
           >
             <OfficeView scale={currentScale} employeeCount={employees.length} />
           </div>
         </PixelWindow>
 
+        {/* 右パネル：経営情報 3 枠（販売中 / 月固定費 / 借金）460×580 */}
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            display: 'flex',
+            flexDirection: 'column',
             gap: 12,
+            height: '100%',
+            minHeight: 0,
           }}
         >
-          <PixelWindow title="会社サマリ" variant="standard">
-            <ul
-              style={{
-                listStyle: 'none',
-                margin: 0,
-                padding: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 4,
-                fontSize: 13,
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              <li>
-                累計売上: <strong>{formatYen(lifetimeRevenue)}</strong>
-                <span style={{ marginLeft: 6, fontSize: 11, color: '#6b4f3a' }}>
-                  （¥{lifetimeRevenue.toLocaleString()}）
-                </span>
-              </li>
-              <li>累計リリース: {library.length}本</li>
-              <li>販売中: {sellingWorks.length}本</li>
-              <li>最高メタスコア: {records.bestMetascore}</li>
-              <li>最高売上: {formatYen(records.bestRevenue)}</li>
-              <li>最高コンボ: {records.bestCombo}</li>
-              <li>最高WPM: {records.bestWPM}</li>
-            </ul>
-          </PixelWindow>
-
-          {/* v0.10 仕上げ T-6：ゲーム内時間（GlobalTicker で自動進行）
-              旧「⏩ 1 週進める」ボタンは GlobalTicker 導入で不要になったため廃止。 */}
-          <PixelWindow title="🗓 ゲーム内時間" variant="standard">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#1a0f08' }}>
-                {formatGameDate(currentDate)}
-              </div>
-              <div
-                style={{
-                  height: 6,
-                  background: '#1a0f08',
-                  border: '2px solid #2c1f15',
-                  borderRadius: 2,
-                  overflow: 'hidden',
-                }}
-                aria-label="次の週まで"
-              >
-                <div
+          {/* 販売中の作品（高さ 240px、3 件まで表示） */}
+          <PixelWindow
+            title={`📈 販売中の作品 (${sellingWorks.length})`}
+            variant="standard"
+            bodyStyle={{ padding: 8 }}
+            style={{ flex: '0 0 auto', height: 240, display: 'flex', flexDirection: 'column' }}
+          >
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              {sellingWorks.length === 0 ? (
+                <p style={{ margin: 0, fontSize: 12, color: '#6b4f3a' }}>
+                  販売中の作品はありません
+                </p>
+              ) : (
+                <ul
                   style={{
-                    width: `${weekProgress}%`,
-                    height: '100%',
-                    background: '#5aa84a',
-                    transition: 'width 250ms linear',
+                    listStyle: 'none',
+                    margin: 0,
+                    padding: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
                   }}
-                />
-              </div>
-              <p style={{ margin: 0, fontSize: 11, color: '#6b4f3a' }}>
-                ※リアル 7.5 秒 = ゲーム内 1 週（タイピング中）／30 秒 = 1 週（アイドル中）。
-                月初に固定費が発生します。
-              </p>
+                >
+                  {sellingWorks.slice(0, 3).map((w) => {
+                    const pct = (w.salesPool / Math.max(1, w.initialSalesPool)) * 100;
+                    return (
+                      <li key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700 }}>
+                          {w.title}（🎯{w.metascore}）
+                        </div>
+                        <div
+                          style={{
+                            height: 6,
+                            background: '#1a0f08',
+                            border: '2px solid #2c1f15',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: `${pct}%`,
+                              height: '100%',
+                              background: '#5aa84a',
+                            }}
+                          />
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: '#3a2a1e',
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
+                        >
+                          残{formatYen(w.salesPool)} / 累計{formatYen(w.totalRevenue)}
+                        </div>
+                      </li>
+                    );
+                  })}
+                  {sellingWorks.length > 3 && (
+                    <li style={{ fontSize: 10, color: '#6b4f3a' }}>
+                      他 {sellingWorks.length - 3} 本販売中
+                    </li>
+                  )}
+                </ul>
+              )}
             </div>
           </PixelWindow>
 
           {/* v0.10：月固定費パネル＋先月の収支 */}
-          <PixelWindow title="💸 月々の固定費" variant="emphasis">
+          <PixelWindow
+            title="💸 月々の固定費"
+            variant="emphasis"
+            bodyStyle={{ padding: 8 }}
+            style={{ flex: '0 0 auto' }}
+          >
             <ul
               style={{
                 listStyle: 'none',
@@ -296,10 +291,12 @@ export const OfficeScreen = () => {
             </ul>
           </PixelWindow>
 
-          {/* v0.10 仕上げ T-23：借金パネル */}
+          {/* 借金パネル */}
           <PixelWindow
             title="🏦 借金"
             variant={debt > 0 ? 'emphasis' : 'standard'}
+            bodyStyle={{ padding: 8 }}
+            style={{ flex: '0 0 auto' }}
           >
             <ul
               style={{
@@ -308,8 +305,8 @@ export const OfficeScreen = () => {
                 padding: 0,
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 4,
-                fontSize: 13,
+                gap: 3,
+                fontSize: 12,
                 fontVariantNumeric: 'tabular-nums',
               }}
             >
@@ -318,81 +315,23 @@ export const OfficeScreen = () => {
                 <strong style={{ color: debt > 0 ? '#a02828' : '#3a2a1e' }}>
                   {formatYen(debt)}
                 </strong>
+                <span style={{ marginLeft: 8, fontSize: 11, color: '#6b4f3a' }}>
+                  / 上限 {formatYen(borrowingLimit)}
+                </span>
               </li>
               <li>
-                月利息（3%）: <strong>{formatYen(monthlyInterest)}</strong>/月
+                月利息: <strong>{formatYen(monthlyInterest)}</strong>/月
+                <span style={{ marginLeft: 8, fontSize: 11, color: '#6b4f3a' }}>
+                  借入可 {formatYen(borrowingAvailable)}
+                </span>
               </li>
-              <li>
-                借入上限: <strong>{formatYen(borrowingLimit)}</strong>
-              </li>
-              <li style={{ fontSize: 11, color: '#6b4f3a' }}>
-                残り借入可能: {formatYen(borrowingAvailable)}
-              </li>
-              <li style={{ marginTop: 6 }}>
+              <li style={{ marginTop: 4 }}>
                 <PixelButton size="small" onClick={() => setModal('debt')}>
                   借入 / 返済
                 </PixelButton>
               </li>
             </ul>
           </PixelWindow>
-
-          {sellingWorks.length > 0 && (
-            <PixelWindow title="📈 販売中の作品" variant="standard">
-              <ul
-                style={{
-                  listStyle: 'none',
-                  margin: 0,
-                  padding: 0,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8,
-                }}
-              >
-                {sellingWorks.slice(0, 5).map((w) => {
-                  const pct = (w.salesPool / Math.max(1, w.initialSalesPool)) * 100;
-                  return (
-                    <li key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700 }}>
-                        {w.title}（🎯{w.metascore}）
-                      </div>
-                      <div
-                        style={{
-                          height: 8,
-                          background: '#1a0f08',
-                          border: '2px solid #2c1f15',
-                          borderRadius: 2,
-                          overflow: 'hidden',
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: `${pct}%`,
-                            height: '100%',
-                            background: '#5aa84a',
-                          }}
-                        />
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: '#3a2a1e',
-                          fontVariantNumeric: 'tabular-nums',
-                        }}
-                      >
-                        残¥{Math.round(w.salesPool).toLocaleString()} / 累計¥
-                        {w.totalRevenue.toLocaleString()}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-              {sellingWorks.length > 5 && (
-                <p style={{ fontSize: 11, marginTop: 6, color: '#3a2a1e' }}>
-                  他 {sellingWorks.length - 5} 本販売中
-                </p>
-              )}
-            </PixelWindow>
-          )}
         </div>
       </main>
 
@@ -549,13 +488,50 @@ export const OfficeScreen = () => {
         )}
       </PixelModal>
 
-      {/* ── 実績モーダル ── */}
+      {/* ── 実績モーダル（会社サマリ含む） ── */}
       <PixelModal
         open={modal === 'achievements'}
         onClose={closeModal}
         title={`🏆 実績 ${achievements.length}/${ACHIEVEMENTS.length}`}
         maxWidth={560}
       >
+        {/* v0.11 L2-3：会社サマリを実績モーダルの先頭に移設 */}
+        <section
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 4,
+            padding: 10,
+            marginBottom: 10,
+            background: '#fff4d0',
+            border: '2px solid #2c1f15',
+            fontSize: 12,
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          <div>
+            累計売上: <strong>{formatYen(lifetimeRevenue)}</strong>
+          </div>
+          <div>
+            累計リリース: <strong>{library.length}本</strong>
+          </div>
+          <div>
+            販売中: <strong>{sellingWorks.length}本</strong>
+          </div>
+          <div>
+            最高メタ: <strong>{records.bestMetascore}</strong>
+          </div>
+          <div>
+            最高売上: <strong>{formatYen(records.bestRevenue)}</strong>
+          </div>
+          <div>
+            最高コンボ: <strong>{records.bestCombo}</strong>
+          </div>
+          <div>
+            最高WPM: <strong>{records.bestWPM}</strong>
+          </div>
+        </section>
+
         <ul
           style={{
             listStyle: 'none',

@@ -5,19 +5,13 @@ import { ComboGauge } from '../../components/ComboGauge';
 import { GhostBar } from '../../components/GhostBar';
 import { JacketView } from '../../components/JacketView';
 import { TypingPanel } from '../../components/TypingPanel';
-import { PixelWindow } from '../../components/ui';
+import { PixelStatusBar } from '../../components/ui';
 import { buildLine } from '../../data/codeSnippets';
 import { getPhrases } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { trendLabel, trendMultiplier } from '../../data/trend';
 import { useGameStore } from '../../state/gameStore';
-import {
-  addWeeks,
-  compareDate,
-  dateToWeekIndex,
-  formatGameDate,
-  type GameDate,
-} from '../../state/types';
+import { addWeeks, compareDate, dateToWeekIndex, type GameDate } from '../../state/types';
 import { formatWeeks } from '../../utils/format';
 import { useTyping } from './useTyping';
 
@@ -212,77 +206,70 @@ export const DevelopScreen = () => {
 
   return (
     <div className={`screen develop-screen ${isHot ? 'is-hot' : ''}`}>
-      <header className="topbar">
-        <h1>💻 開発中</h1>
-        <div className="topbar-meta">
+      {/* v0.11 L4：上部 HUD は PixelStatusBar に統合（日付+進捗込み）。
+       *  さらに「📅 経過/予定週数」「⚠期日超過」を追加表示する細い帯を下に置く。 */}
+      <PixelStatusBar />
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+          padding: '6px 16px',
+          height: 32,
+          background: '#3a2a1e',
+          color: '#fff8e0',
+          fontSize: 12,
+          borderBottom: '2px solid #1a0f08',
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <JacketView
             genreId={current.genreId}
             themeId={current.themeId}
             title={current.title}
             size="sm"
           />
+          <span style={{ fontWeight: 700 }}>💻 {current.title}</span>
         </div>
-      </header>
-
-      {/* v0.10：ゲーム内時間カレンダー＋週進捗 */}
-      <div style={{ margin: '0 0 12px' }}>
-        <PixelWindow title="🗓 ゲーム内時間" variant="emphasis" bodyStyle={{ padding: 10 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            fontVariantNumeric: 'tabular-nums',
+            color: overdue ? '#ff8888' : '#fff8e0',
+          }}
+        >
+          <span>
+            経過 {elapsedWeeks} 週 / 予定 {neededWeeks} 週（{formatWeeks(neededWeeks)}）
+          </span>
+          {overdue && <span style={{ color: '#ff5555', fontWeight: 700 }}>⚠ 期日超過</span>}
           <div
+            role="progressbar"
+            aria-label="開発期間プログレス"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(weekPct)}
             style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-              fontVariantNumeric: 'tabular-nums',
+              width: 120,
+              height: 8,
+              background: '#0d0805',
+              border: '2px solid #1a0f08',
+              overflow: 'hidden',
             }}
           >
             <div
               style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'baseline',
-                gap: 12,
-                flexWrap: 'wrap',
+                width: `${weekPct}%`,
+                height: '100%',
+                background: overdue ? '#a02828' : '#f5c84a',
+                transition: 'width 200ms linear',
               }}
-            >
-              <span style={{ fontSize: 16, fontWeight: 700, color: '#1a0f08' }}>
-                {formatGameDate(currentDate)}
-              </span>
-              <span style={{ fontSize: 12, color: overdue ? '#a02828' : '#3a2a1e' }}>
-                経過 {elapsedWeeks} 週 / 予定 {neededWeeks} 週（{formatWeeks(neededWeeks)}）
-                {overdue && ' ⚠ 期日超過'}
-              </span>
-            </div>
-            <div
-              role="progressbar"
-              aria-label="開発期間プログレス"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(weekPct)}
-              style={{
-                height: 12,
-                background: '#2c1f15',
-                border: '2px solid #1a0f08',
-                boxShadow: 'inset 0 0 0 1px rgba(255,248,224,0.2)',
-                borderRadius: 2,
-                overflow: 'hidden',
-              }}
-            >
-              <div
-                style={{
-                  width: `${weekPct}%`,
-                  height: '100%',
-                  background: overdue
-                    ? 'repeating-linear-gradient(45deg,#a02828,#a02828 4px,#7a1c1c 4px,#7a1c1c 8px)'
-                    : '#f5c84a',
-                  transition: 'width 200ms linear',
-                }}
-              />
-            </div>
-            <div style={{ fontSize: 11, color: '#6b4f3a' }}>
-              標準速度 リアル 7.5 秒 = ゲーム内 1 週／月初に固定費が発生します
-            </div>
+            />
           </div>
-        </PixelWindow>
+        </div>
       </div>
 
       {/* テロップ（バグ・固定費） */}
