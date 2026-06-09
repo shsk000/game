@@ -139,27 +139,114 @@ export const OfficeScreen = () => {
           overflow: 'hidden',
         }}
       >
-        {/* 左パネル：オフィスビュー 760×580 */}
-        <PixelWindow
-          title="🏠 オフィス"
-          variant="standard"
-          bodyStyle={{ padding: 8, height: '100%', display: 'flex' }}
-          style={{ height: '100%' }}
+        {/* 左パネル：オフィスビュー（上）+ アクション CTA（下）760×580 */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+            height: '100%',
+            minHeight: 0,
+          }}
         >
-          <div
-            style={{
-              flex: 1,
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              background: '#1a0f08',
-              padding: 8,
-              overflow: 'hidden',
-            }}
+          <PixelWindow
+            title="🏠 オフィス"
+            variant="standard"
+            bodyStyle={{ padding: 8, flex: 1, display: 'flex' }}
+            style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
           >
-            <OfficeView scale={currentScale} employeeCount={employees.length} />
-          </div>
-        </PixelWindow>
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                background: '#1a0f08',
+                padding: 8,
+                overflow: 'hidden',
+              }}
+            >
+              <OfficeView scale={currentScale} employeeCount={employees.length} />
+            </div>
+          </PixelWindow>
+
+          {/* メイン CTA：新しいゲームを作る（最重要） */}
+          <PixelWindow
+            variant="emphasis"
+            bodyStyle={{ padding: 10 }}
+            style={{ flex: '0 0 auto' }}
+          >
+            <button
+              type="button"
+              onClick={() => goTo('plan')}
+              disabled={employees.length === 0}
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                background: employees.length === 0 ? '#7a6f5a' : '#f5c84a',
+                color: employees.length === 0 ? '#3a2a1e' : '#1a0f08',
+                border: '4px solid #1a0f08',
+                boxShadow:
+                  employees.length === 0
+                    ? 'inset 0 0 0 2px rgba(255,255,255,0.2), 2px 2px 0 rgba(0,0,0,0.4)'
+                    : 'inset 0 0 0 2px #fff8e0, 4px 4px 0 rgba(0,0,0,0.5)',
+                fontFamily: 'inherit',
+                fontSize: 18,
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                cursor: employees.length === 0 ? 'not-allowed' : 'pointer',
+                imageRendering: 'pixelated',
+                textShadow:
+                  employees.length === 0 ? 'none' : '1px 1px 0 rgba(255,255,255,0.4)',
+              }}
+            >
+              ▶ 新しいゲームを作る
+            </button>
+            {employees.length === 0 ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 12,
+                  color: '#6b4f3a',
+                }}
+              >
+                <span>※ 開発には従業員が 1 人以上必要</span>
+                <button
+                  type="button"
+                  onClick={() => setModal('hire')}
+                  style={{
+                    padding: '4px 10px',
+                    background: '#5aa84a',
+                    color: '#fff8e0',
+                    border: '3px solid #1a0f08',
+                    fontFamily: 'inherit',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    imageRendering: 'pixelated',
+                    marginLeft: 'auto',
+                  }}
+                >
+                  👥 従業員を雇う
+                </button>
+              </div>
+            ) : (
+              <p
+                style={{
+                  margin: '6px 0 0',
+                  fontSize: 11,
+                  color: '#6b4f3a',
+                  textAlign: 'center',
+                }}
+              >
+                ジャンル・テーマを選んで開発開始
+              </p>
+            )}
+          </PixelWindow>
+        </div>
 
         {/* 右パネル：経営情報 3 枠（販売中 / 月固定費 / 借金）460×580 */}
         <div
