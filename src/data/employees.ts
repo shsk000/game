@@ -1,4 +1,5 @@
 import type { Candidate, Employee, EmployeeRole, EmployeeSpecialty } from '../state/types';
+import { computeMonthlyWage } from './balance';
 import type { CategoryId } from './categories';
 
 const SURNAMES = [
@@ -73,16 +74,15 @@ const rollPower = (role: EmployeeRole): number => {
 };
 
 /**
- * v0.10：月給（円）。power 値の桁感に応じてリスケール。
- *  - programmer: power 1.0 で約 ¥200,000、3.0 で約 ¥500,000、5.0+ で ¥1,000,000+
- *  - designer:   power 3 で約 ¥250,000、10 で約 ¥1,000,000
- *  - pr:         power 10 で約 ¥300,000、20 で約 ¥600,000
+ * v0.10 仕上げ：月給計算は balance.ts に集約。
+ * 役職差なし、power のみで決まる（balance-design §6-1）。
+ *   月給 = base ¥30 万 + power × ¥20 万
+ *
+ * @param _role 役職（現バランスでは未使用、将来の差別化用にシグネチャは維持）
+ * @param power power 値
  */
-const wageFor = (role: EmployeeRole, power: number): number => {
-  if (role === 'programmer') return Math.round(100_000 + power * 200_000);
-  if (role === 'designer') return Math.round(100_000 + power * 100_000);
-  return Math.round(100_000 + power * 30_000);
-};
+const wageFor = (_role: EmployeeRole, power: number): number =>
+  Math.round(computeMonthlyWage(power));
 
 /**
  * v0.10：個別社員の月給を取得。

@@ -357,6 +357,9 @@ export const OfficeView = ({
               width={deskW}
               height={deskH}
               style={{ imageRendering: 'pixelated', display: 'block' }}
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
             />
           ) : (
             <div
@@ -389,6 +392,9 @@ export const OfficeView = ({
               width={monitorSize}
               height={monitorSize}
               style={{ imageRendering: 'pixelated', display: 'block' }}
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
             />
           ) : (
             <div style={{ fontSize: monitorSize * 0.7, textAlign: 'center' }}>🖥️</div>
@@ -436,6 +442,9 @@ export const OfficeView = ({
               width={chairSize}
               height={chairSize}
               style={{ imageRendering: 'pixelated', display: 'block' }}
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
             />
           ) : (
             <div style={{ fontSize: chairSize * 0.7, textAlign: 'center' }}>💺</div>

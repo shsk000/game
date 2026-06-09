@@ -1,3 +1,4 @@
+import { INITIAL_FUNDS } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import type { GenreId } from '../data/genres';
@@ -69,14 +70,17 @@ const defaultBreakdown = (): WorkBreakdown => ({
 
 export const defaults = (): Persisted => ({
   version: 5,
-  // v0.10 の桁感に合わせて初期資金を ¥15,000,000 に（v0.9 の ¥1,500 を ×10,000）
-  funds: 15_000_000,
+  // v0.10 仕上げ：初期資金は balance.ts INITIAL_FUNDS（¥500 万）に統一。
+  // 失敗 2-3 本で詰む緊張感（balance-design §0、§5-4）。
+  funds: INITIAL_FUNDS,
   lifetimeRevenue: 0,
   fans: 0,
   employees: [],
   unlockedScales: ['mini'],
-  unlockedGenres: ['action', 'puzzle', 'rpg'],
-  unlockedThemes: ['fantasy', 'sf', 'sushi', 'ninja', 'onsen'],
+  // v0.10 仕上げ：初期解放は「人気無い・単純」ジャンル / テーマのみ。
+  // ファンタジー・SF・忍者などの人気テーマは終盤解放。
+  unlockedGenres: ['puzzle', 'adventure', 'simulation'],
+  unlockedThemes: ['sushi', 'onsen', 'farming'],
   unlockedCategories: [...INITIAL_CATEGORY_IDS],
   ghosts: emptyGhostsRecord(),
   library: [],
