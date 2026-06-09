@@ -320,6 +320,21 @@ export const load = (): Persisted | null => {
             ? parsed.unlockedCategories
             : [...INITIAL_CATEGORY_IDS];
         merged.currentDate = parsed.currentDate ?? { ...INITIAL_GAME_DATE };
+
+        // v0.10 仕上げマイグレーション：人気ジャンル / テーマを再ロック
+        // 旧版は action/puzzle/rpg や fantasy/sf 等が初期解放だったが、新版は人気のないものから。
+        // 達成（library に既出のもの）は維持しつつ、設計上 stage 1 のものだけに絞り込む。
+        const newInitialGenres = defaults().unlockedGenres;
+        const newInitialThemes = defaults().unlockedThemes;
+        const usedGenres = new Set(merged.library.map((w) => w.genreId));
+        const usedThemes = new Set(merged.library.map((w) => w.themeId));
+        merged.unlockedGenres = Array.from(
+          new Set([...newInitialGenres, ...Array.from(usedGenres)]),
+        );
+        merged.unlockedThemes = Array.from(
+          new Set([...newInitialThemes, ...Array.from(usedThemes)]),
+        );
+
         return merged;
       }
     }

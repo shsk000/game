@@ -5,7 +5,6 @@ import {
   SCORE_BASE,
   salesMultiplierForScore,
 } from '../data/balance';
-import { getCompat } from '../data/compatibility';
 import type { GenreId } from '../data/genres';
 import type { Scale } from '../data/scales';
 import type { ThemeId } from '../data/themes';
@@ -76,11 +75,12 @@ export const computeRevenue = (
   const tierMul = salesMultiplierForScore(metascore);
 
   // 各ソフトボーナス（負の値もあり、最終的に合算）
-  const trendBonus = Math.max(-0.2, trendMultiplier(trend, _genreId, _themeId) - 1); // -0.2 〜 +0.5
-  const fanBonus = Math.min(0.3, Math.sqrt(Math.max(0, fans)) / 200); // ファン 10000 で +0.3 上限
-  const launchBonus = launchAdActive ? 0.2 : 0;
+  // v0.10 仕上げ：上限を +50% → +20% に圧縮（hit 帯がさらに ×1.5 で +¥1500 万嵩上げされていた問題）
+  const trendBonus = Math.max(-0.15, trendMultiplier(trend, _genreId, _themeId) - 1);
+  const fanBonus = Math.min(0.15, Math.sqrt(Math.max(0, fans)) / 400); // ファン 10000 で +0.15 上限
+  const launchBonus = launchAdActive ? 0.1 : 0;
   const totalBonus = trendBonus + fanBonus + launchBonus + prBonus + pioneerBonus;
-  const softMul = 1 + Math.max(-0.3, Math.min(0.5, totalBonus));
+  const softMul = 1 + Math.max(-0.3, Math.min(0.2, totalBonus));
 
   const v = baseRevenue * tierMul * softMul;
   return Math.max(0, Math.round(v));

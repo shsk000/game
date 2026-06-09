@@ -29,11 +29,22 @@ export const GlobalTicker = () => {
     let lastWeekAt = performance.now();
     let lastAutoAt = performance.now();
     let lastBugAt = performance.now();
+    let lastScreen: string | null = null;
 
     const t = setInterval(() => {
       const s = useGameStore.getState();
       if (s.gameOver) return;
       const now = performance.now();
+
+      // 画面が切り替わった瞬間に各 tick の lastAt をリセット
+      // （アイドル中に貯めた 25 秒分を develop 突入時に即時消費してしまう問題を防ぐ）
+      if (s.screen !== lastScreen) {
+        lastSalesAt = now;
+        lastWeekAt = now;
+        lastAutoAt = now;
+        lastBugAt = now;
+        lastScreen = s.screen;
+      }
 
       // 1) 販売 tick：1 秒ごと（全画面）
       if (now - lastSalesAt >= SALES_INTERVAL_MS) {
