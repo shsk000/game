@@ -8,18 +8,15 @@
   "files": {
     "includes": [
       "src/**",
-      "app/**",
       "tests/**",
       "*.ts",
       "*.tsx",
       "*.json",
       "*.css",
       "!**/dist",
-      "!**/.next",
       "!**/node_modules",
       "!**/test-results",
-      "!**/playwright-report",
-      "!next-env.d.ts"
+      "!**/playwright-report"
     ]
   },
   "formatter": {

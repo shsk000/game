@@ -32,6 +32,3 @@ playwright/.cache/
 *.njsproj
 *.sln
 *.sw?
-.next/
-next-env.d.ts
-tsconfig.tsbuildinfo
