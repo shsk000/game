@@ -269,6 +269,30 @@ export const DevelopScreen = () => {
               }}
             />
           </div>
+          {/* v0.11：開発中断ボタン（オフィスへ戻る） */}
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm('開発を中断してオフィスに戻りますか？\n（進捗は失われます）')) {
+                useGameStore.setState({ current: null, screen: 'office' });
+              }
+            }}
+            style={{
+              padding: '4px 10px',
+              background: '#a02828',
+              color: '#fff8e0',
+              border: '2px solid #1a0f08',
+              fontFamily: 'inherit',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+              imageRendering: 'pixelated',
+              marginLeft: 8,
+            }}
+            aria-label="開発を中断してオフィスに戻る"
+          >
+            🚪 中断
+          </button>
         </div>
       </div>
 

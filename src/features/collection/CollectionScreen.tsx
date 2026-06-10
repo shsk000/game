@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { PixelMenuBar, type PixelMenuItem, PixelStatusBar, PixelWindow } from '../../components/ui';
+import { PixelWindow } from '../../components/ui';
 import { compatLabel, getCompat } from '../../data/compatibility';
 import type { GenreId } from '../../data/genres';
 import { GENRE_BY_ID, GENRES } from '../../data/genres';
@@ -21,8 +21,6 @@ import { useGameStore } from '../../state/gameStore';
  * - 未発見セル：グレー背景・黄色「？」
  * - 表が大きいので overflow-x: auto で横スクロール可
  */
-
-const ICON_BASE = '/sprites/ui';
 
 type Cell = {
   discovered: boolean;
@@ -61,7 +59,6 @@ export const CollectionScreen = () => {
   const library = useGameStore((s) => s.library);
   const unlockedGenres = useGameStore((s) => s.unlockedGenres);
   const unlockedThemes = useGameStore((s) => s.unlockedThemes);
-  const goTo = useGameStore((s) => s.goTo);
 
   // v0.10 仕上げ：未解放ジャンル / テーマは図鑑にも出さない（何があるか分からない設計）。
   const visibleGenres = useMemo(
@@ -111,45 +108,21 @@ export const CollectionScreen = () => {
   const totalCells = visibleGenres.length * visibleThemes.length;
   const discoveredCount = stats.size;
 
-  const menuItems: PixelMenuItem[] = [
-    {
-      id: 'office',
-      label: 'オフィス',
-      emoji: '🏠',
-      iconSrc: `${ICON_BASE}/icon_office.png`,
-      onClick: () => goTo('office'),
-    },
-    {
-      id: 'plan',
-      label: '計画',
-      emoji: '📋',
-      iconSrc: `${ICON_BASE}/icon_plan.png`,
-      onClick: () => goTo('plan'),
-    },
-    {
-      id: 'library',
-      label: '作品',
-      emoji: '📚',
-      iconSrc: `${ICON_BASE}/icon_library.png`,
-      onClick: () => goTo('library'),
-    },
-  ];
-
+  // v0.11 G2：ScreenOverlay の中身として描画（ページ遷移しない）
   return (
-    <div className="screen collection-screen">
-      <PixelStatusBar />
-
-      <main
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-          padding: 12,
-          minHeight: 0,
-          overflow: 'auto',
-        }}
-      >
+    <div
+      className="collection-screen"
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        padding: 10,
+        minHeight: 0,
+        overflow: 'auto',
+        background: '#2a1a0e',
+      }}
+    >
         <PixelWindow
           title={`📖 ジャンル相性図鑑（発見 ${discoveredCount} / ${totalCells}）`}
           variant="standard"
@@ -299,9 +272,6 @@ export const CollectionScreen = () => {
             </span>
           </div>
         </PixelWindow>
-      </main>
-
-      <PixelMenuBar items={menuItems} />
     </div>
   );
 };

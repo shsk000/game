@@ -1,12 +1,6 @@
 import { useMemo, useState } from 'react';
 import { JacketView } from '../../components/JacketView';
-import {
-  PixelButton,
-  PixelMenuBar,
-  type PixelMenuItem,
-  PixelStatusBar,
-  PixelWindow,
-} from '../../components/ui';
+import { PixelButton, PixelWindow } from '../../components/ui';
 import { GENRE_BY_ID } from '../../data/genres';
 import type { Scale } from '../../data/scales';
 import { SCALE_BY_ID, SCALES } from '../../data/scales';
@@ -29,14 +23,11 @@ import { formatYen } from '../../utils/format';
  * - 戻るボタンは PixelMenuBar の「オフィス」アイコン
  */
 
-const ICON_BASE = '/sprites/ui';
-
 type SortKey = 'newest' | 'revenue' | 'metascore';
 const PAGE_SIZE = 12;
 
 export const LibraryScreen = () => {
   const library = useGameStore((s) => s.library);
-  const goTo = useGameStore((s) => s.goTo);
 
   // フィルタ・ソート・ページング状態
   const [scaleFilter, setScaleFilter] = useState<Scale | 'all'>('all');
@@ -57,47 +48,23 @@ export const LibraryScreen = () => {
   const currentPage = Math.min(page, totalPages - 1);
   const paged = filteredSorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
-  const menuItems: PixelMenuItem[] = [
-    {
-      id: 'office',
-      label: 'オフィス',
-      emoji: '🏠',
-      iconSrc: `${ICON_BASE}/icon_office.png`,
-      onClick: () => goTo('office'),
-    },
-    {
-      id: 'plan',
-      label: '計画',
-      emoji: '📋',
-      iconSrc: `${ICON_BASE}/icon_plan.png`,
-      onClick: () => goTo('plan'),
-    },
-    {
-      id: 'collection',
-      label: '図鑑',
-      emoji: '📖',
-      iconSrc: `${ICON_BASE}/icon_collection.png`,
-      onClick: () => goTo('collection'),
-    },
-  ];
-
   const sellingCount = library.filter((w) => w.selling).length;
 
+  // v0.11 G2：ScreenOverlay の中身として描画（ページ遷移しない）
   return (
-    <div className="screen library-screen">
-      <PixelStatusBar />
-
-      <main
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-          padding: 12,
-          minHeight: 0,
-          overflow: 'auto',
-        }}
-      >
+    <div
+      className="library-screen"
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        padding: 10,
+        minHeight: 0,
+        overflow: 'auto',
+        background: '#2a1a0e',
+      }}
+    >
         {/* フィルタ + ソート + ページャ */}
         {library.length > 0 && (
           <PixelWindow variant="standard" bodyStyle={{ padding: 8 }}>
@@ -352,9 +319,6 @@ export const LibraryScreen = () => {
             </div>
           )}
         </PixelWindow>
-      </main>
-
-      <PixelMenuBar items={menuItems} />
     </div>
   );
 };

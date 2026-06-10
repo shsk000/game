@@ -2,13 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ads } from '../../ads/AdProvider';
 import { JacketView } from '../../components/JacketView';
 import { Tutorial } from '../../components/Tutorial';
-import {
-  PixelButton,
-  PixelMenuBar,
-  type PixelMenuItem,
-  PixelStatusBar,
-  PixelWindow,
-} from '../../components/ui';
+import { PixelButton, PixelWindow } from '../../components/ui';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
 import type { CategoryId } from '../../data/categories';
 import { CATEGORIES, CATEGORY_BY_ID, categoryAffinity } from '../../data/categories';
@@ -45,8 +39,6 @@ import { computeProfitForScale } from '../../utils/profit';
  * - 従業員アサインは `<input type="checkbox" data-employee-id="...">`
  * - 「▶ 開発開始」ボタン文言
  */
-
-const ICON_BASE = '/sprites/ui';
 
 // 色トークン（office-visual-design / game-ui-design のクリーム＋ブラウン系）
 const COLORS = {
@@ -118,7 +110,6 @@ const EstimateBox = ({ label, value, sub, accent }: EstimateBoxProps) => (
 
 export const PlanScreen = () => {
   const startProject = useGameStore((s) => s.startProject);
-  const goTo = useGameStore((s) => s.goTo);
   const unlocked = useGameStore((s) => s.unlockedScales);
   const unlockedGenres = useGameStore((s) => s.unlockedGenres);
   const unlockedThemes = useGameStore((s) => s.unlockedThemes);
@@ -214,45 +205,21 @@ export const PlanScreen = () => {
     startProject(genreId, themeId, scale, selectedCategories, assignedEmployeeIds);
   };
 
-  const menuItems: PixelMenuItem[] = [
-    {
-      id: 'office',
-      label: 'オフィス',
-      emoji: '🏠',
-      iconSrc: `${ICON_BASE}/icon_hire.png`,
-      onClick: () => goTo('office'),
-    },
-    {
-      id: 'library',
-      label: '作品',
-      emoji: '📚',
-      iconSrc: `${ICON_BASE}/icon_library.png`,
-      onClick: () => goTo('library'),
-    },
-    {
-      id: 'collection',
-      label: '図鑑',
-      emoji: '📖',
-      iconSrc: `${ICON_BASE}/icon_collection.png`,
-      onClick: () => goTo('collection'),
-    },
-  ];
-
+  // v0.11 G2：PlanScreen は ScreenOverlay の中身として描画される（ページ遷移しない）
   return (
-    <div className="screen plan-screen" style={{ background: COLORS.bgDark }}>
-      <PixelStatusBar />
-
-      <main
-        style={{
-          flex: 1,
-          display: 'grid',
-          gridTemplateColumns: '700px 540px',
-          gap: 12,
-          padding: 12,
-          minHeight: 0,
-          overflow: 'hidden',
-        }}
-      >
+    <div
+      className="plan-screen"
+      style={{
+        flex: 1,
+        display: 'grid',
+        gridTemplateColumns: '1fr 400px',
+        gap: 10,
+        padding: 10,
+        minHeight: 0,
+        overflow: 'hidden',
+        background: COLORS.bgDark,
+      }}
+    >
         {/* 左パネル：5 セクション（ジャンル/テーマ/規模/カテゴリ/従業員） */}
         <div
           style={{
@@ -688,9 +655,6 @@ export const PlanScreen = () => {
             </div>
           </PixelWindow>
         </div>
-      </main>
-
-      <PixelMenuBar items={menuItems} />
 
       {!tutorialDone && <Tutorial />}
     </div>

@@ -124,214 +124,49 @@ export const OfficeScreen = () => {
     },
   ];
 
-  return (
-    <div className="screen office-screen" style={{ gap: 0 }}>
-      <PixelStatusBar />
+  // G1：規模ごとの OfficeView 実寸（OfficeView の LAYOUTS × cellPx=96 と同期）
+  const STAGE_SIZE: Record<string, { w: number; h: number }> = {
+    mini: { w: 768, h: 672 },
+    mobile: { w: 1056, h: 672 },
+    indie: { w: 1056, h: 864 },
+    hit: { w: 1344, h: 864 },
+    aaa: { w: 1344, h: 1056 },
+  };
+  const stageSize = STAGE_SIZE[currentScale] ?? STAGE_SIZE.mini;
+  const stageScale = Math.min(1280 / stageSize.w, 720 / stageSize.h);
 
-      <main
+  return (
+    <div className="office-stage-root office-screen">
+      {/* ── 世界ステージ：オフィスが画面全体（HUD の裏まで広がる） ── */}
+      <div className="office-stage">
+        <div style={{ transform: `scale(${stageScale})`, transformOrigin: 'center center' }}>
+          <OfficeView scale={currentScale} employeeCount={employees.length} />
+        </div>
+      </div>
+
+      {/* ── HUD（世界の上に浮く） ── */}
+      <PixelStatusBar
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, opacity: 0.96 }}
+      />
+
+      {/* ── 右側：経営情報の浮遊小窓（コンパクト） ── */}
+      <div
         style={{
-          flex: 1,
-          display: 'grid',
-          gridTemplateColumns: '760px 460px',
-          gap: 12,
-          padding: 12,
-          minHeight: 0,
-          overflow: 'hidden',
+          position: 'absolute',
+          right: 12,
+          top: 66,
+          width: 296,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          zIndex: 5,
         }}
       >
-        {/* 左パネル：オフィスビュー（上）+ アクション CTA（下）760×580 */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-            height: '100%',
-            minHeight: 0,
-          }}
-        >
+        {sellingWorks.length > 0 && (
           <PixelWindow
-            title="🏠 オフィス"
+            title={`📈 販売中 (${sellingWorks.length})`}
             variant="standard"
-            bodyStyle={{ padding: 8, flex: 1, display: 'flex' }}
-            style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
-          >
-            <div
-              style={{
-                flex: 1,
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                background: '#1a0f08',
-                padding: 8,
-                overflow: 'hidden',
-              }}
-            >
-              <OfficeView scale={currentScale} employeeCount={employees.length} />
-            </div>
-          </PixelWindow>
-
-          {/* メイン CTA：新しいゲームを作る（最重要） */}
-          <PixelWindow
-            variant="emphasis"
-            bodyStyle={{ padding: 10 }}
-            style={{ flex: '0 0 auto' }}
-          >
-            <button
-              type="button"
-              onClick={() => goTo('plan')}
-              disabled={employees.length === 0}
-              style={{
-                width: '100%',
-                padding: '14px 16px',
-                background: employees.length === 0 ? '#7a6f5a' : '#f5c84a',
-                color: employees.length === 0 ? '#3a2a1e' : '#1a0f08',
-                border: '4px solid #1a0f08',
-                boxShadow:
-                  employees.length === 0
-                    ? 'inset 0 0 0 2px rgba(255,255,255,0.2), 2px 2px 0 rgba(0,0,0,0.4)'
-                    : 'inset 0 0 0 2px #fff8e0, 4px 4px 0 rgba(0,0,0,0.5)',
-                fontFamily: 'inherit',
-                fontSize: 18,
-                fontWeight: 700,
-                letterSpacing: '0.08em',
-                cursor: employees.length === 0 ? 'not-allowed' : 'pointer',
-                imageRendering: 'pixelated',
-                textShadow:
-                  employees.length === 0 ? 'none' : '1px 1px 0 rgba(255,255,255,0.4)',
-              }}
-            >
-              ▶ 新しいゲームを作る
-            </button>
-            {employees.length === 0 ? (
-              <div
-                style={{
-                  marginTop: 8,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 12,
-                  color: '#6b4f3a',
-                }}
-              >
-                <span>※ 開発には従業員が 1 人以上必要</span>
-                <button
-                  type="button"
-                  onClick={() => setModal('hire')}
-                  style={{
-                    padding: '4px 10px',
-                    background: '#5aa84a',
-                    color: '#fff8e0',
-                    border: '3px solid #1a0f08',
-                    fontFamily: 'inherit',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    imageRendering: 'pixelated',
-                    marginLeft: 'auto',
-                  }}
-                >
-                  👥 従業員を雇う
-                </button>
-              </div>
-            ) : (
-              <p
-                style={{
-                  margin: '6px 0 0',
-                  fontSize: 11,
-                  color: '#6b4f3a',
-                  textAlign: 'center',
-                }}
-              >
-                ジャンル・テーマを選んで開発開始
-              </p>
-            )}
-          </PixelWindow>
-        </div>
-
-        {/* 右パネル：経営情報 3 枠（販売中 / 月固定費 / 借金）460×580 */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-            height: '100%',
-            minHeight: 0,
-          }}
-        >
-          {/* 販売中の作品（高さ 240px、3 件まで表示） */}
-          <PixelWindow
-            title={`📈 販売中の作品 (${sellingWorks.length})`}
-            variant="standard"
-            bodyStyle={{ padding: 8 }}
-            style={{ flex: '0 0 auto', height: 240, display: 'flex', flexDirection: 'column' }}
-          >
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              {sellingWorks.length === 0 ? (
-                <p style={{ margin: 0, fontSize: 12, color: '#6b4f3a' }}>
-                  販売中の作品はありません
-                </p>
-              ) : (
-                <ul
-                  style={{
-                    listStyle: 'none',
-                    margin: 0,
-                    padding: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 6,
-                  }}
-                >
-                  {sellingWorks.slice(0, 3).map((w) => {
-                    const pct = (w.salesPool / Math.max(1, w.initialSalesPool)) * 100;
-                    return (
-                      <li key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700 }}>
-                          {w.title}（🎯{w.metascore}）
-                        </div>
-                        <div
-                          style={{
-                            height: 6,
-                            background: '#1a0f08',
-                            border: '2px solid #2c1f15',
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: `${pct}%`,
-                              height: '100%',
-                              background: '#5aa84a',
-                            }}
-                          />
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 10,
-                            color: '#3a2a1e',
-                            fontVariantNumeric: 'tabular-nums',
-                          }}
-                        >
-                          残{formatYen(w.salesPool)} / 累計{formatYen(w.totalRevenue)}
-                        </div>
-                      </li>
-                    );
-                  })}
-                  {sellingWorks.length > 3 && (
-                    <li style={{ fontSize: 10, color: '#6b4f3a' }}>
-                      他 {sellingWorks.length - 3} 本販売中
-                    </li>
-                  )}
-                </ul>
-              )}
-            </div>
-          </PixelWindow>
-
-          {/* v0.10：月固定費パネル＋先月の収支 */}
-          <PixelWindow
-            title="💸 月々の固定費"
-            variant="emphasis"
-            bodyStyle={{ padding: 8 }}
-            style={{ flex: '0 0 auto' }}
+            bodyStyle={{ padding: 6 }}
           >
             <ul
               style={{
@@ -340,89 +175,166 @@ export const OfficeScreen = () => {
                 padding: 0,
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 4,
-                fontSize: 13,
-                fontVariantNumeric: 'tabular-nums',
+                gap: 5,
               }}
             >
-              <li>
-                人件費（{employees.length}人）: <strong>{formatYen(monthlySalaries)}</strong>/月
-              </li>
-              <li>
-                オフィス賃料（{currentScaleDef.name}）: <strong>{formatYen(monthlyRent)}</strong>/月
-              </li>
-              {monthlyInterest > 0 && (
-                <li>
-                  借金月利（{Math.round(DEBT_CONFIG.monthlyInterestRate * 100)}%）:{' '}
-                  <strong>{formatYen(monthlyInterest)}</strong>/月
+              {sellingWorks.slice(0, 3).map((w) => {
+                const pct = (w.salesPool / Math.max(1, w.initialSalesPool)) * 100;
+                return (
+                  <li key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {w.title}（🎯{w.metascore}）
+                    </div>
+                    <div
+                      style={{
+                        height: 6,
+                        background: '#1a0f08',
+                        border: '2px solid #2c1f15',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{ width: `${pct}%`, height: '100%', background: '#5aa84a' }}
+                      />
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: '#3a2a1e',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      残{formatYen(w.salesPool)} / 累計{formatYen(w.totalRevenue)}
+                    </div>
+                  </li>
+                );
+              })}
+              {sellingWorks.length > 3 && (
+                <li style={{ fontSize: 10, color: '#6b4f3a' }}>
+                  他 {sellingWorks.length - 3} 本
                 </li>
               )}
-              <li
-                style={{
-                  marginTop: 4,
-                  paddingTop: 4,
-                  borderTop: '2px solid #2c1f15',
-                  fontWeight: 700,
-                }}
-              >
-                合計: <strong style={{ color: '#a02828' }}>{formatYen(monthlyTotal)}</strong>/月
-              </li>
-              <li style={{ marginTop: 6, fontSize: 12, color: '#6b4f3a' }}>
-                先月の収支:{' '}
-                {lastFixedCost ? (
-                  <strong style={{ color: '#a02828' }}>-{formatYen(lastFixedCost.total)}</strong>
-                ) : (
-                  <span>—（まだ月初を迎えていません）</span>
-                )}
-              </li>
             </ul>
           </PixelWindow>
+        )}
 
-          {/* 借金パネル */}
-          <PixelWindow
-            title="🏦 借金"
-            variant={debt > 0 ? 'emphasis' : 'standard'}
-            bodyStyle={{ padding: 8 }}
-            style={{ flex: '0 0 auto' }}
+        {/* 経営：固定費 + 借金を 1 窓に統合 */}
+        <PixelWindow
+          title="💸 経営"
+          variant={debt > 0 ? 'emphasis' : 'standard'}
+          bodyStyle={{ padding: 6 }}
+        >
+          <ul
+            style={{
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 3,
+              fontSize: 11,
+              fontVariantNumeric: 'tabular-nums',
+            }}
           >
-            <ul
-              style={{
-                listStyle: 'none',
-                margin: 0,
-                padding: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 3,
-                fontSize: 12,
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              <li>
-                残債:{' '}
-                <strong style={{ color: debt > 0 ? '#a02828' : '#3a2a1e' }}>
-                  {formatYen(debt)}
-                </strong>
-                <span style={{ marginLeft: 8, fontSize: 11, color: '#6b4f3a' }}>
-                  / 上限 {formatYen(borrowingLimit)}
-                </span>
+            <li>
+              固定費 <strong style={{ color: '#a02828' }}>{formatYen(monthlyTotal)}</strong>/月
+              <span style={{ marginLeft: 6, color: '#6b4f3a' }}>
+                （人件費 {formatYen(monthlySalaries)} + 賃料 {formatYen(monthlyRent)}
+                {monthlyInterest > 0 && ` + 利息 ${formatYen(monthlyInterest)}`}）
+              </span>
+            </li>
+            <li>
+              借金{' '}
+              <strong style={{ color: debt > 0 ? '#a02828' : '#3a2a1e' }}>
+                {formatYen(debt)}
+              </strong>
+              <span style={{ marginLeft: 6, color: '#6b4f3a' }}>
+                / 借入可 {formatYen(borrowingAvailable)}
+              </span>
+              <PixelButton
+                size="small"
+                onClick={() => setModal('debt')}
+                style={{ marginLeft: 8 }}
+              >
+                借入/返済
+              </PixelButton>
+            </li>
+            {lastFixedCost && (
+              <li style={{ color: '#6b4f3a' }}>
+                先月 <strong style={{ color: '#a02828' }}>-{formatYen(lastFixedCost.total)}</strong>
               </li>
-              <li>
-                月利息: <strong>{formatYen(monthlyInterest)}</strong>/月
-                <span style={{ marginLeft: 8, fontSize: 11, color: '#6b4f3a' }}>
-                  借入可 {formatYen(borrowingAvailable)}
-                </span>
-              </li>
-              <li style={{ marginTop: 4 }}>
-                <PixelButton size="small" onClick={() => setModal('debt')}>
-                  借入 / 返済
-                </PixelButton>
-              </li>
-            </ul>
-          </PixelWindow>
-        </div>
-      </main>
+            )}
+          </ul>
+        </PixelWindow>
+      </div>
 
-      <PixelMenuBar items={menuItems} />
+      {/* ── CTA：左下に浮く大ボタン ── */}
+      <div
+        style={{
+          position: 'absolute',
+          left: 12,
+          bottom: 96,
+          width: 320,
+          zIndex: 5,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            if (employees.length === 0) {
+              setModal('hire');
+            } else {
+              goTo('plan');
+            }
+          }}
+          style={{
+            width: '100%',
+            padding: '14px 16px',
+            background: '#f5c84a',
+            color: '#1a0f08',
+            border: '4px solid #1a0f08',
+            boxShadow: 'inset 0 0 0 2px #fff8e0, 4px 4px 0 rgba(0,0,0,0.5)',
+            fontFamily: 'inherit',
+            fontSize: 18,
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            cursor: 'pointer',
+            imageRendering: 'pixelated',
+            textShadow: '1px 1px 0 rgba(255,255,255,0.4)',
+          }}
+        >
+          ▶ 新しいゲームを作る
+        </button>
+        {employees.length === 0 && (
+          <p
+            style={{
+              margin: '6px 0 0',
+              padding: '4px 8px',
+              fontSize: 11,
+              color: '#fff8e0',
+              background: 'rgba(26,15,8,0.85)',
+              border: '2px solid #1a0f08',
+              textAlign: 'center',
+            }}
+          >
+            まず従業員を採用しましょう（↑クリック）
+          </p>
+        )}
+      </div>
+
+      {/* ── dock（下部固定） ── */}
+      <PixelMenuBar
+        items={menuItems}
+        style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10 }}
+      />
 
       {/* ── 採用モーダル ── */}
       <PixelModal open={modal === 'hire'} onClose={closeModal} title="採用" maxWidth={560}>

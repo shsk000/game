@@ -1222,3 +1222,159 @@ body,
   padding: 0;
   margin: 0;
 }
+
+/* ---- v0.11 G1〜G3：ゲーム UI 文法 ---- */
+
+/*
+ * G1: オフィス = 全画面ステージ。
+ * 世界（OfficeView）が画面全体を占め、HUD / dock / パネルはその上に浮く。
+ */
+.office-stage-root {
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  overflow: hidden;
+  background: #1a1208;
+}
+.office-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 0;
+}
+
+/*
+ * G2: 画面遷移 → オーバーレイ窓。
+ * 背後の世界は dim されるが生きている（時間も売上も進む）。
+ */
+.overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 6, 2, 0.62);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: g-backdrop-in 120ms steps(2) both;
+}
+.overlay-window {
+  width: 1160px;
+  height: 640px;
+  display: flex;
+  flex-direction: column;
+  background: #f5e8c8;
+  border: 5px solid #1a0f08;
+  box-shadow:
+    inset 0 0 0 2px #6b4f3a,
+    6px 6px 0 rgba(0, 0, 0, 0.55);
+  animation: g-window-pop 160ms steps(3) both;
+  image-rendering: pixelated;
+}
+.overlay-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #3a2a1e;
+  color: #fff8e0;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  border-bottom: 3px solid #1a0f08;
+  flex-shrink: 0;
+}
+.overlay-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes g-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes g-window-pop {
+  0% {
+    transform: scale(0.92);
+  }
+  60% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/*
+ * G3: ジュース — ボタンの押し込み・ホバー（全ボタン共通、離散ステップ）。
+ */
+.game-root button {
+  transition:
+    transform 50ms steps(1),
+    filter 50ms steps(1);
+}
+.game-root button:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.game-root button:active:not(:disabled) {
+  transform: translateY(2px);
+  filter: brightness(0.95);
+}
+
+/* G3: 資金変動の浮き文字（+¥ / -¥） */
+@keyframes g-float-up {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-28px);
+    opacity: 0;
+  }
+}
+.money-float {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+  animation: g-float-up 900ms steps(6) both;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8);
+  z-index: 50;
+}
+
+/* G3: 資金変動フラッシュ */
+@keyframes g-flash-gain {
+  0%,
+  100% {
+    color: #f5c84a;
+  }
+  50% {
+    color: #6cff95;
+  }
+}
+@keyframes g-flash-loss {
+  0%,
+  100% {
+    color: #f5c84a;
+  }
+  50% {
+    color: #ff6b6b;
+  }
+}
+.funds-gain {
+  animation: g-flash-gain 400ms steps(2) both;
+}
+.funds-loss {
+  animation: g-flash-loss 400ms steps(2) both;
+}
