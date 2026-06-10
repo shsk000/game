@@ -1,8 +1,8 @@
 /* ---- v0.11 UI 刷新：ローカルピクセルフォント ---- */
-/* x0y0pxFreeFont (hicchicc 製) - SIL OFL ライセンス・商用可・表記不要 */
+/* BestTen-DOT（10×10 ドット風日本語フォント） */
 @font-face {
-  font-family: "DenkiChip";
-  src: url("/font/x8y12pxDenkiChip.woff2") format("woff2");
+  font-family: "BestTenDOT";
+  src: url("/font/BestTen-DOT.otf") format("opentype");
   font-display: swap;
   font-weight: normal;
   font-style: normal;
@@ -23,7 +23,7 @@
   /* v0.11：ピクセルフォント優先、絵文字は OS のカラー絵文字フォントに任せる、
    * 日本語の漢字広域カバーは JP フォントにフォールバック */
   font-family:
-    "DenkiChip", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
+    "BestTenDOT", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
     "Source Han Sans JP", "Noto Sans JP", "Hiragino Sans", "Meiryo", ui-monospace,
     "SF Mono", Menlo, Consolas, monospace;
   font-size: 16px;
@@ -1152,7 +1152,7 @@ body {
 }
 
 /* ---- Pixel UI baseline (game-ui-design SKILL) ---- */
-/* v0.11：Google Fonts CDN は廃止、ローカル x8y12pxDenkiChip に統一（CSS 先頭の @font-face で定義済み） */
+/* v0.11：Google Fonts CDN は廃止、ローカル BestTen-DOT に統一（CSS 先頭の @font-face で定義済み） */
 
 /* Force pixelated rendering on all sprites and UI images globally */
 img,
@@ -1165,7 +1165,7 @@ canvas {
 /* Pixel-font-first body */
 body {
   font-family:
-    "DenkiChip", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
+    "BestTenDOT", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
     "Source Han Sans JP", "Noto Sans JP", "Hiragino Sans", "Meiryo", ui-monospace,
     "SF Mono", Menlo, Consolas, monospace;
 }
