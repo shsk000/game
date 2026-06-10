@@ -41,10 +41,11 @@ async function resetAndOpen(page: Page) {
   await dismissTutorial(page);
 }
 
-test('起動時の初期画面はオフィス（ヘッダー「オフィス」を確認）', async ({ page }) => {
+test('起動時の初期画面はオフィスステージ（CTA を確認）', async ({ page }) => {
   await resetAndOpen(page);
-  // PixelWindow タイトル「オフィス」を含む要素が存在する
-  await expect(page.locator('text=オフィス').first()).toBeVisible();
+  // v0.11 G1：オフィスは全画面ステージ。CTA「新しいゲームを作る」が浮いている
+  await expect(page.locator('.office-stage-root').first()).toBeVisible();
+  await expect(page.locator('button', { hasText: '新しいゲームを作る' }).first()).toBeVisible();
 });
 
 test('PixelMenuBar に 7 項目が並ぶ', async ({ page }) => {

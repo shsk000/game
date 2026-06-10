@@ -840,7 +840,8 @@ useGameStore.subscribe(
 );
 
 // テスト用：window.__gs() で現在のストア state を取得（dev / e2e のみで使用）
-if (typeof window !== 'undefined' && import.meta.env.DEV) {
+// Next.js 移行で import.meta.env → process.env.NODE_ENV に変更（ビルド時にインライン化される）
+if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
   (window as unknown as { __gs: () => GameState }).__gs = () => useGameStore.getState();
 }
 
