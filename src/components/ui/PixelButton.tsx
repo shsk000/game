@@ -37,27 +37,28 @@ const sizeTokens: Record<Size, { padX: number; padY: number; font: number }> = {
   large: { padX: 22, padY: 12, font: 18 },
 };
 
+/** v0.11 G4：Game Dev Story 風濃紺パレット */
 const variantTokens: Record<
   Variant,
   { bg: string; bgHover: string; border: string; text: string }
 > = {
   primary: {
-    bg: '#5aa84a',
-    bgHover: '#6dbc5a',
-    border: '#1a0f08',
-    text: '#fff8e0',
+    bg: '#ffd54a',
+    bgHover: '#ffe06e',
+    border: '#0a1422',
+    text: '#0a1422',
   },
   secondary: {
-    bg: '#d8c089',
-    bgHover: '#e8d09a',
-    border: '#1a0f08',
-    text: '#1a0f08',
+    bg: '#2e4568',
+    bgHover: '#3d5a85',
+    border: '#0a1422',
+    text: '#ffffff',
   },
   danger: {
     bg: '#c84a3a',
     bgHover: '#d85a4a',
-    border: '#1a0f08',
-    text: '#fff8e0',
+    border: '#0a1422',
+    text: '#ffffff',
   },
 };
 

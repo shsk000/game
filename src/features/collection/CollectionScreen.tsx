@@ -49,7 +49,7 @@ const LEGEND_SWATCH: React.CSSProperties = {
   display: 'inline-block',
   width: 16,
   height: 16,
-  border: '2px solid #1a0f08',
+  border: '2px solid #0a1422',
   marginRight: 6,
   verticalAlign: 'middle',
   imageRendering: 'pixelated',
@@ -120,7 +120,7 @@ export const CollectionScreen = () => {
         padding: 10,
         minHeight: 0,
         overflow: 'auto',
-        background: '#2a1a0e',
+        background: '#0d1626',
       }}
     >
         <PixelWindow
@@ -132,7 +132,7 @@ export const CollectionScreen = () => {
             style={{
               margin: '0 0 10px',
               fontSize: 12,
-              color: '#3a2a1e',
+              color: '#c9d8ef',
               lineHeight: 1.5,
             }}
           >
@@ -147,8 +147,8 @@ export const CollectionScreen = () => {
               flexWrap: 'wrap',
               marginBottom: 10,
               padding: 4,
-              background: '#5c4a3a',
-              border: '2px solid #1a0f08',
+              background: '#16263e',
+              border: '2px solid #0a1422',
             }}
           >
             {visibleGenres.map((g) => {
@@ -163,9 +163,9 @@ export const CollectionScreen = () => {
                     fontFamily: 'inherit',
                     fontSize: 12,
                     fontWeight: 700,
-                    background: isActive ? '#f5c84a' : '#3a2a1e',
+                    background: isActive ? '#ffd54a' : '#3a2a1e',
                     color: isActive ? '#1a0f08' : '#fff8e0',
-                    border: '2px solid #1a0f08',
+                    border: '2px solid #0a1422',
                     cursor: 'pointer',
                     imageRendering: 'pixelated',
                   }}
@@ -175,7 +175,7 @@ export const CollectionScreen = () => {
               );
             })}
             {GENRES.length > visibleGenres.length && (
-              <span style={{ fontSize: 11, color: '#c8b58a', alignSelf: 'center', padding: '0 6px' }}>
+              <span style={{ fontSize: 11, color: '#9fb6d4', alignSelf: 'center', padding: '0 6px' }}>
                 + ? 種類（未解放）
               </span>
             )}
@@ -189,8 +189,8 @@ export const CollectionScreen = () => {
                 gridTemplateColumns: 'repeat(5, 1fr)',
                 gap: 6,
                 padding: 6,
-                background: '#5c4a3a',
-                border: '2px solid #1a0f08',
+                background: '#16263e',
+                border: '2px solid #0a1422',
                 imageRendering: 'pixelated',
               }}
             >
@@ -203,15 +203,15 @@ export const CollectionScreen = () => {
                       key={t.id}
                       style={{
                         padding: 8,
-                        background: '#3a2a1e',
+                        background: '#0f1d33',
                         color: '#f0c020',
                         textAlign: 'center',
-                        border: '2px solid #1a0f08',
+                        border: '2px solid #0a1422',
                         minHeight: 70,
                       }}
                     >
                       <div style={{ fontSize: 16 }}>{t.emoji}</div>
-                      <div style={{ fontSize: 10, color: '#c8b58a' }}>{t.name}</div>
+                      <div style={{ fontSize: 10, color: '#9fb6d4' }}>{t.name}</div>
                       <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>？</div>
                     </div>
                   );
@@ -225,7 +225,7 @@ export const CollectionScreen = () => {
                       background: compatBg(c),
                       color: compatFg(c),
                       textAlign: 'center',
-                      border: '2px solid #1a0f08',
+                      border: '2px solid #0a1422',
                       fontWeight: 700,
                       minHeight: 70,
                     }}
@@ -251,7 +251,7 @@ export const CollectionScreen = () => {
               flexWrap: 'wrap',
               gap: '8px 16px',
               fontSize: 11,
-              color: '#3a2a1e',
+              color: '#c9d8ef',
               lineHeight: 1.6,
             }}
           >
@@ -268,7 +268,7 @@ export const CollectionScreen = () => {
               <span style={{ ...LEGEND_SWATCH, background: '#a83a3a' }} />💀 地雷（&lt;0.9）
             </span>
             <span>
-              <span style={{ ...LEGEND_SWATCH, background: '#5c4a3a' }} />？ 未発見
+              <span style={{ ...LEGEND_SWATCH, background: '#16263e' }} />？ 未発見
             </span>
           </div>
         </PixelWindow>

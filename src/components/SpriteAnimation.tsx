@@ -29,7 +29,10 @@ const checkSheet = async (path: string): Promise<boolean> => {
   if (sheetCache.has(path)) return sheetCache.get(path) ?? false;
   try {
     const res = await fetch(path, { method: 'HEAD' });
-    const ok = res.ok;
+    // Vite dev サーバーは存在しないパスにも 200 + index.html を返すため、
+    // Content-Type が text/html なら「スプライト無し」と判定する
+    const contentType = res.headers.get('content-type') ?? '';
+    const ok = res.ok && !contentType.includes('text/html');
     sheetCache.set(path, ok);
     return ok;
   } catch {

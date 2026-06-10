@@ -30,11 +30,11 @@ export const GameOverModal = () => {
         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
           借入上限を超え、これ以上資金繰りができません。
           <br />
-          残高: <strong style={{ color: '#a02828' }}>{formatYen(funds)}</strong>
+          残高: <strong style={{ color: '#ff6b6b' }}>{formatYen(funds)}</strong>
           <br />
-          借金: <strong style={{ color: '#a02828' }}>{formatYen(debt)}</strong>
+          借金: <strong style={{ color: '#ff6b6b' }}>{formatYen(debt)}</strong>
         </p>
-        <p style={{ margin: 0, fontSize: 12, color: '#6b4f3a' }}>
+        <p style={{ margin: 0, fontSize: 12, color: '#9fb6d4' }}>
           セーブデータをリセットして新規に再開してください。
         </p>
         <PixelButton

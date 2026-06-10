@@ -120,7 +120,10 @@ const checkSprite = async (path: string): Promise<boolean> => {
   if (spriteCache.has(path)) return spriteCache.get(path) ?? false;
   try {
     const res = await fetch(path, { method: 'HEAD' });
-    const ok = res.ok;
+    // Vite dev サーバーは存在しないパスにも 200 + index.html を返すため、
+    // Content-Type が text/html なら「スプライト無し」と判定する
+    const contentType = res.headers.get('content-type') ?? '';
+    const ok = res.ok && !contentType.includes('text/html');
     spriteCache.set(path, ok);
     return ok;
   } catch {
@@ -194,9 +197,11 @@ export const OfficeView = ({
         style={{
           position: 'absolute',
           inset: 0,
+          // v0.11 G4：床はリファレンス準拠の明るいベージュチェッカー
+          // （floor_wood.png が用意されたら差し替わる）
           background: floor.loaded
             ? `url("${floor.path}") repeat`
-            : 'repeating-conic-gradient(#3a2a1e 0% 25%, #4a3826 0% 50%) 50% / 16px 16px',
+            : 'repeating-conic-gradient(#cfc6b3 0% 25%, #c2b8a3 0% 50%) 50% / 32px 32px',
           backgroundSize: floor.loaded ? `${cellPx}px ${cellPx}px` : undefined,
           imageRendering: 'pixelated',
           zIndex: 0,

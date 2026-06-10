@@ -11,7 +11,7 @@ import type { ReactNode } from 'react';
  * - 子要素は `padding` 内に配置（`bodyClassName` でカスタム可）
  */
 
-type Variant = 'standard' | 'emphasis' | 'modal';
+type Variant = 'standard' | 'emphasis' | 'modal' | 'navy';
 
 type Props = {
   children: ReactNode;
@@ -27,21 +27,30 @@ type Props = {
   bodyStyle?: React.CSSProperties;
 };
 
+/**
+ * v0.11 G4：Game Dev Story 風の濃紺パレットに全統一。
+ * 濃紺 #1b2c47 / 暗紺 #0f1d33 / 枠 #0a1422 / ハイライト #3d5a85 / アクセント黄 #ffd54a
+ */
 const variantTokens: Record<Variant, { border: string; bg: string; title: string }> = {
   standard: {
-    border: '4px solid #2c1f15',
-    bg: '#f5e8c8',
-    title: '#3a2a1e',
+    border: '3px solid #0a1422',
+    bg: '#1b2c47',
+    title: '#0f1d33',
   },
   emphasis: {
-    border: '4px solid #2c1f15',
-    bg: '#fff4d0',
-    title: '#a86a1e',
+    border: '3px solid #0a1422',
+    bg: '#24395c',
+    title: '#2a4a73',
   },
   modal: {
-    border: '5px solid #1a0f08',
-    bg: '#f8ecc8',
-    title: '#2c1f15',
+    border: '4px solid #0a1422',
+    bg: '#1b2c47',
+    title: '#0f1d33',
+  },
+  navy: {
+    border: '3px solid #0a1422',
+    bg: '#1b2c47',
+    title: '#0f1d33',
   },
 };
 
@@ -67,7 +76,10 @@ export const PixelWindow = ({
     : {
         border: tokens.border,
         background: tokens.bg,
-        boxShadow: 'inset 0 0 0 2px #fff8e0, 4px 4px 0 rgba(0,0,0,0.35)',
+        boxShadow:
+          variant === 'navy'
+            ? 'inset 0 0 0 1px #3d5a85, 3px 3px 0 rgba(0,0,0,0.45)'
+            : 'inset 0 0 0 1px #3d5a85, 4px 4px 0 rgba(0,0,0,0.35)',
         borderRadius: 2,
       };
 
@@ -76,7 +88,7 @@ export const PixelWindow = ({
       className={className}
       style={{
         position: 'relative',
-        color: '#1a0f08',
+        color: '#ffffff',
         ...frameStyle,
         ...style,
       }}
@@ -85,12 +97,12 @@ export const PixelWindow = ({
         <div
           style={{
             background: tokens.title,
-            color: '#fff8e0',
-            padding: '6px 12px',
+            color: '#ffd54a',
+            padding: '5px 10px',
             fontWeight: 700,
             letterSpacing: '0.08em',
-            fontSize: 14,
-            borderBottom: '3px solid #1a0f08',
+            fontSize: 13,
+            borderBottom: '2px solid #0a1422',
             // ピクセルフォント風にじにじ感を控えめに
             textShadow: '1px 1px 0 rgba(0,0,0,0.5)',
           }}

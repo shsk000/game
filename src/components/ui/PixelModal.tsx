@@ -60,7 +60,7 @@ export const PixelModal = ({
         inset: 0,
         width: '100dvw',
         height: '100dvh',
-        background: 'rgba(26, 15, 8, 0.72)',
+        background: 'rgba(8, 14, 26, 0.72)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -79,6 +79,8 @@ export const PixelModal = ({
           maxWidth,
           maxHeight: '90dvh',
           overflow: 'auto',
+          // v0.11 G3：開く時のポップイン（離散 3 ステップ）
+          animation: 'g-window-pop 160ms steps(3) both',
         }}
       >
         <PixelWindow

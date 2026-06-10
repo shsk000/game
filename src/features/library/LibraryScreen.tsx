@@ -62,7 +62,7 @@ export const LibraryScreen = () => {
         padding: 10,
         minHeight: 0,
         overflow: 'auto',
-        background: '#2a1a0e',
+        background: '#0d1626',
       }}
     >
         {/* フィルタ + ソート + ページャ */}
@@ -89,8 +89,8 @@ export const LibraryScreen = () => {
                     padding: '2px 6px',
                     fontFamily: 'inherit',
                     fontSize: 12,
-                    border: '2px solid #2c1f15',
-                    background: '#fff8e0',
+                    border: '2px solid #0a1422',
+                    background: '#0f1d33',
                   }}
                 >
                   <option value="all">全て</option>
@@ -113,8 +113,8 @@ export const LibraryScreen = () => {
                     padding: '2px 6px',
                     fontFamily: 'inherit',
                     fontSize: 12,
-                    border: '2px solid #2c1f15',
-                    background: '#fff8e0',
+                    border: '2px solid #0a1422',
+                    background: '#0f1d33',
                   }}
                 >
                   <option value="newest">新しい順</option>
@@ -158,7 +158,7 @@ export const LibraryScreen = () => {
                 padding: '32px 16px',
                 textAlign: 'center',
                 fontSize: 13,
-                color: '#3a2a1e',
+                color: '#c9d8ef',
                 lineHeight: 1.6,
               }}
             >
@@ -219,7 +219,7 @@ export const LibraryScreen = () => {
                           style={{
                             fontSize: 13,
                             fontWeight: 700,
-                            color: '#1a0f08',
+                            color: '#ffffff',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
@@ -229,12 +229,12 @@ export const LibraryScreen = () => {
                           {w.pioneer && '🌱 '}
                           {w.title}
                         </div>
-                        <div style={{ fontSize: 11, color: '#3a2a1e' }}>
+                        <div style={{ fontSize: 11, color: '#c9d8ef' }}>
                           {genre.emoji}
                           {genre.name} × {theme.emoji}
                           {theme.name}
                         </div>
-                        <div style={{ fontSize: 11, color: '#3a2a1e' }}>{scale.name}</div>
+                        <div style={{ fontSize: 11, color: '#c9d8ef' }}>{scale.name}</div>
                         <div
                           style={{
                             fontSize: 12,
@@ -252,7 +252,7 @@ export const LibraryScreen = () => {
                       style={{
                         marginTop: 8,
                         fontSize: 11,
-                        color: '#3a2a1e',
+                        color: '#c9d8ef',
                         lineHeight: 1.5,
                         fontVariantNumeric: 'tabular-nums',
                       }}
@@ -268,8 +268,8 @@ export const LibraryScreen = () => {
                           aria-label={`販売残 ${sellingPct}%`}
                           style={{
                             height: 10,
-                            background: '#1a0f08',
-                            border: '2px solid #2c1f15',
+                            background: '#0d1626',
+                            border: '2px solid #0a1422',
                             borderRadius: 2,
                             overflow: 'hidden',
                             imageRendering: 'pixelated',
@@ -288,7 +288,7 @@ export const LibraryScreen = () => {
                           style={{
                             marginTop: 4,
                             fontSize: 11,
-                            color: '#3a2a1e',
+                            color: '#c9d8ef',
                             fontWeight: 700,
                             fontVariantNumeric: 'tabular-nums',
                           }}
@@ -301,11 +301,11 @@ export const LibraryScreen = () => {
                         style={{
                           marginTop: 8,
                           padding: '4px 8px',
-                          background: '#e8d8b0',
-                          border: '2px solid #2c1f15',
+                          background: '#2e4568',
+                          border: '2px solid #0a1422',
                           borderRadius: 2,
                           fontSize: 11,
-                          color: '#3a2a1e',
+                          color: '#c9d8ef',
                           fontWeight: 700,
                           fontVariantNumeric: 'tabular-nums',
                         }}

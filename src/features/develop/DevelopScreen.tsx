@@ -217,10 +217,10 @@ export const DevelopScreen = () => {
           gap: 16,
           padding: '6px 16px',
           height: 32,
-          background: '#3a2a1e',
-          color: '#fff8e0',
+          background: '#0f1d33',
+          color: '#ffffff',
           fontSize: 12,
-          borderBottom: '2px solid #1a0f08',
+          borderBottom: '2px solid #0a1422',
           flexShrink: 0,
         }}
       >
@@ -255,8 +255,8 @@ export const DevelopScreen = () => {
             style={{
               width: 120,
               height: 8,
-              background: '#0d0805',
-              border: '2px solid #1a0f08',
+              background: '#0a1422',
+              border: '2px solid #0a1422',
               overflow: 'hidden',
             }}
           >
@@ -264,7 +264,7 @@ export const DevelopScreen = () => {
               style={{
                 width: `${weekPct}%`,
                 height: '100%',
-                background: overdue ? '#a02828' : '#f5c84a',
+                background: overdue ? '#a03030' : '#ffd54a',
                 transition: 'width 200ms linear',
               }}
             />
@@ -279,9 +279,9 @@ export const DevelopScreen = () => {
             }}
             style={{
               padding: '4px 10px',
-              background: '#a02828',
-              color: '#fff8e0',
-              border: '2px solid #1a0f08',
+              background: '#a03030',
+              color: '#ffffff',
+              border: '2px solid #0a1422',
               fontFamily: 'inherit',
               fontSize: 11,
               fontWeight: 700,
@@ -317,9 +317,9 @@ export const DevelopScreen = () => {
               style={{
                 padding: '6px 12px',
                 background:
-                  t.tone === 'warn' ? '#a02828' : t.tone === 'good' ? '#308040' : '#3a2a1e',
-                color: '#fff8e0',
-                border: '3px solid #1a0f08',
+                  t.tone === 'warn' ? '#a03030' : t.tone === 'good' ? '#308040' : '#3a2a1e',
+                color: '#ffffff',
+                border: '3px solid #0a1422',
                 boxShadow: '3px 3px 0 rgba(0,0,0,0.4)',
                 fontWeight: 700,
                 fontSize: 13,

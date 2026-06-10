@@ -196,8 +196,8 @@ export const OfficeScreen = () => {
                     <div
                       style={{
                         height: 6,
-                        background: '#1a0f08',
-                        border: '2px solid #2c1f15',
+                        background: '#0d1626',
+                        border: '2px solid #0a1422',
                         overflow: 'hidden',
                       }}
                     >
@@ -208,7 +208,7 @@ export const OfficeScreen = () => {
                     <div
                       style={{
                         fontSize: 10,
-                        color: '#3a2a1e',
+                        color: '#c9d8ef',
                         fontVariantNumeric: 'tabular-nums',
                       }}
                     >
@@ -218,7 +218,7 @@ export const OfficeScreen = () => {
                 );
               })}
               {sellingWorks.length > 3 && (
-                <li style={{ fontSize: 10, color: '#6b4f3a' }}>
+                <li style={{ fontSize: 10, color: '#9fb6d4' }}>
                   他 {sellingWorks.length - 3} 本
                 </li>
               )}
@@ -245,18 +245,18 @@ export const OfficeScreen = () => {
             }}
           >
             <li>
-              固定費 <strong style={{ color: '#a02828' }}>{formatYen(monthlyTotal)}</strong>/月
-              <span style={{ marginLeft: 6, color: '#6b4f3a' }}>
+              固定費 <strong style={{ color: '#ff6b6b' }}>{formatYen(monthlyTotal)}</strong>/月
+              <span style={{ marginLeft: 6, color: '#9fb6d4' }}>
                 （人件費 {formatYen(monthlySalaries)} + 賃料 {formatYen(monthlyRent)}
                 {monthlyInterest > 0 && ` + 利息 ${formatYen(monthlyInterest)}`}）
               </span>
             </li>
             <li>
               借金{' '}
-              <strong style={{ color: debt > 0 ? '#a02828' : '#3a2a1e' }}>
+              <strong style={{ color: debt > 0 ? '#a03030' : '#3a2a1e' }}>
                 {formatYen(debt)}
               </strong>
-              <span style={{ marginLeft: 6, color: '#6b4f3a' }}>
+              <span style={{ marginLeft: 6, color: '#9fb6d4' }}>
                 / 借入可 {formatYen(borrowingAvailable)}
               </span>
               <PixelButton
@@ -268,8 +268,8 @@ export const OfficeScreen = () => {
               </PixelButton>
             </li>
             {lastFixedCost && (
-              <li style={{ color: '#6b4f3a' }}>
-                先月 <strong style={{ color: '#a02828' }}>-{formatYen(lastFixedCost.total)}</strong>
+              <li style={{ color: '#9fb6d4' }}>
+                先月 <strong style={{ color: '#ff6b6b' }}>-{formatYen(lastFixedCost.total)}</strong>
               </li>
             )}
           </ul>
@@ -298,10 +298,10 @@ export const OfficeScreen = () => {
           style={{
             width: '100%',
             padding: '14px 16px',
-            background: '#f5c84a',
-            color: '#1a0f08',
-            border: '4px solid #1a0f08',
-            boxShadow: 'inset 0 0 0 2px #fff8e0, 4px 4px 0 rgba(0,0,0,0.5)',
+            background: '#ffd54a',
+            color: '#ffffff',
+            border: '4px solid #0a1422',
+            boxShadow: 'inset 0 0 0 1px #3d5a85, 4px 4px 0 rgba(0,0,0,0.5)',
             fontFamily: 'inherit',
             fontSize: 18,
             fontWeight: 700,
@@ -319,9 +319,9 @@ export const OfficeScreen = () => {
               margin: '6px 0 0',
               padding: '4px 8px',
               fontSize: 11,
-              color: '#fff8e0',
-              background: 'rgba(26,15,8,0.85)',
-              border: '2px solid #1a0f08',
+              color: '#ffffff',
+              background: 'rgba(10,20,34,0.88)',
+              border: '2px solid #0a1422',
               textAlign: 'center',
             }}
           >
@@ -352,8 +352,8 @@ export const OfficeScreen = () => {
                 style={{
                   fontSize: 12,
                   padding: '2px 8px',
-                  background: '#3a2a1e',
-                  color: '#fff8e0',
+                  background: '#0f1d33',
+                  color: '#ffffff',
                   borderRadius: 2,
                 }}
               >
@@ -389,7 +389,7 @@ export const OfficeScreen = () => {
                 fontSize: 13,
                 margin: '0 0 8px',
                 paddingBottom: 4,
-                borderBottom: '2px solid #2c1f15',
+                borderBottom: '2px solid #0a1422',
               }}
             >
               在籍メンバー
@@ -412,8 +412,8 @@ export const OfficeScreen = () => {
                     alignItems: 'center',
                     gap: 8,
                     padding: '6px 8px',
-                    background: '#fff4d0',
-                    border: '2px solid #2c1f15',
+                    background: '#24395c',
+                    border: '2px solid #0a1422',
                     borderRadius: 2,
                   }}
                 >
@@ -421,15 +421,15 @@ export const OfficeScreen = () => {
                     style={{
                       fontSize: 10,
                       padding: '1px 6px',
-                      background: '#3a2a1e',
-                      color: '#fff8e0',
+                      background: '#0f1d33',
+                      color: '#ffffff',
                       borderRadius: 2,
                     }}
                   >
                     {roleLabel(e.role)}
                   </span>
                   <span style={{ fontWeight: 700, fontSize: 13, flex: 1 }}>{e.name}</span>
-                  <span style={{ fontSize: 11, color: '#3a2a1e' }}>
+                  <span style={{ fontSize: 11, color: '#c9d8ef' }}>
                     {formatPower(e.role, e.power)}
                   </span>
                   <PixelButton size="small" variant="danger" onClick={() => fireEmployee(e.id)}>
@@ -461,8 +461,8 @@ export const OfficeScreen = () => {
                 key={s.id}
                 style={{
                   padding: '6px 10px',
-                  background: isUnlocked ? '#d0e8c0' : '#e8d8b0',
-                  border: '2px solid #2c1f15',
+                  background: isUnlocked ? '#d0e8c0' : '#2e4568',
+                  border: '2px solid #0a1422',
                   borderRadius: 2,
                   fontSize: 13,
                   opacity: isUnlocked ? 1 : 0.85,
@@ -502,8 +502,8 @@ export const OfficeScreen = () => {
             gap: 4,
             padding: 10,
             marginBottom: 10,
-            background: '#fff4d0',
-            border: '2px solid #2c1f15',
+            background: '#24395c',
+            border: '2px solid #0a1422',
             fontSize: 12,
             fontVariantNumeric: 'tabular-nums',
           }}
@@ -551,15 +551,15 @@ export const OfficeScreen = () => {
                   alignItems: 'center',
                   gap: 10,
                   padding: '8px 10px',
-                  background: done ? '#fff4d0' : '#e8d8b0',
-                  border: '2px solid #2c1f15',
+                  background: done ? '#24395c' : '#2e4568',
+                  border: '2px solid #0a1422',
                   borderRadius: 2,
                   opacity: done ? 1 : 0.7,
                 }}
               >
                 <span style={{ fontSize: 22 }}>{a.emoji}</span>
                 <span style={{ fontWeight: 700, fontSize: 13, minWidth: 110 }}>{a.name}</span>
-                <span style={{ fontSize: 12, color: '#3a2a1e', flex: 1 }}>{a.desc}</span>
+                <span style={{ fontSize: 12, color: '#c9d8ef', flex: 1 }}>{a.desc}</span>
               </li>
             );
           })}
@@ -584,7 +584,7 @@ export const OfficeScreen = () => {
             <li>所持金: <strong>{formatYen(funds)}</strong></li>
             <li>借入上限: <strong>{formatYen(borrowingLimit)}</strong>（月固定費 × 12）</li>
             <li>残り借入可能: <strong>{formatYen(borrowingAvailable)}</strong></li>
-            <li style={{ fontSize: 11, color: '#6b4f3a' }}>
+            <li style={{ fontSize: 11, color: '#9fb6d4' }}>
               月利 {Math.round(DEBT_CONFIG.monthlyInterestRate * 100)}%（残債に対し毎月発生）
             </li>
           </ul>
@@ -599,8 +599,8 @@ export const OfficeScreen = () => {
                 padding: '4px 6px',
                 fontSize: 14,
                 fontFamily: 'inherit',
-                border: '2px solid #2c1f15',
-                background: '#fff8e0',
+                border: '2px solid #0a1422',
+                background: '#0f1d33',
               }}
             />
           </label>

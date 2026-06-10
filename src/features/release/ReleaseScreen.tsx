@@ -211,7 +211,7 @@ export const ReleaseScreen = () => {
           padding: 12,
           minHeight: 0,
           overflow: 'auto',
-          background: '#2a1a0e',
+          background: '#0d1626',
         }}
       >
         <section className="card release-card">
@@ -283,7 +283,7 @@ export const ReleaseScreen = () => {
         padding: 12,
         minHeight: 0,
         overflow: 'auto',
-        background: '#2a1a0e',
+        background: '#0d1626',
       }}
     >
       <section className="card release-card">
@@ -383,8 +383,8 @@ export const ReleaseScreen = () => {
                       alignItems: 'center',
                       gap: 4,
                       padding: 6,
-                      background: '#fff4d0',
-                      border: '3px solid #1a0f08',
+                      background: '#24395c',
+                      border: '3px solid #0a1422',
                     }}
                   >
                     <div style={{ fontSize: 18, fontWeight: 700, color: '#a85a28' }}>
@@ -415,7 +415,7 @@ export const ReleaseScreen = () => {
                 <li>
                   ⏱ 開発タイム {work.developSec.toFixed(1)}秒
                   {work.developWeeks !== undefined && (
-                    <span style={{ marginLeft: 6, color: '#6b4f3a' }}>
+                    <span style={{ marginLeft: 6, color: '#9fb6d4' }}>
                       ／ ゲーム内 {formatWeeks(work.developWeeks)}（{work.developWeeks} 週）
                     </span>
                   )}
@@ -470,23 +470,23 @@ export const ReleaseScreen = () => {
                       <span>売上見込（初動＋販売プール）</span>
                       <strong>{formatYen(projectedTotal)}</strong>
                       <span>− 開発費（{scaleDef.name}）</span>
-                      <strong style={{ color: '#a02828' }}>-{formatYen(devCost)}</strong>
+                      <strong style={{ color: '#ff6b6b' }}>-{formatYen(devCost)}</strong>
                       <span>
                         − 月固定費 × {devMonths} ヶ月（{formatYen(monthlyRent)}/月）
                       </span>
-                      <strong style={{ color: '#a02828' }}>-{formatYen(fixedCostTotal)}</strong>
+                      <strong style={{ color: '#ff6b6b' }}>-{formatYen(fixedCostTotal)}</strong>
                       <span
                         style={{
                           gridColumn: '1 / 3',
                           height: 1,
-                          background: '#2c1f15',
+                          background: '#16263e',
                           margin: '4px 0',
                         }}
                       />
                       <span style={{ fontWeight: 700 }}>利益見込</span>
                       <strong
                         style={{
-                          color: positive ? '#308040' : '#a02828',
+                          color: positive ? '#308040' : '#a03030',
                           fontSize: 16,
                         }}
                       >
@@ -495,7 +495,7 @@ export const ReleaseScreen = () => {
                       <span style={{ fontWeight: 700 }}>ROI</span>
                       <strong
                         style={{
-                          color: positive ? '#308040' : '#a02828',
+                          color: positive ? '#308040' : '#a03030',
                         }}
                       >
                         {roi}
@@ -572,8 +572,8 @@ const RadarChart = ({ charPower, genreAffinity, performance, luck }: RadarProps)
         display: 'flex',
         justifyContent: 'center',
         margin: '8px 0 4px',
-        background: '#fff4d0',
-        border: '3px solid #1a0f08',
+        background: '#24395c',
+        border: '3px solid #0a1422',
         padding: 8,
         imageRendering: 'pixelated',
       }}

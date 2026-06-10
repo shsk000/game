@@ -42,17 +42,17 @@ import { computeProfitForScale } from '../../utils/profit';
 
 // 色トークン（office-visual-design / game-ui-design のクリーム＋ブラウン系）
 const COLORS = {
-  bgDark: '#2a1a0e',
-  bgCream: '#f5e8c8',
-  bgCreamLight: '#fff4d0',
+  bgDark: '#0d1626',
+  bgCream: '#1b2c47',
+  bgCreamLight: '#24395c',
   border: '#2c1f15',
   borderHard: '#1a0f08',
   textDark: '#1a0f08',
   textMid: '#3a2a1e',
   textSub: '#6b4f3a',
-  accentYellow: '#f5c84a',
+  accentYellow: '#ffd54a',
   accentOrange: '#e07020',
-  accentRed: '#a02828',
+  accentRed: '#a03030',
   trendHot: '#e07020',
   pioneer: '#308040',
   warn: '#a86a1e',
@@ -252,7 +252,7 @@ export const PlanScreen = () => {
               );
             })}
             {GENRES.length > unlockedGenres.length && (
-              <span style={{ fontSize: 11, color: '#6b4f3a', alignSelf: 'center' }}>
+              <span style={{ fontSize: 11, color: '#9fb6d4', alignSelf: 'center' }}>
                 + ? 種類（未解放）
               </span>
             )}
@@ -279,7 +279,7 @@ export const PlanScreen = () => {
               );
             })}
             {THEMES.length > unlockedThemes.length && (
-              <span style={{ fontSize: 11, color: '#6b4f3a', alignSelf: 'center' }}>
+              <span style={{ fontSize: 11, color: '#9fb6d4', alignSelf: 'center' }}>
                 + ? 種類（未解放）
               </span>
             )}
@@ -402,7 +402,7 @@ export const PlanScreen = () => {
                       fontSize: 12,
                       fontWeight: 700,
                       letterSpacing: '0.06em',
-                      background: isSelected ? '#5aa84a' : '#d8c089',
+                      background: isSelected ? '#5aa84a' : '#2e4568',
                       color: isSelected ? '#fff8e0' : COLORS.textDark,
                       border: `3px solid ${COLORS.borderHard}`,
                       cursor: reachedMax ? 'not-allowed' : 'pointer',
@@ -465,13 +465,13 @@ export const PlanScreen = () => {
                         alignItems: 'center',
                         gap: 8,
                         padding: '6px 10px',
-                        background: isAssigned ? '#fff4d0' : '#e8d8b0',
+                        background: isAssigned ? '#24395c' : '#2e4568',
                         border: `3px solid ${COLORS.borderHard}`,
                         cursor: reachedMax ? 'not-allowed' : 'pointer',
                         opacity: reachedMax ? 0.6 : 1,
                         fontSize: 13,
                         boxShadow: isAssigned
-                          ? 'inset 0 0 0 2px #f5c84a'
+                          ? 'inset 0 0 0 2px #ffd54a'
                           : 'inset 0 0 0 2px rgba(0,0,0,0.1)',
                         imageRendering: 'pixelated',
                         userSelect: 'none',
@@ -596,7 +596,7 @@ export const PlanScreen = () => {
                     style={{
                       padding: '1px 6px',
                       background: COLORS.pioneer,
-                      color: '#fff8e0',
+                      color: '#ffffff',
                       fontSize: 11,
                       fontWeight: 700,
                       width: 'fit-content',

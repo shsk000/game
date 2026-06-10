@@ -131,10 +131,10 @@ export const PixelStatusBar = ({ className, style }: Props) => {
         gap: 16,
         padding: '8px 16px',
         height: 56,
-        background: '#1a0f08',
-        borderBottom: '4px solid #2c1f15',
-        color: '#fff8e0',
-        boxShadow: 'inset 0 -2px 0 #6b4f3a',
+        background: '#0d1626',
+        borderBottom: '4px solid #0a1422',
+        color: '#ffffff',
+        boxShadow: 'inset 0 -2px 0 #3d5a85',
         fontWeight: 700,
         letterSpacing: '0.04em',
         imageRendering: 'pixelated',
@@ -149,7 +149,7 @@ export const PixelStatusBar = ({ className, style }: Props) => {
             emoji="💰"
             label="資金"
             value={formatYen(displayFunds)}
-            color="#f5c84a"
+            color="#ffd54a"
             valueClassName={
               fundsFlash === 'gain' ? 'funds-gain' : fundsFlash === 'loss' ? 'funds-loss' : undefined
             }
@@ -178,7 +178,7 @@ export const PixelStatusBar = ({ className, style }: Props) => {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <PixelIcon emoji="📅" label="日付" size={20} />
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-          <span style={{ fontSize: 13, color: '#fff8e0', fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ fontSize: 13, color: '#ffffff', fontVariantNumeric: 'tabular-nums' }}>
             {formatGameDate(currentDate)}
           </span>
           <div
@@ -186,8 +186,8 @@ export const PixelStatusBar = ({ className, style }: Props) => {
             style={{
               width: 120,
               height: 6,
-              background: '#0d0805',
-              border: '2px solid #2c1f15',
+              background: '#0a1422',
+              border: '2px solid #0a1422',
             }}
           >
             <div
@@ -217,7 +217,7 @@ const StatusItem = ({ emoji, label, value, color, valueClassName }: StatusItemPr
   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
     <PixelIcon emoji={emoji} label={label} size={22} />
     <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
-      <span style={{ fontSize: 9, color: '#c8b58a' }}>{label}</span>
+      <span style={{ fontSize: 9, color: '#9fb6d4' }}>{label}</span>
       <span
         className={valueClassName}
         style={{
@@ -239,7 +239,7 @@ const Divider = () => (
     style={{
       width: 2,
       height: 20,
-      background: '#6b4f3a',
+      background: '#3d5a85',
     }}
   />
 );
