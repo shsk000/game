@@ -77,9 +77,10 @@ const hintStyle: React.CSSProperties = {
   margin: 0,
 };
 
+// 窓タイトルバー（青 #214577）内に置くサブテキスト。明色必須（暗色だと読めない）
 const subMetaStyle: React.CSSProperties = {
   fontSize: 11,
-  color: COLORS.textSub,
+  color: '#bcd0e8',
   fontWeight: 400,
   marginLeft: 8,
 };
