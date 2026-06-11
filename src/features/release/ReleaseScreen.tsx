@@ -211,7 +211,7 @@ export const ReleaseScreen = () => {
           padding: 12,
           minHeight: 0,
           overflow: 'auto',
-          background: '#0d1626',
+          background: '#c9ccd0',
         }}
       >
         <section className="card release-card">
@@ -283,7 +283,7 @@ export const ReleaseScreen = () => {
         padding: 12,
         minHeight: 0,
         overflow: 'auto',
-        background: '#0d1626',
+        background: '#c9ccd0',
       }}
     >
       <section className="card release-card">

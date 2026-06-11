@@ -1259,14 +1259,14 @@ body,
   justify-content: center;
   animation: g-backdrop-in 120ms steps(2) both;
 }
-/* v0.11 G5：リファレンス準拠 — 細枠 1px 青グレー + 暗紺タイトルバー + 白文字 */
+/* v0.11 G5c：リファレンス実測 — 青タイトルバー #214577 + オフホワイト本体 #e0dfda */
 .overlay-window {
   width: 1160px;
   height: 640px;
   display: flex;
   flex-direction: column;
-  background: #1e2d49;
-  border: 1px solid #4a6a9a;
+  background: #e0dfda;
+  border: 1px solid #10151c;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   animation: g-window-pop 160ms steps(3) both;
   image-rendering: pixelated;
@@ -1276,12 +1276,12 @@ body,
   align-items: center;
   justify-content: space-between;
   padding: 6px 10px;
-  background: #15223a;
+  background: #214577;
   color: #ffffff;
   font-weight: 700;
   font-size: 13px;
   letter-spacing: 0.06em;
-  border-bottom: 1px solid #4a6a9a;
+  border-bottom: 1px solid #10151c;
   flex-shrink: 0;
 }
 .overlay-body {

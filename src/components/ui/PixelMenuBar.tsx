@@ -2,11 +2,12 @@ import type { ReactNode } from 'react';
 import { PixelIcon } from './PixelIcon';
 
 /**
- * 画面下部の常駐 dock（v0.11 G5：リファレンス準拠のタイル型ボタン）。
+ * 画面下部の常駐 dock（v0.11 G5c：リファレンス実測準拠）。
  *
- * - 各メニューは四角いタイル（紺 + 細枠）。選択中は黄色タイル + 紺文字
- * - アイコン上 + ラベル下の縦構成
- * - dock 背景はさらに暗い紺
+ * リファレンスの dock は「背景バーなし」— 床の上にタイルが直接浮く。
+ * - 非選択タイル：白グレー #e8e6e0 + 黒枠 + 黒ラベル
+ * - 選択中タイル：オレンジ #de934a + 白文字
+ * - タイルは大きめ（88×60）、わずかな隙間で並ぶ
  */
 
 export type PixelMenuItem = {
@@ -35,14 +36,15 @@ export const PixelMenuBar = ({ items, activeId, children, className, style }: Pr
       style={{
         display: 'flex',
         justifyContent: 'center',
-        alignItems: 'center',
-        gap: 6,
-        padding: '8px 16px',
+        alignItems: 'flex-end',
+        gap: 4,
+        padding: '0 16px 6px',
         height: 72,
-        background: '#101c30',
-        borderTop: '1px solid #4a6a9a',
+        // リファレンス準拠：dock に背景バーは無い（世界の上にタイルが浮く）
+        background: 'transparent',
         imageRendering: 'pixelated',
         flexShrink: 0,
+        pointerEvents: 'none',
         ...style,
       }}
     >
@@ -74,23 +76,26 @@ const PixelMenuBarItem = ({ item, active }: ItemProps) => {
         alignItems: 'center',
         justifyContent: 'center',
         gap: 2,
-        width: 64,
-        height: 56,
-        background: active ? '#ffd54a' : '#1e2d49',
-        border: active ? '1px solid #ffd54a' : '1px solid #4a6a9a',
-        color: active ? '#0a1422' : '#ffffff',
+        width: 88,
+        height: 60,
+        background: active ? '#de934a' : '#e8e6e0',
+        border: '1px solid #10151c',
+        color: active ? '#ffffff' : '#1c2228',
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.4 : 1,
         fontFamily: 'inherit',
         fontWeight: 700,
-        fontSize: 10,
+        fontSize: 11,
         letterSpacing: '0.04em',
         imageRendering: 'pixelated',
         userSelect: 'none',
         borderRadius: 0,
+        boxShadow: '0 2px 4px rgba(0,0,0,0.35)',
+        pointerEvents: 'auto',
+        textShadow: active ? '1px 1px 0 rgba(0,0,0,0.3)' : 'none',
       }}
     >
-      <PixelIcon src={iconSrc} emoji={emoji ?? ''} label={label} size={24} />
+      <PixelIcon src={iconSrc} emoji={emoji ?? ''} label={label} size={26} />
       <span>{label}</span>
     </button>
   );

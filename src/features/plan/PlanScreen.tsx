@@ -41,21 +41,22 @@ import { computeProfitForScale } from '../../utils/profit';
  */
 
 // 色トークン（office-visual-design / game-ui-design のクリーム＋ブラウン系）
+/** v0.11 G5c：リファレンス実測（青タイトル + オフホワイト本体）に合わせた白地トークン */
 const COLORS = {
-  bgDark: '#0d1626',
-  bgCream: '#1b2c47',
-  bgCreamLight: '#24395c',
-  border: '#2c1f15',
-  borderHard: '#1a0f08',
-  textDark: '#1a0f08',
-  textMid: '#3a2a1e',
-  textSub: '#6b4f3a',
-  accentYellow: '#ffd54a',
-  accentOrange: '#e07020',
-  accentRed: '#a03030',
-  trendHot: '#e07020',
-  pioneer: '#308040',
-  warn: '#a86a1e',
+  bgDark: '#c9ccd0',
+  bgCream: '#e0dfda',
+  bgCreamLight: '#f2f1ed',
+  border: '#5a636e',
+  borderHard: '#10151c',
+  textDark: '#1c2228',
+  textMid: '#3a4148',
+  textSub: '#6b7280',
+  accentYellow: '#d99114',
+  accentOrange: '#cf5f10',
+  accentRed: '#b8302a',
+  trendHot: '#cf5f10',
+  pioneer: '#2a7a3c',
+  warn: '#9a6b10',
 } as const;
 
 const sectionStyle: React.CSSProperties = {
@@ -402,7 +403,7 @@ export const PlanScreen = () => {
                       fontSize: 12,
                       fontWeight: 700,
                       letterSpacing: '0.06em',
-                      background: isSelected ? '#5aa84a' : '#2e4568',
+                      background: isSelected ? '#2a7a3c' : '#eef0f3',
                       color: isSelected ? '#fff8e0' : COLORS.textDark,
                       border: `3px solid ${COLORS.borderHard}`,
                       cursor: reachedMax ? 'not-allowed' : 'pointer',
@@ -465,13 +466,13 @@ export const PlanScreen = () => {
                         alignItems: 'center',
                         gap: 8,
                         padding: '6px 10px',
-                        background: isAssigned ? '#24395c' : '#2e4568',
+                        background: isAssigned ? '#fff3cf' : '#eef0f3',
                         border: `3px solid ${COLORS.borderHard}`,
                         cursor: reachedMax ? 'not-allowed' : 'pointer',
                         opacity: reachedMax ? 0.6 : 1,
                         fontSize: 13,
                         boxShadow: isAssigned
-                          ? 'inset 0 0 0 2px #ffd54a'
+                          ? 'inset 0 0 0 2px #d99114'
                           : 'inset 0 0 0 2px rgba(0,0,0,0.1)',
                         imageRendering: 'pixelated',
                         userSelect: 'none',

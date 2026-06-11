@@ -102,11 +102,11 @@ export const PixelStatusBar = ({ className, style }: Props) => {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 24,
-        padding: '0 14px',
+        gap: 20,
+        padding: '0 12px',
         height: 40,
-        background: '#16243d',
-        borderBottom: '1px solid #4a6a9a',
+        background: '#161d28',
+        borderBottom: '1px solid #10151c',
         color: '#ffffff',
         fontWeight: 700,
         letterSpacing: '0.04em',
@@ -116,18 +116,39 @@ export const PixelStatusBar = ({ className, style }: Props) => {
         ...style,
       }}
     >
-      {/* 会社名 + 規模バッジ */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 15 }}>🏭</span>
+      {/* 会社名 + 規模バッジ（リファレンス：枠付き左ブロック） */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '3px 10px 3px 4px',
+          border: '1px solid #3a4a60',
+          background: '#1b2433',
+        }}
+      >
+        <span
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 26,
+            height: 26,
+            background: '#e0dfda',
+            border: '1px solid #10151c',
+            fontSize: 14,
+          }}
+        >
+          🏭
+        </span>
         <span>タイピング工場</span>
         <span
           style={{
             padding: '1px 8px',
-            background: '#ffd54a',
-            color: '#0a1422',
+            background: '#f5c33e',
+            color: '#161d28',
             fontSize: 11,
             fontWeight: 700,
-            borderRadius: 2,
           }}
         >
           {scaleName}
@@ -153,7 +174,7 @@ export const PixelStatusBar = ({ className, style }: Props) => {
             fundsFlash === 'gain' ? 'funds-gain' : fundsFlash === 'loss' ? 'funds-loss' : undefined
           }
           style={{
-            color: '#ffd54a',
+            color: '#f5c33e',
             fontVariantNumeric: 'tabular-nums',
             fontSize: 14,
           }}
@@ -174,7 +195,7 @@ export const PixelStatusBar = ({ className, style }: Props) => {
 
       {/* ファン数 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 11, color: '#9fb6d4' }}>ファン数</span>
+        <span style={{ fontSize: 11, color: '#8a96a8' }}>ファン数</span>
         <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatNumber(fans)}人</span>
       </div>
     </div>

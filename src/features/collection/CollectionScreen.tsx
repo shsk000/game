@@ -120,7 +120,7 @@ export const CollectionScreen = () => {
         padding: 10,
         minHeight: 0,
         overflow: 'auto',
-        background: '#0d1626',
+        background: '#c9ccd0',
       }}
     >
         <PixelWindow
@@ -132,7 +132,7 @@ export const CollectionScreen = () => {
             style={{
               margin: '0 0 10px',
               fontSize: 12,
-              color: '#c9d8ef',
+              color: '#3a4148',
               lineHeight: 1.5,
             }}
           >
@@ -147,7 +147,7 @@ export const CollectionScreen = () => {
               flexWrap: 'wrap',
               marginBottom: 10,
               padding: 4,
-              background: '#16263e',
+              background: '#aab2bb',
               border: '2px solid #0a1422',
             }}
           >
@@ -175,7 +175,7 @@ export const CollectionScreen = () => {
               );
             })}
             {GENRES.length > visibleGenres.length && (
-              <span style={{ fontSize: 11, color: '#9fb6d4', alignSelf: 'center', padding: '0 6px' }}>
+              <span style={{ fontSize: 11, color: '#6b7280', alignSelf: 'center', padding: '0 6px' }}>
                 + ? 種類（未解放）
               </span>
             )}
@@ -189,7 +189,7 @@ export const CollectionScreen = () => {
                 gridTemplateColumns: 'repeat(5, 1fr)',
                 gap: 6,
                 padding: 6,
-                background: '#16263e',
+                background: '#aab2bb',
                 border: '2px solid #0a1422',
                 imageRendering: 'pixelated',
               }}
@@ -203,7 +203,7 @@ export const CollectionScreen = () => {
                       key={t.id}
                       style={{
                         padding: 8,
-                        background: '#0f1d33',
+                        background: '#3a4148',
                         color: '#f0c020',
                         textAlign: 'center',
                         border: '2px solid #0a1422',
@@ -211,7 +211,7 @@ export const CollectionScreen = () => {
                       }}
                     >
                       <div style={{ fontSize: 16 }}>{t.emoji}</div>
-                      <div style={{ fontSize: 10, color: '#9fb6d4' }}>{t.name}</div>
+                      <div style={{ fontSize: 10, color: '#6b7280' }}>{t.name}</div>
                       <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>？</div>
                     </div>
                   );
@@ -251,7 +251,7 @@ export const CollectionScreen = () => {
               flexWrap: 'wrap',
               gap: '8px 16px',
               fontSize: 11,
-              color: '#c9d8ef',
+              color: '#3a4148',
               lineHeight: 1.6,
             }}
           >

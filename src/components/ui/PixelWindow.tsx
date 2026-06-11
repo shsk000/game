@@ -28,30 +28,31 @@ type Props = {
 };
 
 /**
- * v0.11 G5：リファレンス画像準拠の窓スタイル。
- * - 枠は細い 1px の明るい青グレー（太い黒枠 + ハード影は使わない）
- * - 本体 #1e2d49 / タイトルバー #15223a + 白文字（黄色ではない）
+ * v0.11 G5c：リファレンス画像から実測した色（PIL でサンプリング）。
+ * - タイトルバー：#214577（落ち着いた青）+ 白文字
+ * - コンテンツ部分：#e0dfda（暖色オフホワイト）+ 黒系文字 #1c2228
+ * - 枠：#10151c の細枠 1px
  */
 const variantTokens: Record<Variant, { border: string; bg: string; title: string }> = {
   standard: {
-    border: '1px solid #4a6a9a',
-    bg: '#1e2d49',
-    title: '#15223a',
+    border: '1px solid #10151c',
+    bg: '#e0dfda',
+    title: '#214577',
   },
   emphasis: {
-    border: '1px solid #5a7aac',
-    bg: '#22335a',
-    title: '#1a2a4a',
+    border: '1px solid #10151c',
+    bg: '#e0dfda',
+    title: '#1a3a66',
   },
   modal: {
-    border: '1px solid #4a6a9a',
-    bg: '#1e2d49',
-    title: '#15223a',
+    border: '1px solid #10151c',
+    bg: '#e0dfda',
+    title: '#214577',
   },
   navy: {
-    border: '1px solid #4a6a9a',
-    bg: '#1e2d49',
-    title: '#15223a',
+    border: '1px solid #10151c',
+    bg: '#e0dfda',
+    title: '#214577',
   },
 };
 
@@ -86,7 +87,7 @@ export const PixelWindow = ({
       className={className}
       style={{
         position: 'relative',
-        color: '#ffffff',
+        color: '#1c2228',
         ...frameStyle,
         ...style,
       }}
@@ -100,8 +101,8 @@ export const PixelWindow = ({
             fontWeight: 700,
             letterSpacing: '0.06em',
             fontSize: 12,
-            borderBottom: '1px solid #4a6a9a',
-            textShadow: '1px 1px 0 rgba(0,0,0,0.5)',
+            borderBottom: '1px solid #10151c',
+            textShadow: '1px 1px 0 rgba(0,0,0,0.4)',
           }}
         >
           {title}

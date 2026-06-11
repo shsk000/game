@@ -41,18 +41,26 @@ const formatPower = (role: string, power: number) => {
 
 /** 役職ごとの絵文字とラベル色（リファレンスの社員リスト準拠） */
 const ROLE_VISUAL: Record<string, { emoji: string; color: string }> = {
-  programmer: { emoji: '🧑‍💻', color: '#5fd75f' },
-  designer: { emoji: '🎨', color: '#7adfff' },
-  pr: { emoji: '📣', color: '#ffb8d8' },
+  programmer: { emoji: '🧑‍💻', color: '#1d8a3c' },
+  designer: { emoji: '🎨', color: '#1668a8' },
+  pr: { emoji: '📣', color: '#c2447a' },
 };
 
 /** セグメント式ゲージ（リファレンスのブロック分割ゲージ） */
-const SegGauge = ({ pct, color = '#43c059' }: { pct: number; color?: string }) => (
+const SegGauge = ({
+  pct,
+  color = '#2e9e4f',
+  track = '#c6ccd4',
+}: {
+  pct: number;
+  color?: string;
+  track?: string;
+}) => (
   <div
     style={{
       height: 8,
-      background: '#0a1422',
-      border: '1px solid #4a6a9a',
+      background: track,
+      border: '1px solid #9aa3ae',
       overflow: 'hidden',
     }}
   >
@@ -60,7 +68,7 @@ const SegGauge = ({ pct, color = '#43c059' }: { pct: number; color?: string }) =
       style={{
         width: `${Math.max(0, Math.min(100, pct))}%`,
         height: '100%',
-        background: `repeating-linear-gradient(to right, ${color} 0 6px, #0a1422 6px 8px)`,
+        background: `repeating-linear-gradient(to right, ${color} 0 6px, ${track} 6px 8px)`,
       }}
     />
   </div>
@@ -246,16 +254,29 @@ export const OfficeScreen = () => {
             }}
           >
             {news.slice(0, 5).map((n) => (
-              <li key={n.text} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-                <span style={{ flexShrink: 0 }}>{n.icon}</span>
+              <li
+                key={n.text}
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span style={{ color: '#1c2228' }}>{n.text}</span>
+                {/* リファレンス準拠：行の右端に色丸インジケータ */}
                 <span
+                  aria-hidden
                   style={{
-                    color:
-                      n.tone === 'warn' ? '#ffb454' : n.tone === 'good' ? '#6cff95' : '#e8f0ff',
+                    flexShrink: 0,
+                    width: 10,
+                    height: 10,
+                    borderRadius: '50%',
+                    border: '1px solid #10151c',
+                    background:
+                      n.tone === 'warn' ? '#e05252' : n.tone === 'good' ? '#3fb950' : '#2f81d6',
                   }}
-                >
-                  {n.text}
-                </span>
+                />
               </li>
             ))}
           </ul>
@@ -267,7 +288,7 @@ export const OfficeScreen = () => {
           bodyStyle={{ padding: 8 }}
         >
           {employees.length === 0 ? (
-            <p style={{ margin: 0, fontSize: 11, color: '#9fb6d4' }}>まだ社員がいません</p>
+            <p style={{ margin: 0, fontSize: 11, color: '#6b7684' }}>まだ社員がいません</p>
           ) : (
             <ul
               style={{
@@ -303,12 +324,12 @@ export const OfficeScreen = () => {
                       {e.name}
                     </span>
                     <span style={{ color: v.color, fontSize: 10 }}>{roleLabel(e.role)}</span>
-                    <span style={{ color: '#9fb6d4', fontSize: 10 }}>P{e.power}</span>
+                    <span style={{ color: '#6b7684', fontSize: 10 }}>P{e.power}</span>
                   </li>
                 );
               })}
               {employees.length > 6 && (
-                <li style={{ fontSize: 10, color: '#9fb6d4' }}>他 {employees.length - 6} 人</li>
+                <li style={{ fontSize: 10, color: '#6b7684' }}>他 {employees.length - 6} 人</li>
               )}
             </ul>
           )}
@@ -363,7 +384,7 @@ export const OfficeScreen = () => {
                     <div
                       style={{
                         fontSize: 10,
-                        color: '#c9d8ef',
+                        color: '#3a4452',
                         fontVariantNumeric: 'tabular-nums',
                       }}
                     >
@@ -373,7 +394,7 @@ export const OfficeScreen = () => {
                 );
               })}
               {sellingWorks.length > 3 && (
-                <li style={{ fontSize: 10, color: '#9fb6d4' }}>
+                <li style={{ fontSize: 10, color: '#6b7684' }}>
                   他 {sellingWorks.length - 3} 本
                 </li>
               )}
@@ -400,18 +421,18 @@ export const OfficeScreen = () => {
             }}
           >
             <li>
-              固定費 <strong style={{ color: '#ff6b6b' }}>{formatYen(monthlyTotal)}</strong>/月
-              <span style={{ marginLeft: 6, color: '#9fb6d4' }}>
+              固定費 <strong style={{ color: '#cc2f2f' }}>{formatYen(monthlyTotal)}</strong>/月
+              <span style={{ marginLeft: 6, color: '#6b7684' }}>
                 （人件費 {formatYen(monthlySalaries)} + 賃料 {formatYen(monthlyRent)}
                 {monthlyInterest > 0 && ` + 利息 ${formatYen(monthlyInterest)}`}）
               </span>
             </li>
             <li>
               借金{' '}
-              <strong style={{ color: debt > 0 ? '#a03030' : '#3a2a1e' }}>
+              <strong style={{ color: debt > 0 ? '#cc2f2f' : '#222a35' }}>
                 {formatYen(debt)}
               </strong>
-              <span style={{ marginLeft: 6, color: '#9fb6d4' }}>
+              <span style={{ marginLeft: 6, color: '#6b7684' }}>
                 / 借入可 {formatYen(borrowingAvailable)}
               </span>
               <PixelButton
@@ -423,8 +444,8 @@ export const OfficeScreen = () => {
               </PixelButton>
             </li>
             {lastFixedCost && (
-              <li style={{ color: '#9fb6d4' }}>
-                先月 <strong style={{ color: '#ff6b6b' }}>-{formatYen(lastFixedCost.total)}</strong>
+              <li style={{ color: '#6b7684' }}>
+                先月 <strong style={{ color: '#cc2f2f' }}>-{formatYen(lastFixedCost.total)}</strong>
               </li>
             )}
           </ul>
@@ -436,7 +457,7 @@ export const OfficeScreen = () => {
         style={{
           position: 'absolute',
           left: 12,
-          bottom: 108,
+          bottom: 112,
           width: 264,
           zIndex: 5,
         }}
@@ -487,46 +508,81 @@ export const OfficeScreen = () => {
       {/* ── dock（タイル型、ティッカーの上） ── */}
       <PixelMenuBar
         items={menuItems}
-        style={{ position: 'absolute', bottom: 24, left: 0, right: 0, zIndex: 10 }}
+        style={{ position: 'absolute', bottom: 28, left: 0, right: 0, zIndex: 10 }}
       />
 
-      {/* ── 最下部ティッカー（リファレンス準拠） ── */}
+      {/* ── 最下部ティッカー（リファレンス実測 #151c27） ── */}
       <div
         style={{
           position: 'absolute',
           bottom: 0,
           left: 0,
           right: 0,
-          height: 24,
+          height: 28,
           display: 'flex',
           alignItems: 'center',
-          gap: 16,
-          padding: '0 12px',
-          background: '#0b1526',
-          borderTop: '1px solid #4a6a9a',
+          gap: 14,
+          padding: '0 10px',
+          background: '#151c27',
+          borderTop: '1px solid #10151c',
           color: '#e8f0ff',
           fontSize: 11,
           zIndex: 10,
         }}
       >
+        {/* 左：再生コントロール風（装飾。時間は常に流れる） */}
+        <div style={{ display: 'flex', gap: 2 }}>
+          {['⏸', '▶'].map((c) => (
+            <span
+              key={c}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 20,
+                height: 18,
+                background: '#222c3c',
+                border: '1px solid #10151c',
+                fontSize: 9,
+                color: '#8a96a8',
+              }}
+            >
+              {c}
+            </span>
+          ))}
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span>次の週まで</span>
           <div style={{ width: 80 }}>
-            <SegGauge pct={weekProgress} color="#ffd54a" />
+            <SegGauge pct={weekProgress} color="#f5c33e" track="#222c3c" />
           </div>
         </div>
         {trend && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span>📢</span>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span
+              aria-hidden
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                background: '#2f81d6',
+                border: '1px solid #10151c',
+              }}
+            />
             <span>
               今月のトレンド：
-              <span style={{ color: '#ffd54a', fontWeight: 700 }}>
+              <span style={{ color: '#f5c33e', fontWeight: 700 }}>
                 {GENRE_BY_ID[trend.genreId]?.name} × {THEME_BY_ID[trend.themeId]?.name}
               </span>
               が人気！
             </span>
           </div>
         )}
+        {/* 右：通知アイコン風 */}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, color: '#8a96a8' }}>
+          <span>✉ {library.length}</span>
+          <span>🏆 {achievements.length}</span>
+        </div>
       </div>
 
       {/* ── 採用モーダル ── */}
@@ -545,7 +601,7 @@ export const OfficeScreen = () => {
                 style={{
                   fontSize: 12,
                   padding: '2px 8px',
-                  background: '#0f1d33',
+                  background: '#2d6cb5',
                   color: '#ffffff',
                   borderRadius: 2,
                 }}
@@ -622,7 +678,7 @@ export const OfficeScreen = () => {
                     {roleLabel(e.role)}
                   </span>
                   <span style={{ fontWeight: 700, fontSize: 13, flex: 1 }}>{e.name}</span>
-                  <span style={{ fontSize: 11, color: '#c9d8ef' }}>
+                  <span style={{ fontSize: 11, color: '#3a4452' }}>
                     {formatPower(e.role, e.power)}
                   </span>
                   <PixelButton size="small" variant="danger" onClick={() => fireEmployee(e.id)}>
@@ -752,7 +808,7 @@ export const OfficeScreen = () => {
               >
                 <span style={{ fontSize: 22 }}>{a.emoji}</span>
                 <span style={{ fontWeight: 700, fontSize: 13, minWidth: 110 }}>{a.name}</span>
-                <span style={{ fontSize: 12, color: '#c9d8ef', flex: 1 }}>{a.desc}</span>
+                <span style={{ fontSize: 12, color: '#3a4452', flex: 1 }}>{a.desc}</span>
               </li>
             );
           })}
@@ -777,7 +833,7 @@ export const OfficeScreen = () => {
             <li>所持金: <strong>{formatYen(funds)}</strong></li>
             <li>借入上限: <strong>{formatYen(borrowingLimit)}</strong>（月固定費 × 12）</li>
             <li>残り借入可能: <strong>{formatYen(borrowingAvailable)}</strong></li>
-            <li style={{ fontSize: 11, color: '#9fb6d4' }}>
+            <li style={{ fontSize: 11, color: '#6b7684' }}>
               月利 {Math.round(DEBT_CONFIG.monthlyInterestRate * 100)}%（残債に対し毎月発生）
             </li>
           </ul>

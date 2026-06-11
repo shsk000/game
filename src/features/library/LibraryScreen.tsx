@@ -62,7 +62,7 @@ export const LibraryScreen = () => {
         padding: 10,
         minHeight: 0,
         overflow: 'auto',
-        background: '#0d1626',
+        background: '#c9ccd0',
       }}
     >
         {/* フィルタ + ソート + ページャ */}
@@ -90,7 +90,7 @@ export const LibraryScreen = () => {
                     fontFamily: 'inherit',
                     fontSize: 12,
                     border: '2px solid #0a1422',
-                    background: '#0f1d33',
+                    background: '#ffffff',
                   }}
                 >
                   <option value="all">全て</option>
@@ -114,7 +114,7 @@ export const LibraryScreen = () => {
                     fontFamily: 'inherit',
                     fontSize: 12,
                     border: '2px solid #0a1422',
-                    background: '#0f1d33',
+                    background: '#ffffff',
                   }}
                 >
                   <option value="newest">新しい順</option>
@@ -158,7 +158,7 @@ export const LibraryScreen = () => {
                 padding: '32px 16px',
                 textAlign: 'center',
                 fontSize: 13,
-                color: '#c9d8ef',
+                color: '#3a4148',
                 lineHeight: 1.6,
               }}
             >
@@ -219,7 +219,7 @@ export const LibraryScreen = () => {
                           style={{
                             fontSize: 13,
                             fontWeight: 700,
-                            color: '#ffffff',
+                            color: '#1c2228',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
@@ -229,12 +229,12 @@ export const LibraryScreen = () => {
                           {w.pioneer && '🌱 '}
                           {w.title}
                         </div>
-                        <div style={{ fontSize: 11, color: '#c9d8ef' }}>
+                        <div style={{ fontSize: 11, color: '#3a4148' }}>
                           {genre.emoji}
                           {genre.name} × {theme.emoji}
                           {theme.name}
                         </div>
-                        <div style={{ fontSize: 11, color: '#c9d8ef' }}>{scale.name}</div>
+                        <div style={{ fontSize: 11, color: '#3a4148' }}>{scale.name}</div>
                         <div
                           style={{
                             fontSize: 12,
@@ -252,7 +252,7 @@ export const LibraryScreen = () => {
                       style={{
                         marginTop: 8,
                         fontSize: 11,
-                        color: '#c9d8ef',
+                        color: '#3a4148',
                         lineHeight: 1.5,
                         fontVariantNumeric: 'tabular-nums',
                       }}
@@ -268,7 +268,7 @@ export const LibraryScreen = () => {
                           aria-label={`販売残 ${sellingPct}%`}
                           style={{
                             height: 10,
-                            background: '#0d1626',
+                            background: '#c9ccd0',
                             border: '2px solid #0a1422',
                             borderRadius: 2,
                             overflow: 'hidden',
@@ -288,7 +288,7 @@ export const LibraryScreen = () => {
                           style={{
                             marginTop: 4,
                             fontSize: 11,
-                            color: '#c9d8ef',
+                            color: '#3a4148',
                             fontWeight: 700,
                             fontVariantNumeric: 'tabular-nums',
                           }}
@@ -301,11 +301,11 @@ export const LibraryScreen = () => {
                         style={{
                           marginTop: 8,
                           padding: '4px 8px',
-                          background: '#2e4568',
+                          background: '#dfe3e8',
                           border: '2px solid #0a1422',
                           borderRadius: 2,
                           fontSize: 11,
-                          color: '#c9d8ef',
+                          color: '#3a4148',
                           fontWeight: 700,
                           fontVariantNumeric: 'tabular-nums',
                         }}
