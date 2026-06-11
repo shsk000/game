@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { OfficeView } from '../../components/OfficeView';
 import {
   PixelButton,
@@ -11,7 +11,9 @@ import {
 import { ACHIEVEMENTS } from '../../data/achievements';
 import { DEBT_CONFIG, computeBorrowingLimit } from '../../data/balance';
 import { REFRESH_COST, roleLabel, sumMonthlySalaries } from '../../data/employees';
+import { GENRE_BY_ID } from '../../data/genres';
 import { nextLockedScale, SCALE_BY_ID, SCALES } from '../../data/scales';
+import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
 import { formatYen } from '../../utils/format';
 
@@ -37,6 +39,33 @@ const formatPower = (role: string, power: number) => {
   return `売上 +${power}%`;
 };
 
+/** 役職ごとの絵文字とラベル色（リファレンスの社員リスト準拠） */
+const ROLE_VISUAL: Record<string, { emoji: string; color: string }> = {
+  programmer: { emoji: '🧑‍💻', color: '#5fd75f' },
+  designer: { emoji: '🎨', color: '#7adfff' },
+  pr: { emoji: '📣', color: '#ffb8d8' },
+};
+
+/** セグメント式ゲージ（リファレンスのブロック分割ゲージ） */
+const SegGauge = ({ pct, color = '#43c059' }: { pct: number; color?: string }) => (
+  <div
+    style={{
+      height: 8,
+      background: '#0a1422',
+      border: '1px solid #4a6a9a',
+      overflow: 'hidden',
+    }}
+  >
+    <div
+      style={{
+        width: `${Math.max(0, Math.min(100, pct))}%`,
+        height: '100%',
+        background: `repeating-linear-gradient(to right, ${color} 0 6px, #0a1422 6px 8px)`,
+      }}
+    />
+  </div>
+);
+
 export const OfficeScreen = () => {
   const funds = useGameStore((s) => s.funds);
   const lifetimeRevenue = useGameStore((s) => s.lifetimeRevenue);
@@ -60,6 +89,24 @@ export const OfficeScreen = () => {
   const [modal, setModal] = useState<ModalKind>(null);
   const [debtAmountInput, setDebtAmountInput] = useState<string>('');
   const closeModal = () => setModal(null);
+
+  const trend = useGameStore((s) => s.trend);
+  const currentDate = useGameStore((s) => s.currentDate);
+
+  // ティッカー用：次の週まで進捗（IDLE 30 秒/週、GlobalTicker と同期）
+  const [weekProgress, setWeekProgress] = useState(0);
+  const weekStartRef = useRef<number>(performance.now());
+  useEffect(() => {
+    weekStartRef.current = performance.now();
+    setWeekProgress(0);
+  }, [currentDate]);
+  useEffect(() => {
+    const t = setInterval(() => {
+      const elapsed = performance.now() - weekStartRef.current;
+      setWeekProgress(Math.min(100, (elapsed / 30_000) * 100));
+    }, 250);
+    return () => clearInterval(t);
+  }, []);
 
   const next = nextLockedScale(unlocked);
   const sellingWorks = library.filter((w) => w.selling);
@@ -135,6 +182,29 @@ export const OfficeScreen = () => {
   const stageSize = STAGE_SIZE[currentScale] ?? STAGE_SIZE.mini;
   const stageScale = Math.min(1280 / stageSize.w, 720 / stageSize.h);
 
+  // G5：お知らせ（リファレンスの左上窓）。store の状態から直近の出来事を導出
+  const news: { icon: string; text: string; tone?: 'warn' | 'good' }[] = [];
+  if (employees.length === 0) {
+    news.push({ icon: '👥', text: '従業員を採用しましょう', tone: 'warn' });
+  }
+  if (trend) {
+    const tg = GENRE_BY_ID[trend.genreId]?.name ?? '';
+    const tt = THEME_BY_ID[trend.themeId]?.name ?? '';
+    news.push({ icon: '📈', text: `${tg}×${tt} が人気です`, tone: 'good' });
+  }
+  if (library[0]) {
+    news.push({ icon: '🎮', text: `『${library[0].title}』を発売しました` });
+  }
+  if (debt > 0) {
+    news.push({ icon: '⚠', text: `借金 ${formatYen(debt)} の返済をお忘れなく`, tone: 'warn' });
+  }
+  if (next && funds >= next.unlockCost) {
+    news.push({ icon: '🏆', text: `「${next.name}」が解放可能です！`, tone: 'good' });
+  }
+  if (news.length === 0) {
+    news.push({ icon: '📋', text: '新しいゲームを企画しましょう' });
+  }
+
   return (
     <div className="office-stage-root office-screen">
       {/* ── 世界ステージ：オフィスが画面全体（HUD の裏まで広がる） ── */}
@@ -144,17 +214,113 @@ export const OfficeScreen = () => {
         </div>
       </div>
 
-      {/* ── HUD（世界の上に浮く） ── */}
+      {/* ── HUD（世界の上に浮く、40px 薄バー） ── */}
       <PixelStatusBar
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, opacity: 0.96 }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}
       />
+
+      {/* ── 左側：お知らせ + 社員リスト（リファレンス準拠） ── */}
+      <div
+        style={{
+          position: 'absolute',
+          left: 12,
+          top: 48,
+          width: 264,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          zIndex: 5,
+        }}
+      >
+        <PixelWindow title="📢 お知らせ" variant="standard" bodyStyle={{ padding: 8 }}>
+          <ul
+            style={{
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              fontSize: 11,
+              lineHeight: 1.4,
+            }}
+          >
+            {news.slice(0, 5).map((n) => (
+              <li key={n.text} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                <span style={{ flexShrink: 0 }}>{n.icon}</span>
+                <span
+                  style={{
+                    color:
+                      n.tone === 'warn' ? '#ffb454' : n.tone === 'good' ? '#6cff95' : '#e8f0ff',
+                  }}
+                >
+                  {n.text}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </PixelWindow>
+
+        <PixelWindow
+          title={`👥 社員リスト ${employees.length}人`}
+          variant="standard"
+          bodyStyle={{ padding: 8 }}
+        >
+          {employees.length === 0 ? (
+            <p style={{ margin: 0, fontSize: 11, color: '#9fb6d4' }}>まだ社員がいません</p>
+          ) : (
+            <ul
+              style={{
+                listStyle: 'none',
+                margin: 0,
+                padding: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 5,
+              }}
+            >
+              {employees.slice(0, 6).map((e) => {
+                const v = ROLE_VISUAL[e.role] ?? ROLE_VISUAL.programmer;
+                return (
+                  <li
+                    key={e.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontSize: 11,
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>{v.emoji}</span>
+                    <span
+                      style={{
+                        flex: 1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {e.name}
+                    </span>
+                    <span style={{ color: v.color, fontSize: 10 }}>{roleLabel(e.role)}</span>
+                    <span style={{ color: '#9fb6d4', fontSize: 10 }}>P{e.power}</span>
+                  </li>
+                );
+              })}
+              {employees.length > 6 && (
+                <li style={{ fontSize: 10, color: '#9fb6d4' }}>他 {employees.length - 6} 人</li>
+              )}
+            </ul>
+          )}
+        </PixelWindow>
+      </div>
 
       {/* ── 右側：経営情報の浮遊小窓（コンパクト） ── */}
       <div
         style={{
           position: 'absolute',
           right: 12,
-          top: 66,
+          top: 48,
           width: 296,
           display: 'flex',
           flexDirection: 'column',
@@ -193,18 +359,7 @@ export const OfficeScreen = () => {
                     >
                       {w.title}（🎯{w.metascore}）
                     </div>
-                    <div
-                      style={{
-                        height: 6,
-                        background: '#0d1626',
-                        border: '2px solid #0a1422',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <div
-                        style={{ width: `${pct}%`, height: '100%', background: '#5aa84a' }}
-                      />
-                    </div>
+                    <SegGauge pct={pct} />
                     <div
                       style={{
                         fontSize: 10,
@@ -276,13 +431,13 @@ export const OfficeScreen = () => {
         </PixelWindow>
       </div>
 
-      {/* ── CTA：左下に浮く大ボタン ── */}
+      {/* ── CTA：左下に浮くボタン ── */}
       <div
         style={{
           position: 'absolute',
           left: 12,
-          bottom: 96,
-          width: 320,
+          bottom: 108,
+          width: 264,
           zIndex: 5,
         }}
       >
@@ -297,18 +452,17 @@ export const OfficeScreen = () => {
           }}
           style={{
             width: '100%',
-            padding: '14px 16px',
+            padding: '10px 14px',
             background: '#ffd54a',
-            color: '#ffffff',
-            border: '4px solid #0a1422',
-            boxShadow: 'inset 0 0 0 1px #3d5a85, 4px 4px 0 rgba(0,0,0,0.5)',
+            color: '#0a1422',
+            border: '1px solid #ffd54a',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
             fontFamily: 'inherit',
-            fontSize: 18,
+            fontSize: 15,
             fontWeight: 700,
             letterSpacing: '0.08em',
             cursor: 'pointer',
             imageRendering: 'pixelated',
-            textShadow: '1px 1px 0 rgba(255,255,255,0.4)',
           }}
         >
           ▶ 新しいゲームを作る
@@ -316,12 +470,12 @@ export const OfficeScreen = () => {
         {employees.length === 0 && (
           <p
             style={{
-              margin: '6px 0 0',
-              padding: '4px 8px',
-              fontSize: 11,
-              color: '#ffffff',
+              margin: '4px 0 0',
+              padding: '3px 8px',
+              fontSize: 10,
+              color: '#ffb454',
               background: 'rgba(10,20,34,0.88)',
-              border: '2px solid #0a1422',
+              border: '1px solid #4a6a9a',
               textAlign: 'center',
             }}
           >
@@ -330,11 +484,50 @@ export const OfficeScreen = () => {
         )}
       </div>
 
-      {/* ── dock（下部固定） ── */}
+      {/* ── dock（タイル型、ティッカーの上） ── */}
       <PixelMenuBar
         items={menuItems}
-        style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10 }}
+        style={{ position: 'absolute', bottom: 24, left: 0, right: 0, zIndex: 10 }}
       />
+
+      {/* ── 最下部ティッカー（リファレンス準拠） ── */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 24,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          padding: '0 12px',
+          background: '#0b1526',
+          borderTop: '1px solid #4a6a9a',
+          color: '#e8f0ff',
+          fontSize: 11,
+          zIndex: 10,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span>次の週まで</span>
+          <div style={{ width: 80 }}>
+            <SegGauge pct={weekProgress} color="#ffd54a" />
+          </div>
+        </div>
+        {trend && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span>📢</span>
+            <span>
+              今月のトレンド：
+              <span style={{ color: '#ffd54a', fontWeight: 700 }}>
+                {GENRE_BY_ID[trend.genreId]?.name} × {THEME_BY_ID[trend.themeId]?.name}
+              </span>
+              が人気！
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* ── 採用モーダル ── */}
       <PixelModal open={modal === 'hire'} onClose={closeModal} title="採用" maxWidth={560}>

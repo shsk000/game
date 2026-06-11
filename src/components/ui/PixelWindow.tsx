@@ -28,29 +28,30 @@ type Props = {
 };
 
 /**
- * v0.11 G4：Game Dev Story 風の濃紺パレットに全統一。
- * 濃紺 #1b2c47 / 暗紺 #0f1d33 / 枠 #0a1422 / ハイライト #3d5a85 / アクセント黄 #ffd54a
+ * v0.11 G5：リファレンス画像準拠の窓スタイル。
+ * - 枠は細い 1px の明るい青グレー（太い黒枠 + ハード影は使わない）
+ * - 本体 #1e2d49 / タイトルバー #15223a + 白文字（黄色ではない）
  */
 const variantTokens: Record<Variant, { border: string; bg: string; title: string }> = {
   standard: {
-    border: '3px solid #0a1422',
-    bg: '#1b2c47',
-    title: '#0f1d33',
+    border: '1px solid #4a6a9a',
+    bg: '#1e2d49',
+    title: '#15223a',
   },
   emphasis: {
-    border: '3px solid #0a1422',
-    bg: '#24395c',
-    title: '#2a4a73',
+    border: '1px solid #5a7aac',
+    bg: '#22335a',
+    title: '#1a2a4a',
   },
   modal: {
-    border: '4px solid #0a1422',
-    bg: '#1b2c47',
-    title: '#0f1d33',
+    border: '1px solid #4a6a9a',
+    bg: '#1e2d49',
+    title: '#15223a',
   },
   navy: {
-    border: '3px solid #0a1422',
-    bg: '#1b2c47',
-    title: '#0f1d33',
+    border: '1px solid #4a6a9a',
+    bg: '#1e2d49',
+    title: '#15223a',
   },
 };
 
@@ -76,11 +77,8 @@ export const PixelWindow = ({
     : {
         border: tokens.border,
         background: tokens.bg,
-        boxShadow:
-          variant === 'navy'
-            ? 'inset 0 0 0 1px #3d5a85, 3px 3px 0 rgba(0,0,0,0.45)'
-            : 'inset 0 0 0 1px #3d5a85, 4px 4px 0 rgba(0,0,0,0.35)',
-        borderRadius: 2,
+        boxShadow: '0 2px 6px rgba(0,0,0,0.35)',
+        borderRadius: 0,
       };
 
   return (
@@ -97,13 +95,12 @@ export const PixelWindow = ({
         <div
           style={{
             background: tokens.title,
-            color: '#ffd54a',
-            padding: '5px 10px',
+            color: '#ffffff',
+            padding: '4px 8px',
             fontWeight: 700,
-            letterSpacing: '0.08em',
-            fontSize: 13,
-            borderBottom: '2px solid #0a1422',
-            // ピクセルフォント風にじにじ感を控えめに
+            letterSpacing: '0.06em',
+            fontSize: 12,
+            borderBottom: '1px solid #4a6a9a',
             textShadow: '1px 1px 0 rgba(0,0,0,0.5)',
           }}
         >
@@ -113,7 +110,7 @@ export const PixelWindow = ({
       <div
         className={bodyClassName}
         style={{
-          padding: 14,
+          padding: 10,
           ...bodyStyle,
         }}
       >

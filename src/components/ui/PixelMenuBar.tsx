@@ -2,22 +2,11 @@ import type { ReactNode } from 'react';
 import { PixelIcon } from './PixelIcon';
 
 /**
- * オフィス画面下部の常駐メニューバー。アイコン横並び、選択中はハイライト。
+ * 画面下部の常駐 dock（v0.11 G5：リファレンス準拠のタイル型ボタン）。
  *
- * 使い方：
- *   <PixelMenuBar
- *     items={[
- *       { id: 'plan', label: '計画', emoji: '📋', onClick: () => goTo('plan') },
- *       ...
- *     ]}
- *     activeId="plan"
- *   />
- *
- * もしくは `children` で自由に PixelMenuBarItem を並べる。
- *
- * 仕様：
- * - SKILL `office-visual-design` §1 のカイロソフト風テイスト
- * - 選択中アイテムは黄色ハイライト + 上方向に少し浮き出す（transform）
+ * - 各メニューは四角いタイル（紺 + 細枠）。選択中は黄色タイル + 紺文字
+ * - アイコン上 + ラベル下の縦構成
+ * - dock 背景はさらに暗い紺
  */
 
 export type PixelMenuItem = {
@@ -46,12 +35,12 @@ export const PixelMenuBar = ({ items, activeId, children, className, style }: Pr
       style={{
         display: 'flex',
         justifyContent: 'center',
-        gap: 8,
-        padding: '10px 16px',
-        height: 84,
-        background: '#0f1d33',
-        borderTop: '4px solid #0a1422',
-        boxShadow: 'inset 0 2px 0 #3d5a85',
+        alignItems: 'center',
+        gap: 6,
+        padding: '8px 16px',
+        height: 72,
+        background: '#101c30',
+        borderTop: '1px solid #4a6a9a',
         imageRendering: 'pixelated',
         flexShrink: 0,
         ...style,
@@ -83,27 +72,26 @@ const PixelMenuBarItem = ({ item, active }: ItemProps) => {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 2,
-        padding: '6px 10px 4px',
-        background: active ? '#ffd54a' : 'transparent',
-        border: active ? '3px solid #0a1422' : '3px solid transparent',
-        color: active ? '#1a0f08' : '#fff8e0',
+        width: 64,
+        height: 56,
+        background: active ? '#ffd54a' : '#1e2d49',
+        border: active ? '1px solid #ffd54a' : '1px solid #4a6a9a',
+        color: active ? '#0a1422' : '#ffffff',
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.4 : 1,
         fontFamily: 'inherit',
         fontWeight: 700,
-        fontSize: 11,
+        fontSize: 10,
         letterSpacing: '0.04em',
-        transform: active ? 'translate(0, -2px)' : 'translate(0, 0)',
-        transition: 'transform 80ms steps(1)',
         imageRendering: 'pixelated',
-        boxShadow: active ? 'inset 0 0 0 1px #fff8e0' : 'none',
         userSelect: 'none',
-        minWidth: 56,
+        borderRadius: 0,
       }}
     >
-      <PixelIcon src={iconSrc} emoji={emoji ?? ''} label={label} size={28} />
-      <span style={{ textShadow: active ? 'none' : '1px 1px 0 rgba(0,0,0,0.6)' }}>{label}</span>
+      <PixelIcon src={iconSrc} emoji={emoji ?? ''} label={label} size={24} />
+      <span>{label}</span>
     </button>
   );
 };

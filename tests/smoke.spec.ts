@@ -69,11 +69,13 @@ test('「図鑑」クリックでジャンル相性図鑑に遷移', async ({ pa
   await expect(page.locator('text=ジャンル相性図鑑').first()).toBeVisible();
 });
 
-test('PixelStatusBar に資金・ファン・従業員・作品が表示される', async ({ page }) => {
+test('PixelStatusBar に会社名・日付・資金・ファン数が表示される', async ({ page }) => {
   await resetAndOpen(page);
-  for (const label of ['資金', 'ファン', '従業員', '作品']) {
-    await expect(page.locator(`text=${label}`).first()).toBeVisible();
-  }
+  // v0.11 G5：リファレンス準拠ヘッダー（会社名 + 規模バッジ / 日付 / ¥ / ファン数）
+  await expect(page.locator('text=タイピング工場').first()).toBeVisible();
+  await expect(page.locator('text=ファン数').first()).toBeVisible();
+  await expect(page.locator('text=/¥[\\d,]+/').first()).toBeVisible();
+  await expect(page.locator('text=/\\d+年\\s*\\d+月\\s*第\\d+週/').first()).toBeVisible();
 });
 
 // v0.10 のコアループ通しテストは tests/v10-screens.spec.ts に分離。

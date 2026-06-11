@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { SCALE_BY_ID } from '../../data/scales';
 import { useGameStore } from '../../state/gameStore';
 import { formatGameDate } from '../../state/types';
 import { formatYen } from '../../utils/format';
-import { PixelIcon } from './PixelIcon';
 
 /**
  * v0.11 G3：数値の離散カウントアップ。
@@ -41,23 +41,17 @@ const useAnimatedNumber = (target: number): number => {
 type MoneyFloat = { id: number; delta: number };
 
 /**
- * 画面上部の常駐ステータスバー（v0.11 固定 56px 高）。
+ * 画面上部の常駐ヘッダーバー（v0.11 G5：リファレンス準拠の薄い 1 行構成、40px）。
  *
- * 構造：
- *   左ゾーン：💰 資金 / 👥 ファン / 🧑 従業員 / 📚 作品
- *   右ゾーン：📅 ゲーム内日付 + 次の週まで進捗バー
+ *   [🏭 タイピング工場 (規模バッジ)]   [2026年 1月 1週]   [¥12,500,000] [ファン 125,680人]
  *
- * 仕様：
- * - 1280px 幅にフィット、左右余白 16px
- * - 高さ 56px 固定（layout-design.md §1）
- * - 黒板/レトロ電光掲示板風の濃い背景に明るい数字
- * - 数字は tabular-nums で揃える
+ * - 会社名 + 現在規模の黄色バッジ（リファレンスの Lv.12 バッジ相当）
+ * - 日付は中央
+ * - 資金は黄色、ファンは白。仕切り線は使わない（余白で区切る）
+ * - 「次の週まで」進捗は下部ティッカーに移動（ここには置かない）
  */
 
 const formatNumber = (n: number): string => n.toLocaleString('ja-JP');
-
-const IDLE_MS_PER_WEEK = 30_000;
-const DEVELOP_MS_PER_WEEK = 7500;
 
 type Props = {
   className?: string;
@@ -67,10 +61,11 @@ type Props = {
 export const PixelStatusBar = ({ className, style }: Props) => {
   const funds = useGameStore((s) => s.funds);
   const fans = useGameStore((s) => s.fans);
-  const employeeCount = useGameStore((s) => s.employees.length);
-  const workCount = useGameStore((s) => s.library.length);
+  const unlocked = useGameStore((s) => s.unlockedScales);
   const currentDate = useGameStore((s) => s.currentDate);
-  const screen = useGameStore((s) => s.screen);
+
+  const currentScale = unlocked[unlocked.length - 1] ?? 'mini';
+  const scaleName = SCALE_BY_ID[currentScale]?.name ?? 'ミニゲーム';
 
   // G3：資金カウントアップ + 増減フラッシュ + 浮き「+¥」
   const displayFunds = useAnimatedNumber(funds);
@@ -84,11 +79,9 @@ export const PixelStatusBar = ({ className, style }: Props) => {
     prevFundsRef.current = funds;
     if (delta === 0) return;
 
-    // フラッシュ（離散 2 ステップ）
     setFundsFlash(delta > 0 ? 'gain' : 'loss');
     const flashT = setTimeout(() => setFundsFlash(null), 450);
 
-    // 浮き文字（最大 3 個まで同時）
     floatIdRef.current += 1;
     const id = floatIdRef.current;
     setMoneyFloats((prev) => [...prev.slice(-2), { id, delta }]);
@@ -102,24 +95,6 @@ export const PixelStatusBar = ({ className, style }: Props) => {
     };
   }, [funds]);
 
-  // 次の週までの進捗（GlobalTicker の lastWeekAt と同期）
-  const [weekProgress, setWeekProgress] = useState(0);
-  const weekStartRef = useRef<number>(performance.now());
-
-  useEffect(() => {
-    weekStartRef.current = performance.now();
-    setWeekProgress(0);
-  }, [currentDate]);
-
-  useEffect(() => {
-    const intervalMs = screen === 'develop' ? DEVELOP_MS_PER_WEEK : IDLE_MS_PER_WEEK;
-    const t = setInterval(() => {
-      const elapsed = performance.now() - weekStartRef.current;
-      setWeekProgress(Math.min(100, (elapsed / intervalMs) * 100));
-    }, 250);
-    return () => clearInterval(t);
-  }, [screen]);
-
   return (
     <div
       className={className}
@@ -127,119 +102,81 @@ export const PixelStatusBar = ({ className, style }: Props) => {
       style={{
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 16,
-        padding: '8px 16px',
-        height: 56,
-        background: '#0d1626',
-        borderBottom: '4px solid #0a1422',
+        gap: 24,
+        padding: '0 14px',
+        height: 40,
+        background: '#16243d',
+        borderBottom: '1px solid #4a6a9a',
         color: '#ffffff',
-        boxShadow: 'inset 0 -2px 0 #3d5a85',
         fontWeight: 700,
         letterSpacing: '0.04em',
+        fontSize: 13,
         imageRendering: 'pixelated',
         flexShrink: 0,
         ...style,
       }}
     >
-      {/* 左ゾーン：会社ステータス 4 項目 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ position: 'relative' }}>
-          <StatusItem
-            emoji="💰"
-            label="資金"
-            value={formatYen(displayFunds)}
-            color="#ffd54a"
-            valueClassName={
-              fundsFlash === 'gain' ? 'funds-gain' : fundsFlash === 'loss' ? 'funds-loss' : undefined
-            }
-          />
-          {/* G3：浮き「+¥ / -¥」 */}
-          {moneyFloats.map((f) => (
-            <span
-              key={f.id}
-              className="money-float"
-              style={{ color: f.delta > 0 ? '#6cff95' : '#ff6b6b' }}
-            >
-              {f.delta > 0 ? '+' : ''}
-              {formatYen(f.delta)}
-            </span>
-          ))}
-        </div>
-        <Divider />
-        <StatusItem emoji="👥" label="ファン" value={formatNumber(fans)} color="#7adfff" />
-        <Divider />
-        <StatusItem emoji="🧑‍💻" label="従業員" value={`${employeeCount}人`} color="#9bff9b" />
-        <Divider />
-        <StatusItem emoji="📚" label="作品" value={`${workCount}本`} color="#ffb8d8" />
+      {/* 会社名 + 規模バッジ */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 15 }}>🏭</span>
+        <span>タイピング工場</span>
+        <span
+          style={{
+            padding: '1px 8px',
+            background: '#ffd54a',
+            color: '#0a1422',
+            fontSize: 11,
+            fontWeight: 700,
+            borderRadius: 2,
+          }}
+        >
+          {scaleName}
+        </span>
       </div>
 
-      {/* 右ゾーン：日付 + 次の週進捗 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <PixelIcon emoji="📅" label="日付" size={20} />
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-          <span style={{ fontSize: 13, color: '#ffffff', fontVariantNumeric: 'tabular-nums' }}>
-            {formatGameDate(currentDate)}
-          </span>
-          <div
-            aria-label="次の週まで"
-            style={{
-              width: 120,
-              height: 6,
-              background: '#0a1422',
-              border: '2px solid #0a1422',
-            }}
+      {/* 日付（中央寄せ） */}
+      <div
+        style={{
+          flex: 1,
+          textAlign: 'center',
+          fontVariantNumeric: 'tabular-nums',
+          color: '#e8f0ff',
+        }}
+      >
+        {formatGameDate(currentDate)}
+      </div>
+
+      {/* 資金（黄色、カウントアップ + 浮き文字） */}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span
+          className={
+            fundsFlash === 'gain' ? 'funds-gain' : fundsFlash === 'loss' ? 'funds-loss' : undefined
+          }
+          style={{
+            color: '#ffd54a',
+            fontVariantNumeric: 'tabular-nums',
+            fontSize: 14,
+          }}
+        >
+          ¥{formatNumber(displayFunds)}
+        </span>
+        {moneyFloats.map((f) => (
+          <span
+            key={f.id}
+            className="money-float"
+            style={{ color: f.delta > 0 ? '#6cff95' : '#ff6b6b' }}
           >
-            <div
-              style={{
-                width: `${weekProgress}%`,
-                height: '100%',
-                background: '#5aa84a',
-                transition: 'width 250ms linear',
-              }}
-            />
-          </div>
-        </div>
+            {f.delta > 0 ? '+' : ''}
+            {formatYen(f.delta)}
+          </span>
+        ))}
+      </div>
+
+      {/* ファン数 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 11, color: '#9fb6d4' }}>ファン数</span>
+        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatNumber(fans)}人</span>
       </div>
     </div>
   );
 };
-
-type StatusItemProps = {
-  emoji: string;
-  label: string;
-  value: string;
-  color: string;
-  valueClassName?: string;
-};
-
-const StatusItem = ({ emoji, label, value, color, valueClassName }: StatusItemProps) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-    <PixelIcon emoji={emoji} label={label} size={22} />
-    <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
-      <span style={{ fontSize: 9, color: '#9fb6d4' }}>{label}</span>
-      <span
-        className={valueClassName}
-        style={{
-          fontSize: 13,
-          color,
-          fontVariantNumeric: 'tabular-nums',
-          textShadow: '1px 1px 0 rgba(0,0,0,0.7)',
-        }}
-      >
-        {value}
-      </span>
-    </div>
-  </div>
-);
-
-const Divider = () => (
-  <div
-    aria-hidden
-    style={{
-      width: 2,
-      height: 20,
-      background: '#3d5a85',
-    }}
-  />
-);
