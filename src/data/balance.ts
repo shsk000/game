@@ -270,16 +270,25 @@ export const LUCK_DEFAULT = 50;
 export const KEYS_PER_KANA = 2.0;
 
 /**
- * 開発の「作業量」目標を決める係数（フレーズ 1 本あたりの想定秒数）。
- * workTarget（完走すべきフレーズ数）= timeLimitSec / DEV_SEC_PER_PHRASE。
+ * 開発の「作業量」目標（完走すべきフレーズ数）を決める係数。
+ * workTarget = neededWeeks × DEV_PHRASES_PER_WEEK（最低 3）。
  *
- * 「速く打つほど早く終わる」ための作業量モデル。
- * 制限秒（締切）に対しこの密度で作業量を置くことで、
- * - 速い人：締切より早く完走 → 早期リリース
- * - 平均/遅い人：締切に到達して終了
- * になる。小さくしすぎると「数語で終了（B-Crit-2）」が再発するので 2.0 未満にしない。
+ * v0.11 後期：締切（残り時間）を廃止し、進捗オンリーのモデルに変更。
+ * 打って作業量（doneLoC）を workTarget まで埋めないと完了しない（AFK では終わらない）。
+ * 例：mini neededWeeks 8 × 3 = 24 フレーズ。
+ * 小さくしすぎると「数語で終了（B-Crit-2）」が再発するので下げすぎない。
  */
-export const DEV_SEC_PER_PHRASE = 2.5;
+export const DEV_PHRASES_PER_WEEK = 3;
+
+/**
+ * 「速く打つほどある程度早く終わる」ための速度ボーナス。
+ * フレーズ 1 本の進捗寄与 = 1 × (1 + bonus)。bonus は wpm に応じて 0〜maxBonus。
+ * - baseWpm 以下：ボーナス 0（1 本 = 1.0 進捗）
+ * - fastWpm 以上：ボーナス最大（1 本 = 1 + maxBonus 進捗）
+ * 速い人ほど少ないフレーズ数で workTarget に到達＝早期完了。
+ * maxBonus は B-Crit-2 再発を避けるため控えめに（24 本 → 最速でも ≈15 本）。
+ */
+export const DEV_SPEED_GAIN = { baseWpm: 90, fastWpm: 200, maxBonus: 0.6 } as const;
 
 /**
  * 「開発への影響」4 指標の S/A/B/C しきい値（DevelopScreen で表示）。

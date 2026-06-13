@@ -7,6 +7,7 @@ import {
   computeDevImpact,
   type ImpactRank,
   type KeystrokeRating,
+  progressGain,
   rankColor,
   ratingForInterval,
   toCharsPerMin,
@@ -36,8 +37,9 @@ export const DevelopScreen = () => {
   const reportAccuracy = useGameStore((s) => s.reportAccuracy);
   const clearBug = useGameStore((s) => s.clearBug);
 
-  const [remainingSec, setRemainingSec] = useState(0);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  // 速度ボーナス算出用：最新 wpm を保持（onWpm で更新）
+  const wpmRef = useRef(0);
 
   // 打鍵レーティング（COMBO +GREAT!）：直近正打の打鍵間隔から
   const [rating, setRating] = useState<KeystrokeRating>(null);
@@ -65,11 +67,17 @@ export const DevelopScreen = () => {
   const { view, failCount, combo, wpm, accuracy } = useTyping({
     phrases: effectivePhrases,
     onPhraseComplete: () => {
-      if (current?.bugPhrase) {
-        addDevelopLoC(3);
-        clearBug();
-      } else {
-        addDevelopLoC(1);
+      // 進捗を加算（速く打つほど 1 本の寄与が増える＝ある程度早く完了）
+      const isBug = !!current?.bugPhrase;
+      addDevelopLoC(progressGain(wpmRef.current, isBug));
+      if (isBug) clearBug();
+      // 完了判定は「入力」起点のみ（残り時間＝締切は廃止）。
+      // 作業量目標 workTarget に達したら finishDevelopment。打たなければ永遠に終わらない。
+      const s = useGameStore.getState();
+      const done = s.current?.doneLoC ?? 0;
+      const target = s.current?.workTarget ?? 1;
+      if (done >= target && s.current?.finishedAt == null) {
+        finishDevelopment();
       }
     },
     paused: !current || current.finishedAt !== null,
@@ -86,35 +94,14 @@ export const DevelopScreen = () => {
         ratingTimerRef.current = window.setTimeout(() => setRating(null), 600);
       }
     },
-    onWpm: (w) => reportWPM(w),
+    onWpm: (w) => {
+      wpmRef.current = w;
+      reportWPM(w);
+    },
     onAccuracy: (a) => reportAccuracy(a),
   });
 
-  // 制限秒カウントダウン（rAF）。0 到達で finishDevelopment（多重ガード）
-  const startedAt = current?.startedAt ?? null;
-  const timeLimitSec = current?.timeLimitSec ?? 60;
-  const finishedAt = current?.finishedAt ?? null;
   const workTarget = current?.workTarget ?? 1;
-  useEffect(() => {
-    if (startedAt === null) return;
-    let raf = 0;
-    const loop = () => {
-      const elapsedSec = (performance.now() - startedAt) / 1000;
-      const rem = Math.max(0, timeLimitSec - elapsedSec);
-      setRemainingSec(rem);
-      // 完了条件：作業量を満たす（速く打つほど早い）OR 締切（残り 0 秒）
-      const s = useGameStore.getState();
-      const done = s.current?.doneLoC ?? 0;
-      const reachedWork = done >= workTarget;
-      if ((rem <= 0 || reachedWork) && s.current?.finishedAt == null) {
-        finishDevelopment();
-        return; // 以降ループ停止
-      }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [startedAt, timeLimitSec, finishedAt, workTarget, finishDevelopment]);
 
   // バグ発生をテロップに
   const bugPhrase = current?.bugPhrase ?? null;
@@ -126,20 +113,15 @@ export const DevelopScreen = () => {
   const scaleDef = SCALE_BY_ID[current.scale];
   if (!scaleDef) return null;
 
-  // 残り時間の割合・PHASE ドット
-  const timePct = Math.max(0, Math.min(100, (remainingSec / timeLimitSec) * 100));
-  const TOTAL_PHASES = 6;
-  const litDots = Math.max(
-    1,
-    Math.min(TOTAL_PHASES, Math.ceil((1 - remainingSec / timeLimitSec) * TOTAL_PHASES)),
-  );
-
   // 開発への影響 4 指標
   const impact = computeDevImpact({ wpm, accuracy });
   const charsPerMin = toCharsPerMin(wpm);
   const accuracyPct = Math.round(accuracy * 1000) / 10;
-  // 進捗（作業量）：速く打つほど早く 100% に達して完了
+  // 進捗（作業量）：打って workTarget まで埋めると完了。速く打つほど早く 100% に達する。
   const progressPct = Math.max(0, Math.min(100, (current.doneLoC / workTarget) * 100));
+  // PHASE ドットは進捗に連動（演出）
+  const TOTAL_PHASES = 6;
+  const litDots = Math.max(1, Math.min(TOTAL_PHASES, Math.ceil((progressPct / 100) * TOTAL_PHASES)));
 
   return (
     <div className="screen develop-screen" style={{ background: '#05080c' }}>
@@ -275,41 +257,29 @@ export const DevelopScreen = () => {
                   </div>
                 </div>
               </div>
-              {/* 残り時間 + 進捗 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={devBox()}>
-                  <span style={{ fontSize: 11, color: DEV.sub }}>残り時間</span>
-                  <span
-                    style={{
-                      fontSize: 32,
-                      fontWeight: 700,
-                      color: remainingSec <= 10 ? '#ff6b6b' : DEV.timeGreen,
-                      fontVariantNumeric: 'tabular-nums',
-                      lineHeight: 1.1,
-                    }}
-                  >
-                    {remainingSec.toFixed(1)} <span style={{ fontSize: 14 }}>秒</span>
-                  </span>
-                  <SegGauge
-                    pct={timePct}
-                    color={remainingSec <= 10 ? '#ff6b6b' : DEV.timeGreen}
-                    track="#0c1207"
-                  />
-                </div>
-                {/* 進捗（速く打つほど早く 100% → 早期完了） */}
-                <div style={devBox()}>
+              {/* 進捗（打って埋めると完成。速いほど早く 100% に達する） */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ ...devBox(), gap: 8, height: '100%', justifyContent: 'center' }}>
                   <span style={{ fontSize: 11, color: DEV.sub }}>進捗（速いほど早く完成）</span>
                   <span
                     style={{
-                      fontSize: 22,
+                      fontSize: 44,
                       fontWeight: 700,
                       color: DEV.greenBright,
                       fontVariantNumeric: 'tabular-nums',
+                      lineHeight: 1,
                     }}
                   >
-                    {Math.floor(progressPct)} <span style={{ fontSize: 12 }}>%</span>
+                    {Math.floor(progressPct)} <span style={{ fontSize: 16 }}>%</span>
                   </span>
-                  <SegGauge pct={progressPct} color={DEV.greenBright} track="#0c1207" />
+                  <SegGauge pct={progressPct} color={DEV.greenBright} track="#0c1207" height={12} />
+                  <span style={{ fontSize: 11, color: DEV.sub }}>
+                    完成まであと{' '}
+                    <span style={{ color: DEV.cream, fontWeight: 700 }}>
+                      {Math.max(0, Math.ceil(workTarget - current.doneLoC))}
+                    </span>{' '}
+                    本
+                  </span>
                 </div>
               </div>
             </div>

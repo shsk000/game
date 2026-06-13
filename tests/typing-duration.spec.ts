@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * 検証：v0.11 開発フェーズの制限秒モデル。
- * mini は neededWeeks 8 週 × 7.5 秒 = timeLimitSec 60。
- * 開発開始 → develop 遷移 → timeLimitSec=60 → カウントダウンが減ることを確認する。
- * （release まで 60 秒待つのはテストが遅いので、制限秒の設定と減少のみ検証）
+ * 検証：v0.11 後期の開発フェーズ＝進捗オンリーモデル。
+ * 締切（残り時間）は廃止。作業量目標 workTarget まで打って初めて完了する。
+ * mini は neededWeeks 8 週 × DEV_PHRASES_PER_WEEK(3) = workTarget 24 本。
+ * 開発開始 → develop 遷移 → workTarget=24 が設定され、進捗 UI が出ることを確認する。
  */
-test('mini の開発は制限秒 60 でカウントダウンする', async ({ page }) => {
+test('mini の開発は進捗オンリー（workTarget 24・残り時間なし）', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.addInitScript(() => {
     (window as unknown as { __sfxMuted: boolean }).__sfxMuted = true;
@@ -63,18 +63,19 @@ test('mini の開発は制限秒 60 でカウントダウンする', async ({ pa
     )
     .catch(() => {});
 
-  const limit = await page.evaluate(() => {
+  const target = await page.evaluate(() => {
     // @ts-ignore
-    return (window as any).__gs?.()?.current?.timeLimitSec;
+    return (window as any).__gs?.()?.current?.workTarget;
   });
-  expect(limit).toBe(60);
+  expect(target).toBe(24);
 
-  // 残り時間表示が減っているか（2 秒待って 60 秒未満になる）
-  await page.waitForTimeout(2000);
-  const remainTextOk = await page
+  // 締切は廃止：残り時間表示は無い。進捗 UI が出ている
+  await expect(page.locator('text=進捗（速いほど早く完成）').first()).toBeVisible();
+  await expect(page.locator('text=完成まであと').first()).toBeVisible();
+  const hasCountdown = await page
     .locator('text=/\\d+\\.\\d 秒/')
     .first()
     .isVisible()
     .catch(() => false);
-  expect(remainTextOk).toBe(true);
+  expect(hasCountdown).toBe(false);
 });

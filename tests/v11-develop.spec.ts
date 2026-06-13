@@ -74,7 +74,7 @@ test('v11 develop panel スクショ + 主要要素', async ({ page }) => {
   expect(screen).toBe('develop');
 
   await expect(page.locator('text=開発フェーズ').first()).toBeVisible();
-  await expect(page.locator('text=残り時間').first()).toBeVisible();
+  await expect(page.locator('text=進捗（速いほど早く完成）').first()).toBeVisible();
   await expect(page.locator('text=COMBO').first()).toBeVisible();
   await expect(page.locator('text=入力する文章').first()).toBeVisible();
   await expect(page.locator('text=開発への影響（この入力結果）').first()).toBeVisible();
@@ -82,26 +82,30 @@ test('v11 develop panel スクショ + 主要要素', async ({ page }) => {
   await page.screenshot({ path: 'test-results/v11-develop.png', fullPage: false });
 });
 
-test('v11 develop: 制限秒カウントダウンが減る', async ({ page }) => {
+test('v11 develop: 進捗オンリー（入力しないと終わらない・時間で完了しない）', async ({ page }) => {
   await seedAndStartDevelop(page);
-  const t1 = await page.evaluate(() => {
-    // @ts-ignore
-    return (window as any).__gs?.()?.current?.timeLimitSec;
-  });
-  expect(t1).toBeGreaterThan(0);
-  console.log('[develop] timeLimitSec =', t1);
 
-  // 開発中はゲーム内時間が止まっている（currentDate 不変）
+  // workTarget（作業量目標）が設定され、進捗オンリーで動く
+  const target = await page.evaluate(() => {
+    // @ts-ignore
+    return (window as any).__gs?.()?.current?.workTarget;
+  });
+  expect(target).toBeGreaterThan(0);
+  console.log('[develop] workTarget =', target);
+
+  // 入力しないまま放置 → 締切が無いので開発は完了せず develop のまま
+  // （かつゲーム内時間も止まっている）
   const d1 = await page.evaluate(() => {
     // @ts-ignore
     const c = (window as any).__gs?.()?.currentDate;
     return `${c.year}-${c.month}-${c.week}`;
   });
   await page.waitForTimeout(3000);
-  const d2 = await page.evaluate(() => {
+  const after = await page.evaluate(() => {
     // @ts-ignore
-    const c = (window as any).__gs?.()?.currentDate;
-    return `${c.year}-${c.month}-${c.week}`;
+    const s = (window as any).__gs?.();
+    return { screen: s?.screen, date: `${s.currentDate.year}-${s.currentDate.month}-${s.currentDate.week}` };
   });
-  expect(d2).toBe(d1); // 開発中は週が進まない
+  expect(after.screen).toBe('develop'); // 放置では終わらない
+  expect(after.date).toBe(d1); // 開発中は週が進まない
 });

@@ -180,9 +180,9 @@ export type CurrentProject = {
   /** v0.10：WPM しきい値クロスで -X 週テロップを出した一覧（重複防止） */
   timeShortcutsUnlocked?: number[];
   /**
-   * v0.11：開発フェーズの制限時間（リアル秒）。startProject 時に
-   * neededWeeks × (TIME_RATE_MS_PER_WEEK.typingActive/1000) で確定保存。
-   * DevelopScreen の rAF で残り秒をカウントダウンし、0 到達で finishDevelopment。
+   * @deprecated v0.11 後期に締切（残り時間）モデルを廃止。現在は未設定。
+   * 旧：開発フェーズの制限秒。0 到達で finishDevelopment していた。
+   * 現行は進捗オンリー（workTarget まで打って完了）。後方互換のため型のみ残置。
    */
   timeLimitSec?: number;
   /** v0.11：演出表示用のミッション名（例 MISSION_04） */
@@ -190,9 +190,10 @@ export type CurrentProject = {
   /** v0.11：演出表示用のミッション見出し（例 敵を配置する） */
   missionDesc?: string;
   /**
-   * v0.11：早期完了の作業量目標（完走すべきフレーズ数）。
-   * doneLoC がこれに達したら制限秒を待たず開発完了（速く打つほど早く終わる）。
-   * timeLimitSec / DEV_SEC_PER_PHRASE で startProject 時に確定。
+   * v0.11：開発完了の作業量目標（完走すべきフレーズ数）。
+   * doneLoC がこれに達したら開発完了。締切は無く、打たないと終わらない。
+   * neededWeeks × DEV_PHRASES_PER_WEEK で startProject 時に確定。
+   * 速く打つほど 1 本の進捗寄与が増え（DEV_SPEED_GAIN）、少ない本数で到達＝早期完了。
    */
   workTarget?: number;
 };

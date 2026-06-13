@@ -1,12 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { ACHIEVEMENTS } from '../data/achievements';
-import {
-  DEBT_CONFIG,
-  DEV_SEC_PER_PHRASE,
-  TIME_RATE_MS_PER_WEEK,
-  computeBorrowingLimit,
-} from '../data/balance';
+import { DEBT_CONFIG, DEV_PHRASES_PER_WEEK, computeBorrowingLimit } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import {
@@ -350,11 +345,10 @@ export const useGameStore = create<GameState>()(
     startProject: (genreId, themeId, scale, selectedCategories, assignedEmployeeIds) => {
       const def = SCALE_BY_ID[scale];
       const title = generateTitle(genreId, themeId);
-      // v0.11：制限時間 = neededWeeks × (typingActive レート秒)。例 mini 8 週 × 7.5 = 60 秒
-      const secPerWeek = TIME_RATE_MS_PER_WEEK.typingActive / 1000;
-      const timeLimitSec = Math.max(1, Math.round(def.neededWeeks * secPerWeek));
-      // v0.11：早期完了の作業量目標（完走フレーズ数）。速く打つほど締切前に完了できる。
-      const workTarget = Math.max(3, Math.round(timeLimitSec / DEV_SEC_PER_PHRASE));
+      // v0.11 後期：締切（残り時間）を廃止し進捗オンリーに。
+      // 作業量目標 workTarget（完走フレーズ数）まで打って初めて完了する（AFK では終わらない）。
+      // 例：mini neededWeeks 8 × 3 = 24 フレーズ。速く打つほど少ない本数で到達＝早期完了。
+      const workTarget = Math.max(3, Math.round(def.neededWeeks * DEV_PHRASES_PER_WEEK));
       const project: CurrentProject = {
         title,
         genreId,
@@ -374,7 +368,6 @@ export const useGameStore = create<GameState>()(
         perf: { wpm: 0, maxCombo: 0, accuracy: 1 },
         startDate: get().currentDate,
         timeShortcutsUnlocked: [],
-        timeLimitSec,
         workTarget,
         ...buildMissionFlavor(genreId),
       };
@@ -513,7 +506,9 @@ export const useGameStore = create<GameState>()(
     addDevelopLoC: (n) => {
       const cur = get().current;
       if (!cur || cur.finishedAt !== null) return;
-      const newDone = Math.min(cur.requiredLoC, cur.doneLoC + n);
+      // v0.11 後期：進捗の上限は workTarget（作業量目標）。doneLoC が達したら完了。
+      const cap = cur.workTarget ?? cur.requiredLoC;
+      const newDone = Math.min(cap, cur.doneLoC + n);
       set({ current: { ...cur, doneLoC: newDone } });
     },
 

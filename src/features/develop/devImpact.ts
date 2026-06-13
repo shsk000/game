@@ -1,4 +1,9 @@
-import { DEV_IMPACT_THRESHOLDS, KEYS_PER_KANA, KEYSTROKE_RATING } from '../../data/balance';
+import {
+  DEV_IMPACT_THRESHOLDS,
+  DEV_SPEED_GAIN,
+  KEYS_PER_KANA,
+  KEYSTROKE_RATING,
+} from '../../data/balance';
 
 /**
  * v0.11 開発フェーズ：中央パネルの「開発への影響（この入力結果）」算出（純関数）。
@@ -64,6 +69,18 @@ export const ratingForInterval = (intervalMs: number): KeystrokeRating => {
   if (intervalMs <= KEYSTROKE_RATING.GREAT) return 'GREAT';
   if (intervalMs <= KEYSTROKE_RATING.GOOD) return 'GOOD';
   return null;
+};
+
+/**
+ * フレーズ 1 本完走あたりの進捗寄与（作業量）。
+ * 速く打つ（wpm 高い）ほど 1 本の寄与が増え、少ないフレーズ数で workTarget に到達＝早期完了。
+ * 通常 1 本＝1.0〜(1+maxBonus)。バグ修正フレーズは base を 3 にして手応えを出す。
+ */
+export const progressGain = (wpm: number, isBug: boolean): number => {
+  const { baseWpm, fastWpm, maxBonus } = DEV_SPEED_GAIN;
+  const t = clamp((wpm - baseWpm) / (fastWpm - baseWpm), 0, 1);
+  const factor = 1 + t * maxBonus;
+  return (isBug ? 3 : 1) * factor;
 };
 
 /** ランク → 表示色 */
