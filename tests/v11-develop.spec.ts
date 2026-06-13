@@ -82,10 +82,10 @@ test('v11 develop panel スクショ + 主要要素', async ({ page }) => {
   await page.screenshot({ path: 'test-results/v11-develop.png', fullPage: false });
 });
 
-test('v11 develop: 進捗オンリー（入力しないと終わらない・時間で完了しない）', async ({ page }) => {
+test('v11 develop: 完了は入力のみ・時間は裏で進む', async ({ page }) => {
   await seedAndStartDevelop(page);
 
-  // workTarget（作業量目標）が設定され、進捗オンリーで動く
+  // workTarget（作業量目標）が設定され、進捗オンリーで完了が決まる
   const target = await page.evaluate(() => {
     // @ts-ignore
     return (window as any).__gs?.()?.current?.workTarget;
@@ -93,19 +93,20 @@ test('v11 develop: 進捗オンリー（入力しないと終わらない・時�
   expect(target).toBeGreaterThan(0);
   console.log('[develop] workTarget =', target);
 
-  // 入力しないまま放置 → 締切が無いので開発は完了せず develop のまま
-  // （かつゲーム内時間も止まっている）
-  const d1 = await page.evaluate(() => {
+  // 入力しないまま放置 → 完了はしない（develop のまま）が、裏で週は進む。
+  const idx1 = await page.evaluate(() => {
     // @ts-ignore
     const c = (window as any).__gs?.()?.currentDate;
-    return `${c.year}-${c.month}-${c.week}`;
+    return c.year * 48 + (c.month - 1) * 4 + (c.week - 1);
   });
-  await page.waitForTimeout(3000);
+  // 開発中は 7.5s/週。1 週ぶん進む余裕をみて 9s 待つ。
+  await page.waitForTimeout(9000);
   const after = await page.evaluate(() => {
     // @ts-ignore
     const s = (window as any).__gs?.();
-    return { screen: s?.screen, date: `${s.currentDate.year}-${s.currentDate.month}-${s.currentDate.week}` };
+    const c = s.currentDate;
+    return { screen: s?.screen, idx: c.year * 48 + (c.month - 1) * 4 + (c.week - 1) };
   });
-  expect(after.screen).toBe('develop'); // 放置では終わらない
-  expect(after.date).toBe(d1); // 開発中は週が進まない
+  expect(after.screen).toBe('develop'); // 入力しない限り完了しない
+  expect(after.idx).toBeGreaterThan(idx1); // 裏で時間（週）は進む
 });

@@ -3,6 +3,7 @@ import { PixelStatusBar, SegGauge } from '../../components/ui';
 import { getPhrases } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { useGameStore } from '../../state/gameStore';
+import { dateToWeekIndex } from '../../state/types';
 import {
   computeDevImpact,
   type ImpactRank,
@@ -30,6 +31,7 @@ type Toast = { id: number; text: string; tone: 'warn' | 'good' | 'info' };
  */
 export const DevelopScreen = () => {
   const current = useGameStore((s) => s.current);
+  const currentDate = useGameStore((s) => s.currentDate);
   const addDevelopLoC = useGameStore((s) => s.addDevelopLoC);
   const finishDevelopment = useGameStore((s) => s.finishDevelopment);
   const reportCombo = useGameStore((s) => s.reportCombo);
@@ -122,6 +124,22 @@ export const DevelopScreen = () => {
   // PHASE ドットは進捗に連動（演出）
   const TOTAL_PHASES = 6;
   const litDots = Math.max(1, Math.min(TOTAL_PHASES, Math.ceil((progressPct / 100) * TOTAL_PHASES)));
+
+  // 開発期間：裏で時間が進むので、経過週・予定週・その差を表示（速く打つほど短く済む）
+  const plannedWeeks = Math.max(1, scaleDef.neededWeeks);
+  const elapsedWeeks = current.startDate
+    ? Math.max(0, dateToWeekIndex(currentDate) - dateToWeekIndex(current.startDate))
+    : 0;
+  const weekDiff = elapsedWeeks - plannedWeeks; // + 超過 / - 予定内
+  const weeksLeft = Math.max(0, plannedWeeks - elapsedWeeks); // 予定までの残り週
+  // 予定消化率（バー）：予定 100% に近づくほど急げ、超過分は赤で 100% 超え表示
+  const budgetPct = Math.min(130, (elapsedWeeks / plannedWeeks) * 100);
+  const overBudget = weekDiff > 0;
+  // 予定内＝緑→残り少で黄、超過＝赤
+  const periodColor = overBudget ? '#ff6b6b' : weeksLeft <= 1 ? DEV.orange : DEV.timeGreen;
+  const periodNote = overBudget
+    ? `予定超過 +${weekDiff} 週（固定費がかさむ！）`
+    : `予定内：残り ${weeksLeft} 週`;
 
   return (
     <div className="screen develop-screen" style={{ background: '#05080c' }}>
@@ -257,20 +275,21 @@ export const DevelopScreen = () => {
                   </div>
                 </div>
               </div>
-              {/* 進捗（打って埋めると完成。速いほど早く 100% に達する） */}
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <div style={{ ...devBox(), gap: 8, height: '100%', justifyContent: 'center' }}>
+              {/* 右カラム：進捗 + 開発期間（裏で進む時間を可視化） */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {/* 進捗（打って埋めると完成。速いほど早く 100% に達する） */}
+                <div style={{ ...devBox(), gap: 6 }}>
                   <span style={{ fontSize: 11, color: DEV.sub }}>進捗（速いほど早く完成）</span>
                   <span
                     style={{
-                      fontSize: 44,
+                      fontSize: 38,
                       fontWeight: 700,
                       color: DEV.greenBright,
                       fontVariantNumeric: 'tabular-nums',
                       lineHeight: 1,
                     }}
                   >
-                    {Math.floor(progressPct)} <span style={{ fontSize: 16 }}>%</span>
+                    {Math.floor(progressPct)} <span style={{ fontSize: 14 }}>%</span>
                   </span>
                   <SegGauge pct={progressPct} color={DEV.greenBright} track="#0c1207" height={12} />
                   <span style={{ fontSize: 11, color: DEV.sub }}>
@@ -279,6 +298,31 @@ export const DevelopScreen = () => {
                       {Math.max(0, Math.ceil(workTarget - current.doneLoC))}
                     </span>{' '}
                     本
+                  </span>
+                </div>
+
+                {/* 開発期間：経過週・予定週・差（早く打つほど短く済む＝コスト節約） */}
+                <div style={{ ...devBox(), gap: 6 }}>
+                  <span style={{ fontSize: 11, color: DEV.sub }}>
+                    開発期間（予定 {plannedWeeks} 週）
+                  </span>
+                  <span
+                    style={{
+                      display: 'flex',
+                      alignItems: 'baseline',
+                      gap: 6,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    <span style={{ fontSize: 11, color: DEV.sub }}>経過</span>
+                    <span style={{ fontSize: 32, fontWeight: 700, color: periodColor, lineHeight: 1 }}>
+                      {elapsedWeeks}
+                    </span>
+                    <span style={{ fontSize: 13, color: periodColor }}>週</span>
+                  </span>
+                  <SegGauge pct={budgetPct} color={periodColor} track="#0c1207" height={12} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: periodColor }}>
+                    {periodNote}
                   </span>
                 </div>
               </div>

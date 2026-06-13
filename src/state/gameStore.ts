@@ -556,51 +556,12 @@ export const useGameStore = create<GameState>()(
       const beat = prevGhost === null || developSec < prevGhost;
       const newGhost = beat ? developSec : prevGhost;
 
-      // v0.11：開発中はゲーム内時間を止めていたので、完了時に neededWeeks 分を一括進行。
-      // またいだ月数ぶん月初固定費を精算する（給与・賃料・借金利息）。
-      const def = SCALE_BY_ID[cur.scale];
-      const weeks = Math.max(1, def?.neededWeeks ?? 1);
-      const startD = get().currentDate;
-      const endD = addWeeks(startD, weeks);
-      // start〜end の間に「第1週（月初）」を何回またいだか
-      let monthsCrossed = 0;
-      {
-        let d = startD;
-        for (let i = 0; i < weeks; i++) {
-          const nxt = addWeeks(d, 1);
-          if (nxt.month !== d.month || nxt.year !== d.year) monthsCrossed += 1;
-          d = nxt;
-        }
-      }
-      // 固定費を monthsCrossed 回分まとめて精算（triggerGameOver はここでは呼ばない＝
-      // 開発成功直後のゲームオーバーを避け、リリース後の通常 tick に委ねる）
-      const s = get();
-      const salaries = sumMonthlySalaries(s.employees);
-      const currentScale: Scale = s.unlockedScales[s.unlockedScales.length - 1] ?? 'mini';
-      const rent = SCALE_BY_ID[currentScale]?.monthlyRent ?? 0;
-      let funds = s.funds;
-      let debt = s.debt;
-      let lastFixedCost = s.lastFixedCost;
-      for (let i = 0; i < monthsCrossed; i++) {
-        const interest = Math.round(debt * DEBT_CONFIG.monthlyInterestRate);
-        const total = salaries + rent + interest;
-        const raw = funds - total;
-        if (raw < 0) {
-          debt += -raw;
-          funds = 0;
-        } else {
-          funds = raw;
-        }
-        lastFixedCost = { salaries, rent, total };
-      }
-
+      // v0.11 後期：開発中は GlobalTicker が裏で週を進め固定費も精算済み。
+      // よってここでは週の一括進行や固定費精算は行わない（二重計上を防ぐ）。
+      // 実際にかかった週数（startDate→currentDate）は releaseWork の developWeeks に反映される。
       set({
-        current: { ...cur, finishedAt: nowMs, doneLoC: cur.requiredLoC },
+        current: { ...cur, finishedAt: nowMs, doneLoC: cur.workTarget ?? cur.requiredLoC },
         ghosts: { ...get().ghosts, [cur.scale]: newGhost },
-        currentDate: endD,
-        funds,
-        debt,
-        lastFixedCost,
         screen: 'release',
       });
     },

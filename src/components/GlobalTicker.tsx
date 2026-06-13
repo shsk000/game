@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { TIME_RATE_MS_PER_WEEK } from '../data/balance';
 import { useGameStore } from '../state/gameStore';
 
 /**
@@ -45,13 +46,14 @@ export const GlobalTicker = () => {
         lastSalesAt = now;
       }
 
-      // v0.11：開発中はゲーム内時間を停止（週進行・自動 LoC・バグ抽選を行わない）。
-      // 「制限秒のタイピングチャレンジ」に集中させ、完了時に finishDevelopment が
-      // neededWeeks 分の週と固定費をまとめて精算する。
-      if (s.screen === 'develop') return;
-
-      // 2) 時間進行 tick：アイドル中 30s/週
-      if (now - lastWeekAt >= IDLE_WEEK_MS) {
+      // 2) 時間進行 tick：開発中は速く（7.5s/週）、それ以外はアイドル（30s/週）。
+      // v0.11 後期：開発中も裏で時間を進める＝「速く打つほど少ない週で完成し固定費が安く
+      // 早期リリースできる」プレッシャー型。手を止めても週は進み、月またぎで固定費が引かれる
+      // （tickWeek → monthlyTick で借入上限超ならゲームオーバー）。
+      // ※自動 LoC（tickAuto）は呼ばない＝進捗はタイピング入力のみで進む（放置で完成しない）。
+      const weekIntervalMs =
+        s.screen === 'develop' ? TIME_RATE_MS_PER_WEEK.typingActive : IDLE_WEEK_MS;
+      if (now - lastWeekAt >= weekIntervalMs) {
         s.tickWeek();
         lastWeekAt = now;
       }
