@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PixelStatusBar, PixelWindow, SegGauge } from '../../components/ui';
+import { PixelStatusBar, SegGauge } from '../../components/ui';
 import { getPhrases } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { useGameStore } from '../../state/gameStore';
@@ -135,7 +135,7 @@ export const DevelopScreen = () => {
   const accuracyPct = Math.round(accuracy * 1000) / 10;
 
   return (
-    <div className="screen develop-screen" style={{ background: '#0d1626' }}>
+    <div className="screen develop-screen" style={{ background: '#05080c' }}>
       <PixelStatusBar />
 
       {/* テロップ（バグ等） */}
@@ -158,9 +158,9 @@ export const DevelopScreen = () => {
               key={t.id}
               style={{
                 padding: '6px 12px',
-                background: t.tone === 'warn' ? '#a03030' : '#214577',
-                color: '#ffffff',
-                border: '1px solid #10151c',
+                background: t.tone === 'warn' ? '#7a1d1d' : '#1e3a10',
+                color: '#f4ecd9',
+                border: `1px solid ${t.tone === 'warn' ? '#c84a3a' : DEV.greenLine}`,
                 fontWeight: 700,
                 fontSize: 13,
               }}
@@ -171,7 +171,7 @@ export const DevelopScreen = () => {
         </div>
       )}
 
-      {/* 中央パネル */}
+      {/* 中央パネル（ターミナル/コードエディタ風ダークテーマ） */}
       <main
         style={{
           flex: 1,
@@ -182,225 +182,253 @@ export const DevelopScreen = () => {
           padding: 12,
         }}
       >
-        <PixelWindow
-          title={
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-              }}
-            >
-              <span>{'</> 開発フェーズ'}</span>
-              <span
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 11,
-                  color: '#bcd0e8',
-                }}
-              >
-                PHASE {litDots} / {TOTAL_PHASES}
-                <span style={{ display: 'flex', gap: 3 }}>
-                  {Array.from({ length: TOTAL_PHASES }, (_, i) => (
-                    <span
-                      key={i}
-                      style={{
-                        width: 9,
-                        height: 9,
-                        borderRadius: '50%',
-                        background: i < litDots ? '#5fd75f' : '#3a4a60',
-                        border: '1px solid #10151c',
-                      }}
-                    />
-                  ))}
-                </span>
-              </span>
-            </div>
-          }
-          style={{ width: 960 }}
-          bodyStyle={{ padding: 16 }}
+        <div
+          style={{
+            width: 960,
+            background: DEV.panelBg,
+            border: `2px solid ${DEV.panelBorder}`,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+            imageRendering: 'pixelated',
+          }}
         >
-          {/* 行1: ミッション見出し + 残り時間 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16 }}>
-            <div>
-              <div style={{ fontSize: 12, color: '#1d8a3c', fontWeight: 700 }}>
-                {current.missionName ?? 'MISSION_01'}
-              </div>
-              <div style={{ fontSize: 26, fontWeight: 700, color: '#1c2228', margin: '2px 0 6px' }}>
-                {current.missionDesc ?? 'コードを書く'}
-              </div>
-              <p style={{ margin: 0, fontSize: 12, color: '#3a4148', lineHeight: 1.5 }}>
-                制限時間内にできるだけ速く正確に打ち込もう。
-                <br />
-                打鍵の出来が作品の品質・バグ率に直結する。
-              </p>
-            </div>
-            <div
-              style={{
-                background: '#0d1626',
-                border: '1px solid #10151c',
-                padding: 10,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 6,
-              }}
-            >
-              <span style={{ fontSize: 11, color: '#9fb6d4' }}>残り時間</span>
-              <span
-                style={{
-                  fontSize: 30,
-                  fontWeight: 700,
-                  color: remainingSec <= 10 ? '#ff6b6b' : '#5fd75f',
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                {remainingSec.toFixed(1)} <span style={{ fontSize: 14 }}>秒</span>
+          {/* タイトルバー */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '8px 12px',
+              borderBottom: `2px solid ${DEV.panelBorder}`,
+            }}
+          >
+            <span style={{ color: DEV.green, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}>
+              {'</> 開発フェーズ'}
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: DEV.sub }}>
+              PHASE {litDots} / {TOTAL_PHASES}
+              <span style={{ display: 'flex', gap: 4 }}>
+                {Array.from({ length: TOTAL_PHASES }, (_, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: '50%',
+                      background: i < litDots ? DEV.green : '#1e2a14',
+                      border: '1px solid #05080c',
+                    }}
+                  />
+                ))}
               </span>
-              <SegGauge pct={timePct} color={remainingSec <= 10 ? '#ff6b6b' : '#43c059'} track="#0a1422" />
-            </div>
+            </span>
           </div>
 
-          {/* 行2: 入力エリア + COMBO */}
-          <div
-            style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 16, marginTop: 14 }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ padding: 16 }}>
+            {/* 行1: ミッション見出し + 残り時間 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16 }}>
               <div>
-                <div style={{ fontSize: 11, color: '#1668a8', fontWeight: 700, marginBottom: 4 }}>
-                  入力する文章
+                <div style={{ fontSize: 12, color: DEV.greenBright, fontWeight: 700 }}>
+                  {current.missionName ?? 'MISSION_01'}
                 </div>
                 <div
+                  style={{ fontSize: 26, fontWeight: 700, color: DEV.cream, margin: '2px 0 6px' }}
+                >
+                  {current.missionDesc ?? 'コードを書く'}
+                </div>
+                <p style={{ margin: 0, fontSize: 12, color: DEV.sub, lineHeight: 1.5 }}>
+                  制限時間内にできるだけ速く正確に打ち込もう。
+                  <br />
+                  打鍵の出来が作品の品質・バグ率に直結する。
+                </p>
+              </div>
+              <div style={devBox()}>
+                <span style={{ fontSize: 11, color: DEV.sub }}>残り時間</span>
+                <span
                   style={{
-                    background: '#f7f7f4',
-                    border: '1px solid #10151c',
-                    padding: '10px 12px',
-                    fontSize: 26,
-                    color: '#1c2228',
-                    letterSpacing: '0.04em',
-                    minHeight: 30,
+                    fontSize: 32,
+                    fontWeight: 700,
+                    color: remainingSec <= 10 ? '#ff6b6b' : DEV.timeGreen,
+                    fontVariantNumeric: 'tabular-nums',
+                    lineHeight: 1.1,
                   }}
                 >
-                  {view.hiragana}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: '#1668a8', fontWeight: 700, marginBottom: 4 }}>
-                  ローマ字入力
-                </div>
-                <div
-                  style={{
-                    background: '#0d1626',
-                    border: '1px solid #10151c',
-                    padding: '8px 12px',
-                    fontSize: 20,
-                    letterSpacing: '0.08em',
-                    minHeight: 26,
-                  }}
-                >
-                  <span style={{ color: '#5fd75f' }}>{view.completed}</span>
-                  <span className="dev-cursor" style={{ color: '#ffffff' }}>
-                    |
-                  </span>
-                  <span style={{ color: '#7a8aa0' }}>{view.remained}</span>
-                </div>
-              </div>
-            </div>
-            {/* COMBO ボックス */}
-            <div
-              style={{
-                background: '#0d1626',
-                border: '1px solid #10151c',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 2,
-                padding: 8,
-              }}
-            >
-              <span style={{ fontSize: 12, color: '#9fb6d4', letterSpacing: '0.1em' }}>COMBO</span>
-              <span
-                key={combo}
-                className="dev-combo"
-                style={{
-                  fontSize: 40,
-                  fontWeight: 700,
-                  color: '#f5a623',
-                  fontVariantNumeric: 'tabular-nums',
-                  lineHeight: 1,
-                }}
-              >
-                {combo}
-              </span>
-              {rating && (
-                <span className="dev-rating" style={{ fontSize: 14, fontWeight: 700, color: '#ffd54a' }}>
-                  +{rating}!
+                  {remainingSec.toFixed(1)} <span style={{ fontSize: 14 }}>秒</span>
                 </span>
-              )}
+                <SegGauge
+                  pct={timePct}
+                  color={remainingSec <= 10 ? '#ff6b6b' : DEV.timeGreen}
+                  track="#0c1207"
+                />
+              </div>
             </div>
-          </div>
 
-          {/* 行3: 3メトリクス */}
-          <div
-            style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 14 }}
-          >
-            <Metric label="入力速度" icon="⏩" value={`${charsPerMin}`} unit="文字/分" />
-            <Metric label="正確さ" icon="🎯" value={`${accuracyPct}`} unit="%" />
-            <Metric label="ミス回数" icon="❌" value={`${failCount}`} unit="回" />
-          </div>
-
-          {/* 行4: 開発への影響 4枠 */}
-          <div style={{ marginTop: 14 }}>
-            <div style={{ fontSize: 11, color: '#1668a8', fontWeight: 700, marginBottom: 6 }}>
-              開発への影響（この入力結果）
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-              <ImpactBox
-                icon="⚡"
-                label="開発速度"
-                value={`${impact.speedPct >= 0 ? '+' : ''}${impact.speedPct}%`}
-                rank={impact.speedRank}
-                pct={clampPct(impact.speedPct + 30, 70)}
-              />
-              <ImpactBox
-                icon="💎"
-                label="品質"
-                value={`+${impact.qualityDelta}`}
-                rank={impact.qualityRank}
-                pct={impact.qualityDelta * 20}
-              />
-              <ImpactBox
-                icon="🐛"
-                label="バグ率"
-                value={`${impact.bugPct}%`}
-                rank={impact.bugRank}
-                pct={Math.abs(impact.bugPct) * 20}
-              />
-              {/* EXP は今回未実装＝準備中枠 */}
+            {/* 行2: 入力エリア + COMBO */}
+            <div
+              style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 16, marginTop: 14 }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
+                    入力する文章
+                  </div>
+                  <div
+                    style={{
+                      background: '#0c1207',
+                      border: `1px solid ${DEV.panelBorder}`,
+                      padding: '10px 12px',
+                      fontSize: 26,
+                      color: DEV.cream,
+                      letterSpacing: '0.04em',
+                      minHeight: 30,
+                    }}
+                  >
+                    {view.hiragana}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
+                    ローマ字入力
+                  </div>
+                  <div
+                    style={{
+                      background: '#0c1207',
+                      border: `1px solid ${DEV.panelBorder}`,
+                      padding: '8px 12px',
+                      fontSize: 20,
+                      letterSpacing: '0.08em',
+                      minHeight: 26,
+                    }}
+                  >
+                    <span style={{ color: DEV.green }}>{view.completed}</span>
+                    <span className="dev-cursor" style={{ color: DEV.white }}>
+                      |
+                    </span>
+                    <span style={{ color: '#5a6e3a' }}>{view.remained}</span>
+                  </div>
+                </div>
+              </div>
+              {/* COMBO ボックス */}
               <div
                 style={{
-                  background: '#0d1626',
-                  border: '1px dashed #3a4a60',
-                  padding: 8,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                  opacity: 0.6,
+                  ...devBox(),
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 2,
                 }}
               >
-                <span style={{ fontSize: 11, color: '#9fb6d4' }}>✨ 獲得EXP</span>
-                <span style={{ fontSize: 12, color: '#7a8aa0' }}>準備中</span>
+                <span style={{ fontSize: 12, color: DEV.sub, letterSpacing: '0.1em' }}>COMBO</span>
+                <span
+                  key={combo}
+                  className="dev-combo"
+                  style={{
+                    fontSize: 44,
+                    fontWeight: 700,
+                    color: DEV.orange,
+                    fontVariantNumeric: 'tabular-nums',
+                    lineHeight: 1,
+                  }}
+                >
+                  {combo}
+                </span>
+                {rating && (
+                  <span
+                    className="dev-rating"
+                    style={{ fontSize: 14, fontWeight: 700, color: DEV.orange }}
+                  >
+                    +{rating}!
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* 行3: 3メトリクス */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 10,
+                marginTop: 14,
+              }}
+            >
+              <Metric label="入力速度" icon="⏩" value={`${charsPerMin}`} unit="文字/分" />
+              <Metric label="正確さ" icon="🎯" value={`${accuracyPct}`} unit="%" />
+              <Metric label="ミス回数" icon="❌" value={`${failCount}`} unit="回" />
+            </div>
+
+            {/* 行4: 開発への影響 4枠 */}
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 6 }}>
+                開発への影響（この入力結果）
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                <ImpactBox
+                  icon="⚡"
+                  label="開発速度"
+                  value={`${impact.speedPct >= 0 ? '+' : ''}${impact.speedPct}%`}
+                  rank={impact.speedRank}
+                  pct={clampPct(impact.speedPct + 30, 70)}
+                />
+                <ImpactBox
+                  icon="💎"
+                  label="品質"
+                  value={`+${impact.qualityDelta}`}
+                  rank={impact.qualityRank}
+                  pct={impact.qualityDelta * 20}
+                />
+                <ImpactBox
+                  icon="🐛"
+                  label="バグ率"
+                  value={`${impact.bugPct}%`}
+                  rank={impact.bugRank}
+                  pct={Math.abs(impact.bugPct) * 20}
+                />
+                {/* EXP は今回未実装＝準備中枠 */}
+                <div
+                  style={{
+                    ...devBox(),
+                    border: `1px dashed ${DEV.panelBorder}`,
+                    opacity: 0.55,
+                  }}
+                >
+                  <span style={{ fontSize: 11, color: DEV.sub }}>✨ 獲得EXP</span>
+                  <span style={{ fontSize: 12, color: '#5a6e3a' }}>準備中</span>
+                </div>
               </div>
             </div>
           </div>
-        </PixelWindow>
+        </div>
       </main>
     </div>
   );
 };
+
+/**
+ * v0.11 開発フェーズのダークパレット（リファレンス ui/phase/development.png から実測）。
+ * ターミナル/コードエディタ風：ほぼ黒の本体 + 緑系アクセント + オフホワイト文字 + オレンジ COMBO。
+ */
+const DEV = {
+  panelBg: '#06090e',
+  panelBorder: '#2b3a1c',
+  greenLine: '#3a5020',
+  green: '#8fd02a',
+  greenBright: '#a6e138',
+  timeGreen: '#79c11b',
+  cream: '#f4ecd9',
+  white: '#fffdf2',
+  orange: '#e29001',
+  sub: '#7f9a52',
+} as const;
+
+/** ダーク内枠の共通スタイル */
+const devBox = (): React.CSSProperties => ({
+  background: '#0a0f08',
+  border: `1px solid ${DEV.panelBorder}`,
+  padding: 10,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+});
 
 const clampPct = (v: number, max: number) => Math.max(0, Math.min(100, (v / max) * 100));
 
@@ -416,30 +444,21 @@ const Metric = ({
   value: string;
   unit: string;
 }) => (
-  <div
-    style={{
-      background: '#f2f1ed',
-      border: '1px solid #10151c',
-      padding: '8px 10px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 2,
-    }}
-  >
-    <span style={{ fontSize: 11, color: '#3a4148' }}>{label}</span>
+  <div style={{ ...devBox(), gap: 2 }}>
+    <span style={{ fontSize: 11, color: DEV.sub }}>{label}</span>
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
       <span style={{ fontSize: 14 }}>{icon}</span>
       <span
         style={{
           fontSize: 22,
           fontWeight: 700,
-          color: '#1c2228',
+          color: DEV.cream,
           fontVariantNumeric: 'tabular-nums',
         }}
       >
         {value}
       </span>
-      <span style={{ fontSize: 11, color: '#6b7280' }}>{unit}</span>
+      <span style={{ fontSize: 11, color: DEV.sub }}>{unit}</span>
     </div>
   </div>
 );
@@ -458,27 +477,18 @@ const ImpactBox = ({
   rank: ImpactRank;
   pct: number;
 }) => (
-  <div
-    style={{
-      background: '#0d1626',
-      border: '1px solid #10151c',
-      padding: 8,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 4,
-    }}
-  >
-    <span style={{ fontSize: 11, color: '#9fb6d4' }}>
+  <div style={{ ...devBox(), gap: 4 }}>
+    <span style={{ fontSize: 11, color: DEV.sub }}>
       {icon} {label}
     </span>
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
       <span
-        style={{ fontSize: 18, fontWeight: 700, color: '#ffffff', fontVariantNumeric: 'tabular-nums' }}
+        style={{ fontSize: 18, fontWeight: 700, color: DEV.cream, fontVariantNumeric: 'tabular-nums' }}
       >
         {value}
       </span>
       <span style={{ fontSize: 16, fontWeight: 700, color: rankColor(rank) }}>{rank}</span>
     </div>
-    <SegGauge pct={pct} color={rankColor(rank)} track="#0a1422" height={6} />
+    <SegGauge pct={pct} color={rankColor(rank)} track="#0c1207" height={6} />
   </div>
 );
