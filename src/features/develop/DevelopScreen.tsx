@@ -94,6 +94,7 @@ export const DevelopScreen = () => {
   const startedAt = current?.startedAt ?? null;
   const timeLimitSec = current?.timeLimitSec ?? 60;
   const finishedAt = current?.finishedAt ?? null;
+  const workTarget = current?.workTarget ?? 1;
   useEffect(() => {
     if (startedAt === null) return;
     let raf = 0;
@@ -101,7 +102,11 @@ export const DevelopScreen = () => {
       const elapsedSec = (performance.now() - startedAt) / 1000;
       const rem = Math.max(0, timeLimitSec - elapsedSec);
       setRemainingSec(rem);
-      if (rem <= 0 && finishedAt === null) {
+      // 完了条件：作業量を満たす（速く打つほど早い）OR 締切（残り 0 秒）
+      const s = useGameStore.getState();
+      const done = s.current?.doneLoC ?? 0;
+      const reachedWork = done >= workTarget;
+      if ((rem <= 0 || reachedWork) && s.current?.finishedAt == null) {
         finishDevelopment();
         return; // 以降ループ停止
       }
@@ -109,7 +114,7 @@ export const DevelopScreen = () => {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [startedAt, timeLimitSec, finishedAt, finishDevelopment]);
+  }, [startedAt, timeLimitSec, finishedAt, workTarget, finishDevelopment]);
 
   // バグ発生をテロップに
   const bugPhrase = current?.bugPhrase ?? null;
@@ -133,6 +138,8 @@ export const DevelopScreen = () => {
   const impact = computeDevImpact({ wpm, accuracy });
   const charsPerMin = toCharsPerMin(wpm);
   const accuracyPct = Math.round(accuracy * 1000) / 10;
+  // 進捗（作業量）：速く打つほど早く 100% に達して完了
+  const progressPct = Math.max(0, Math.min(100, (current.doneLoC / workTarget) * 100));
 
   return (
     <div className="screen develop-screen" style={{ background: '#05080c' }}>
@@ -225,48 +232,8 @@ export const DevelopScreen = () => {
           </div>
 
           <div style={{ padding: 16 }}>
-            {/* 行1: ミッション見出し + 残り時間 */}
+            {/* 行1: 入力エリア（主役） + 残り時間 / 進捗 */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16 }}>
-              <div>
-                <div style={{ fontSize: 12, color: DEV.greenBright, fontWeight: 700 }}>
-                  {current.missionName ?? 'MISSION_01'}
-                </div>
-                <div
-                  style={{ fontSize: 26, fontWeight: 700, color: DEV.cream, margin: '2px 0 6px' }}
-                >
-                  {current.missionDesc ?? 'コードを書く'}
-                </div>
-                <p style={{ margin: 0, fontSize: 12, color: DEV.sub, lineHeight: 1.5 }}>
-                  制限時間内にできるだけ速く正確に打ち込もう。
-                  <br />
-                  打鍵の出来が作品の品質・バグ率に直結する。
-                </p>
-              </div>
-              <div style={devBox()}>
-                <span style={{ fontSize: 11, color: DEV.sub }}>残り時間</span>
-                <span
-                  style={{
-                    fontSize: 32,
-                    fontWeight: 700,
-                    color: remainingSec <= 10 ? '#ff6b6b' : DEV.timeGreen,
-                    fontVariantNumeric: 'tabular-nums',
-                    lineHeight: 1.1,
-                  }}
-                >
-                  {remainingSec.toFixed(1)} <span style={{ fontSize: 14 }}>秒</span>
-                </span>
-                <SegGauge
-                  pct={timePct}
-                  color={remainingSec <= 10 ? '#ff6b6b' : DEV.timeGreen}
-                  track="#0c1207"
-                />
-              </div>
-            </div>
-
-            {/* 行2: 入力エリア + COMBO */}
-            <div
-              style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 16, marginTop: 14 }}
-            >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div>
                   <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
@@ -276,11 +243,11 @@ export const DevelopScreen = () => {
                     style={{
                       background: '#0c1207',
                       border: `1px solid ${DEV.panelBorder}`,
-                      padding: '10px 12px',
-                      fontSize: 26,
+                      padding: '14px 14px',
+                      fontSize: 34,
                       color: DEV.cream,
                       letterSpacing: '0.04em',
-                      minHeight: 30,
+                      minHeight: 40,
                     }}
                   >
                     {view.hiragana}
@@ -294,10 +261,10 @@ export const DevelopScreen = () => {
                     style={{
                       background: '#0c1207',
                       border: `1px solid ${DEV.panelBorder}`,
-                      padding: '8px 12px',
-                      fontSize: 20,
+                      padding: '10px 14px',
+                      fontSize: 24,
                       letterSpacing: '0.08em',
-                      minHeight: 26,
+                      minHeight: 30,
                     }}
                   >
                     <span style={{ color: DEV.green }}>{view.completed}</span>
@@ -308,38 +275,78 @@ export const DevelopScreen = () => {
                   </div>
                 </div>
               </div>
-              {/* COMBO ボックス */}
-              <div
+              {/* 残り時間 + 進捗 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={devBox()}>
+                  <span style={{ fontSize: 11, color: DEV.sub }}>残り時間</span>
+                  <span
+                    style={{
+                      fontSize: 32,
+                      fontWeight: 700,
+                      color: remainingSec <= 10 ? '#ff6b6b' : DEV.timeGreen,
+                      fontVariantNumeric: 'tabular-nums',
+                      lineHeight: 1.1,
+                    }}
+                  >
+                    {remainingSec.toFixed(1)} <span style={{ fontSize: 14 }}>秒</span>
+                  </span>
+                  <SegGauge
+                    pct={timePct}
+                    color={remainingSec <= 10 ? '#ff6b6b' : DEV.timeGreen}
+                    track="#0c1207"
+                  />
+                </div>
+                {/* 進捗（速く打つほど早く 100% → 早期完了） */}
+                <div style={devBox()}>
+                  <span style={{ fontSize: 11, color: DEV.sub }}>進捗（速いほど早く完成）</span>
+                  <span
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 700,
+                      color: DEV.greenBright,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {Math.floor(progressPct)} <span style={{ fontSize: 12 }}>%</span>
+                  </span>
+                  <SegGauge pct={progressPct} color={DEV.greenBright} track="#0c1207" />
+                </div>
+              </div>
+            </div>
+
+            {/* 行2: COMBO（横長） */}
+            <div
+              style={{
+                ...devBox(),
+                marginTop: 14,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 12,
+              }}
+            >
+              <span style={{ fontSize: 13, color: DEV.sub, letterSpacing: '0.1em' }}>COMBO</span>
+              <span
+                key={combo}
+                className="dev-combo"
                 style={{
-                  ...devBox(),
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 2,
+                  fontSize: 40,
+                  fontWeight: 700,
+                  color: DEV.orange,
+                  fontVariantNumeric: 'tabular-nums',
+                  lineHeight: 1,
                 }}
               >
-                <span style={{ fontSize: 12, color: DEV.sub, letterSpacing: '0.1em' }}>COMBO</span>
+                {combo}
+              </span>
+              {rating && (
                 <span
-                  key={combo}
-                  className="dev-combo"
-                  style={{
-                    fontSize: 44,
-                    fontWeight: 700,
-                    color: DEV.orange,
-                    fontVariantNumeric: 'tabular-nums',
-                    lineHeight: 1,
-                  }}
+                  className="dev-rating"
+                  style={{ fontSize: 16, fontWeight: 700, color: DEV.orange }}
                 >
-                  {combo}
+                  +{rating}!
                 </span>
-                {rating && (
-                  <span
-                    className="dev-rating"
-                    style={{ fontSize: 14, fontWeight: 700, color: DEV.orange }}
-                  >
-                    +{rating}!
-                  </span>
-                )}
-              </div>
+              )}
             </div>
 
             {/* 行3: 3メトリクス */}

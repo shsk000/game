@@ -270,6 +270,18 @@ export const LUCK_DEFAULT = 50;
 export const KEYS_PER_KANA = 2.0;
 
 /**
+ * 開発の「作業量」目標を決める係数（フレーズ 1 本あたりの想定秒数）。
+ * workTarget（完走すべきフレーズ数）= timeLimitSec / DEV_SEC_PER_PHRASE。
+ *
+ * 「速く打つほど早く終わる」ための作業量モデル。
+ * 制限秒（締切）に対しこの密度で作業量を置くことで、
+ * - 速い人：締切より早く完走 → 早期リリース
+ * - 平均/遅い人：締切に到達して終了
+ * になる。小さくしすぎると「数語で終了（B-Crit-2）」が再発するので 2.0 未満にしない。
+ */
+export const DEV_SEC_PER_PHRASE = 2.5;
+
+/**
  * 「開発への影響」4 指標の S/A/B/C しきい値（DevelopScreen で表示）。
  * 値はモックアップ準拠の体感ベース。balance 調整時はここだけ触る。
  */

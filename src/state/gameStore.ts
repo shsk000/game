@@ -1,7 +1,12 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { ACHIEVEMENTS } from '../data/achievements';
-import { DEBT_CONFIG, TIME_RATE_MS_PER_WEEK, computeBorrowingLimit } from '../data/balance';
+import {
+  DEBT_CONFIG,
+  DEV_SEC_PER_PHRASE,
+  TIME_RATE_MS_PER_WEEK,
+  computeBorrowingLimit,
+} from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import {
@@ -348,6 +353,8 @@ export const useGameStore = create<GameState>()(
       // v0.11：制限時間 = neededWeeks × (typingActive レート秒)。例 mini 8 週 × 7.5 = 60 秒
       const secPerWeek = TIME_RATE_MS_PER_WEEK.typingActive / 1000;
       const timeLimitSec = Math.max(1, Math.round(def.neededWeeks * secPerWeek));
+      // v0.11：早期完了の作業量目標（完走フレーズ数）。速く打つほど締切前に完了できる。
+      const workTarget = Math.max(3, Math.round(timeLimitSec / DEV_SEC_PER_PHRASE));
       const project: CurrentProject = {
         title,
         genreId,
@@ -368,6 +375,7 @@ export const useGameStore = create<GameState>()(
         startDate: get().currentDate,
         timeShortcutsUnlocked: [],
         timeLimitSec,
+        workTarget,
         ...buildMissionFlavor(genreId),
       };
       set({

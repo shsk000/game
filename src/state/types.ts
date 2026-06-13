@@ -189,4 +189,10 @@ export type CurrentProject = {
   missionName?: string;
   /** v0.11：演出表示用のミッション見出し（例 敵を配置する） */
   missionDesc?: string;
+  /**
+   * v0.11：早期完了の作業量目標（完走すべきフレーズ数）。
+   * doneLoC がこれに達したら制限秒を待たず開発完了（速く打つほど早く終わる）。
+   * timeLimitSec / DEV_SEC_PER_PHRASE で startProject 時に確定。
+   */
+  workTarget?: number;
 };
