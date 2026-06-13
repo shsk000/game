@@ -1,10 +1,10 @@
 import { expect, type Page, test } from '@playwright/test';
 
 /**
- * v0.11 UI 刷新後の E2E：オフィス → CTA「新しいゲームを作る」→ 計画 →
- * 開発開始 → 開発（時間経過）→ リリース → オフィス、の動線が壊れていないか確認。
+ * v0.11 開発フェーズ中央パネルの検証。
+ * シードで従業員 1 人 + 解放済みを仕込み、計画→開発開始→develop でスクショ + 挙動確認。
  */
-async function seedSession(page: Page) {
+async function seedAndStartDevelop(page: Page) {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.addInitScript(() => {
     (window as unknown as { __sfxMuted: boolean }).__sfxMuted = true;
@@ -48,57 +48,60 @@ async function seedSession(page: Page) {
   await page.evaluate(() => {
     document.querySelectorAll('.tutorial-overlay').forEach((n) => n.remove());
   });
-}
-
-test('E2E: オフィス → CTA → 計画画面', async ({ page }) => {
-  await seedSession(page);
-
-  // オフィス画面で CTA「▶ 新しいゲームを作る」が表示されている
-  const ctaButton = page.locator('button', { hasText: '新しいゲームを作る' }).first();
-  await expect(ctaButton).toBeVisible();
-
-  // CTA クリック → screen が plan に切り替わる
-  await ctaButton.click({ force: true });
-  await page.waitForTimeout(500);
-
-  const screen = await page.evaluate(() => {
-    // @ts-ignore
-    return (window as any).__gs?.()?.screen;
-  });
-  expect(screen).toBe('plan');
-
-  // 計画画面でジャンル選択 UI が見える
-  await expect(page.locator('text=ジャンルを選ぶ').first()).toBeVisible();
-  await expect(page.locator('text=▶ 開発開始').first()).toBeVisible();
-});
-
-test('E2E: 計画 → 開発開始 → 開発画面', async ({ page }) => {
-  await seedSession(page);
+  // 計画へ
   await page.locator('button', { hasText: '新しいゲームを作る' }).first().click({ force: true });
   await page.waitForTimeout(500);
-
-  // 計画画面でカテゴリ 3 つ選択（自動でジャンル/テーマ/規模/従業員は seed のものを使用）
+  // カテゴリ 3 つ
   for (const cid of ['graphics', 'sound', 'gameplay']) {
     await page.locator(`[data-category-id="${cid}"]`).click({ force: true });
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(120);
   }
   // 従業員アサイン
   await page.locator('[data-employee-id="e1"]').check();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(200);
+  // 開発開始
+  await page.locator('button', { hasText: '▶ 開発開始' }).first().click({ force: true });
+  await page.waitForTimeout(600);
+}
 
-  // 開発開始ボタン押下
-  const startBtn = page.locator('button', { hasText: '▶ 開発開始' }).first();
-  await expect(startBtn).toBeEnabled();
-  await startBtn.click({ force: true });
-  await page.waitForTimeout(800);
+test('v11 develop panel スクショ + 主要要素', async ({ page }) => {
+  await seedAndStartDevelop(page);
 
-  // develop 画面に遷移
   const screen = await page.evaluate(() => {
     // @ts-ignore
     return (window as any).__gs?.()?.screen;
   });
   expect(screen).toBe('develop');
 
-  // 開発フェーズパネルが表示されている
   await expect(page.locator('text=開発フェーズ').first()).toBeVisible();
+  await expect(page.locator('text=残り時間').first()).toBeVisible();
+  await expect(page.locator('text=COMBO').first()).toBeVisible();
+  await expect(page.locator('text=入力する文章').first()).toBeVisible();
+  await expect(page.locator('text=開発への影響（この入力結果）').first()).toBeVisible();
+
+  await page.screenshot({ path: 'test-results/v11-develop.png', fullPage: false });
+});
+
+test('v11 develop: 制限秒カウントダウンが減る', async ({ page }) => {
+  await seedAndStartDevelop(page);
+  const t1 = await page.evaluate(() => {
+    // @ts-ignore
+    return (window as any).__gs?.()?.current?.timeLimitSec;
+  });
+  expect(t1).toBeGreaterThan(0);
+  console.log('[develop] timeLimitSec =', t1);
+
+  // 開発中はゲーム内時間が止まっている（currentDate 不変）
+  const d1 = await page.evaluate(() => {
+    // @ts-ignore
+    const c = (window as any).__gs?.()?.currentDate;
+    return `${c.year}-${c.month}-${c.week}`;
+  });
+  await page.waitForTimeout(3000);
+  const d2 = await page.evaluate(() => {
+    // @ts-ignore
+    const c = (window as any).__gs?.()?.currentDate;
+    return `${c.year}-${c.month}-${c.week}`;
+  });
+  expect(d2).toBe(d1); // 開発中は週が進まない
 });

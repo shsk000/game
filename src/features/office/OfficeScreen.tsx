@@ -7,6 +7,7 @@ import {
   PixelModal,
   PixelStatusBar,
   PixelWindow,
+  SegGauge,
 } from '../../components/ui';
 import { ACHIEVEMENTS } from '../../data/achievements';
 import { DEBT_CONFIG, computeBorrowingLimit } from '../../data/balance';
@@ -46,33 +47,7 @@ const ROLE_VISUAL: Record<string, { emoji: string; color: string }> = {
   pr: { emoji: '📣', color: '#c2447a' },
 };
 
-/** セグメント式ゲージ（リファレンスのブロック分割ゲージ） */
-const SegGauge = ({
-  pct,
-  color = '#2e9e4f',
-  track = '#c6ccd4',
-}: {
-  pct: number;
-  color?: string;
-  track?: string;
-}) => (
-  <div
-    style={{
-      height: 8,
-      background: track,
-      border: '1px solid #9aa3ae',
-      overflow: 'hidden',
-    }}
-  >
-    <div
-      style={{
-        width: `${Math.max(0, Math.min(100, pct))}%`,
-        height: '100%',
-        background: `repeating-linear-gradient(to right, ${color} 0 6px, ${track} 6px 8px)`,
-      }}
-    />
-  </div>
-);
+// SegGauge は src/components/ui/SegGauge.tsx に共通化（v0.11 開発フェーズと共用）
 
 export const OfficeScreen = () => {
   const funds = useGameStore((s) => s.funds);

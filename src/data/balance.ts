@@ -257,3 +257,36 @@ export const SCORE_BASE = 30;
 
 /** 運の中庸値 */
 export const LUCK_DEFAULT = 50;
+
+// ============================================================
+// v0.11 開発フェーズ：打鍵フィードバック（DevelopScreen 中央パネル）
+// ============================================================
+
+/**
+ * 入力速度の「文字/分」表示換算。
+ * useTyping の wpm は「成功打鍵（ローマ字キー）/分」相当。かな 1 文字 ≒ 2 打鍵として割る。
+ * 表示専用（内部の品質計算は素の wpm を使う）。
+ */
+export const KEYS_PER_KANA = 2.0;
+
+/**
+ * 「開発への影響」4 指標の S/A/B/C しきい値（DevelopScreen で表示）。
+ * 値はモックアップ準拠の体感ベース。balance 調整時はここだけ触る。
+ */
+export const DEV_IMPACT_THRESHOLDS = {
+  /** 開発速度：wpm のしきい値 */
+  speed: { S: 200, A: 140, B: 90 },
+  /** 品質：accuracy（0..1）のしきい値 */
+  quality: { S: 0.99, A: 0.95, B: 0.9 },
+  /** バグ率：ミス率（0..1）の上限しきい値（小さいほど良い） */
+  bug: { S: 0.01, A: 0.03, B: 0.06 },
+} as const;
+
+/**
+ * 打鍵レーティング（COMBO +GREAT! 等）の判定（直近正打の打鍵間隔 ms）。
+ */
+export const KEYSTROKE_RATING = {
+  PERFECT: 120,
+  GREAT: 200,
+  GOOD: 350,
+} as const;

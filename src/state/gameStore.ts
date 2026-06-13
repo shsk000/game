@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { ACHIEVEMENTS } from '../data/achievements';
-import { DEBT_CONFIG, computeBorrowingLimit } from '../data/balance';
+import { DEBT_CONFIG, TIME_RATE_MS_PER_WEEK, computeBorrowingLimit } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import {
@@ -45,6 +45,35 @@ import type {
 import { addWeeks, INITIAL_GAME_DATE } from './types';
 
 const persisted = storage.load() ?? storage.defaults();
+
+/**
+ * v0.11：開発フェーズの「MISSION 名・見出し」を生成（演出専用）。
+ * ジャンルごとに開発っぽいタスク見出しを 1 つ選ぶ。ゲームロジックには影響しない。
+ */
+const MISSION_FLAVORS: Record<string, string[]> = {
+  action: ['敵を配置する', '当たり判定を実装する', 'コンボ処理を組む', '必殺技を実装する'],
+  rpg: ['敵を配置する', '戦闘システムを実装する', '経験値処理を組む', 'マップを生成する'],
+  puzzle: ['盤面を生成する', '判定ロジックを組む', '連鎖処理を実装する', 'ヒント機能を作る'],
+  adventure: ['シナリオ分岐を組む', 'マップを生成する', 'アイテム処理を実装する', '会話を実装する'],
+  simulation: ['経済ループを組む', 'AI 行動を実装する', 'パラメータ処理を作る', 'UI を組む'],
+  shooter: ['弾幕を生成する', '当たり判定を実装する', 'ボスAIを組む', 'スコア処理を作る'],
+  racing: ['物理挙動を実装する', 'コースを生成する', 'AI 走行を組む', 'タイム計測を作る'],
+  horror: ['演出トリガーを組む', '敵AIを実装する', 'サウンド処理を作る', 'マップを生成する'],
+  fighting: ['コンボ判定を組む', '当たり判定を実装する', '必殺技を作る', 'AI 行動を組む'],
+  roguelike: ['ダンジョンを生成する', 'アイテム処理を組む', '敵を配置する', '永続化処理を作る'],
+  rhythm: ['譜面を生成する', '判定ロジックを組む', 'コンボ処理を作る', 'スコア処理を組む'],
+  sandbox: ['ブロック処理を組む', 'セーブ処理を作る', '物理挙動を実装する', '生成ロジックを組む'],
+};
+let missionCounter = 3;
+const buildMissionFlavor = (genreId: GenreId): { missionName: string; missionDesc: string } => {
+  const pool = MISSION_FLAVORS[genreId] ?? MISSION_FLAVORS.action;
+  missionCounter += 1;
+  const desc = pool[Math.floor(Math.random() * pool.length)];
+  return {
+    missionName: `MISSION_${String(missionCounter).padStart(2, '0')}`,
+    missionDesc: desc,
+  };
+};
 
 type StageUnlock = {
   unlocked: number;
@@ -316,6 +345,9 @@ export const useGameStore = create<GameState>()(
     startProject: (genreId, themeId, scale, selectedCategories, assignedEmployeeIds) => {
       const def = SCALE_BY_ID[scale];
       const title = generateTitle(genreId, themeId);
+      // v0.11：制限時間 = neededWeeks × (typingActive レート秒)。例 mini 8 週 × 7.5 = 60 秒
+      const secPerWeek = TIME_RATE_MS_PER_WEEK.typingActive / 1000;
+      const timeLimitSec = Math.max(1, Math.round(def.neededWeeks * secPerWeek));
       const project: CurrentProject = {
         title,
         genreId,
@@ -335,6 +367,8 @@ export const useGameStore = create<GameState>()(
         perf: { wpm: 0, maxCombo: 0, accuracy: 1 },
         startDate: get().currentDate,
         timeShortcutsUnlocked: [],
+        timeLimitSec,
+        ...buildMissionFlavor(genreId),
       };
       set({
         current: project,
@@ -518,9 +552,52 @@ export const useGameStore = create<GameState>()(
       const prevGhost = get().ghosts[cur.scale];
       const beat = prevGhost === null || developSec < prevGhost;
       const newGhost = beat ? developSec : prevGhost;
+
+      // v0.11：開発中はゲーム内時間を止めていたので、完了時に neededWeeks 分を一括進行。
+      // またいだ月数ぶん月初固定費を精算する（給与・賃料・借金利息）。
+      const def = SCALE_BY_ID[cur.scale];
+      const weeks = Math.max(1, def?.neededWeeks ?? 1);
+      const startD = get().currentDate;
+      const endD = addWeeks(startD, weeks);
+      // start〜end の間に「第1週（月初）」を何回またいだか
+      let monthsCrossed = 0;
+      {
+        let d = startD;
+        for (let i = 0; i < weeks; i++) {
+          const nxt = addWeeks(d, 1);
+          if (nxt.month !== d.month || nxt.year !== d.year) monthsCrossed += 1;
+          d = nxt;
+        }
+      }
+      // 固定費を monthsCrossed 回分まとめて精算（triggerGameOver はここでは呼ばない＝
+      // 開発成功直後のゲームオーバーを避け、リリース後の通常 tick に委ねる）
+      const s = get();
+      const salaries = sumMonthlySalaries(s.employees);
+      const currentScale: Scale = s.unlockedScales[s.unlockedScales.length - 1] ?? 'mini';
+      const rent = SCALE_BY_ID[currentScale]?.monthlyRent ?? 0;
+      let funds = s.funds;
+      let debt = s.debt;
+      let lastFixedCost = s.lastFixedCost;
+      for (let i = 0; i < monthsCrossed; i++) {
+        const interest = Math.round(debt * DEBT_CONFIG.monthlyInterestRate);
+        const total = salaries + rent + interest;
+        const raw = funds - total;
+        if (raw < 0) {
+          debt += -raw;
+          funds = 0;
+        } else {
+          funds = raw;
+        }
+        lastFixedCost = { salaries, rent, total };
+      }
+
       set({
         current: { ...cur, finishedAt: nowMs, doneLoC: cur.requiredLoC },
         ghosts: { ...get().ghosts, [cur.scale]: newGhost },
+        currentDate: endD,
+        funds,
+        debt,
+        lastFixedCost,
         screen: 'release',
       });
     },

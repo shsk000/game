@@ -16,3 +16,4 @@ export { PixelModal } from './PixelModal';
 export { PixelStatusBar } from './PixelStatusBar';
 export { PixelWindow } from './PixelWindow';
 export { ScreenOverlay } from './ScreenOverlay';
+export { SegGauge } from './SegGauge';

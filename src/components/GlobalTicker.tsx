@@ -18,17 +18,12 @@ import { useGameStore } from '../state/gameStore';
  */
 const TICK_BASE_MS = 250; // 250ms 単位で集計（GC オーバーヘッド最小・精度十分）
 const SALES_INTERVAL_MS = 1000;
-const DEVELOP_WEEK_MS = 7500;
 const IDLE_WEEK_MS = 30_000;
-const AUTO_LOC_INTERVAL_MS = 1000;
-const BUG_TRY_INTERVAL_MS = 10_000;
 
 export const GlobalTicker = () => {
   useEffect(() => {
     let lastSalesAt = performance.now();
     let lastWeekAt = performance.now();
-    let lastAutoAt = performance.now();
-    let lastBugAt = performance.now();
     let lastScreen: string | null = null;
 
     const t = setInterval(() => {
@@ -41,34 +36,24 @@ export const GlobalTicker = () => {
       if (s.screen !== lastScreen) {
         lastSalesAt = now;
         lastWeekAt = now;
-        lastAutoAt = now;
-        lastBugAt = now;
         lastScreen = s.screen;
       }
 
-      // 1) 販売 tick：1 秒ごと（全画面）
+      // 1) 販売 tick：1 秒ごと（全画面・開発中も既存作品は売れる）
       if (now - lastSalesAt >= SALES_INTERVAL_MS) {
         s.tickSales(1);
         lastSalesAt = now;
       }
 
-      // 2) 時間進行 tick：開発中 7.5s/週、アイドル中 30s/週
-      const weekIntervalMs = s.screen === 'develop' ? DEVELOP_WEEK_MS : IDLE_WEEK_MS;
-      if (now - lastWeekAt >= weekIntervalMs) {
+      // v0.11：開発中はゲーム内時間を停止（週進行・自動 LoC・バグ抽選を行わない）。
+      // 「制限秒のタイピングチャレンジ」に集中させ、完了時に finishDevelopment が
+      // neededWeeks 分の週と固定費をまとめて精算する。
+      if (s.screen === 'develop') return;
+
+      // 2) 時間進行 tick：アイドル中 30s/週
+      if (now - lastWeekAt >= IDLE_WEEK_MS) {
         s.tickWeek();
         lastWeekAt = now;
-      }
-
-      // 3) 自動 LoC 進行：開発中のみ 1 秒ごと
-      if (s.screen === 'develop' && now - lastAutoAt >= AUTO_LOC_INTERVAL_MS) {
-        s.tickAuto(1);
-        lastAutoAt = now;
-      }
-
-      // 4) バグ抽選：開発中のみ 10 秒ごと
-      if (s.screen === 'develop' && now - lastBugAt >= BUG_TRY_INTERVAL_MS) {
-        s.triggerBugIfDue();
-        lastBugAt = now;
       }
     }, TICK_BASE_MS);
 

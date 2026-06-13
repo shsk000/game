@@ -1312,6 +1312,53 @@ body,
   }
 }
 
+/* v0.11 開発フェーズ：ローマ字入力カーソル点滅（離散） */
+@keyframes dev-cursor-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+.dev-cursor {
+  animation: dev-cursor-blink 900ms steps(1) infinite;
+}
+
+/* v0.11 開発フェーズ：COMBO 数字のポップ（値が変わるたび key で再生） */
+@keyframes dev-combo-pop {
+  0% {
+    transform: scale(1.4);
+  }
+  60% {
+    transform: scale(0.92);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.dev-combo {
+  display: inline-block;
+  animation: dev-combo-pop 160ms steps(3) both;
+}
+
+/* v0.11 開発フェーズ：打鍵レーティング（+GREAT! 等）のフェードアウト */
+@keyframes dev-rating-fade {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+}
+.dev-rating {
+  animation: dev-rating-fade 600ms steps(4) both;
+}
+
 /*
  * G3: ジュース — ボタンの押し込み・ホバー（全ボタン共通、離散ステップ）。
  */

@@ -179,4 +179,14 @@ export type CurrentProject = {
   startDate?: GameDate;
   /** v0.10：WPM しきい値クロスで -X 週テロップを出した一覧（重複防止） */
   timeShortcutsUnlocked?: number[];
+  /**
+   * v0.11：開発フェーズの制限時間（リアル秒）。startProject 時に
+   * neededWeeks × (TIME_RATE_MS_PER_WEEK.typingActive/1000) で確定保存。
+   * DevelopScreen の rAF で残り秒をカウントダウンし、0 到達で finishDevelopment。
+   */
+  timeLimitSec?: number;
+  /** v0.11：演出表示用のミッション名（例 MISSION_04） */
+  missionName?: string;
+  /** v0.11：演出表示用のミッション見出し（例 敵を配置する） */
+  missionDesc?: string;
 };

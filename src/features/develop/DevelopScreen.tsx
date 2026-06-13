@@ -1,60 +1,55 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ads } from '../../ads/AdProvider';
-import { CodeEditor } from '../../components/CodeEditor';
-import { ComboGauge } from '../../components/ComboGauge';
-import { GhostBar } from '../../components/GhostBar';
-import { JacketView } from '../../components/JacketView';
-import { TypingPanel } from '../../components/TypingPanel';
-import { PixelStatusBar } from '../../components/ui';
-import { buildLine } from '../../data/codeSnippets';
+import { PixelStatusBar, PixelWindow, SegGauge } from '../../components/ui';
 import { getPhrases } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
-import { trendLabel, trendMultiplier } from '../../data/trend';
 import { useGameStore } from '../../state/gameStore';
-import { addWeeks, compareDate, dateToWeekIndex, type GameDate } from '../../state/types';
-import { formatWeeks } from '../../utils/format';
+import {
+  computeDevImpact,
+  type ImpactRank,
+  type KeystrokeRating,
+  rankColor,
+  ratingForInterval,
+  toCharsPerMin,
+} from './devImpact';
 import { useTyping } from './useTyping';
-
-const ROLE_LABEL: Record<string, string> = {
-  programmer: 'プログラマー',
-  designer: 'デザイナー',
-  pr: '広報',
-};
 
 type Toast = { id: number; text: string; tone: 'warn' | 'good' | 'info' };
 
+/**
+ * v0.11 開発フェーズ画面（中央パネル）。
+ *
+ * モックアップ（ui/phase/development.png）の中央「開発フェーズ」パネルを再現。
+ * - 制限秒カウントダウン（neededWeeks 秒換算。0 で finishDevelopment → release）
+ * - 入力文章（かな）/ ローマ字 / COMBO レーティング
+ * - 入力速度（文字/分）/ 正確さ / ミス回数
+ * - 開発への影響 4 枠（開発速度 / 品質 / バグ率 / EXP=準備中）
+ * - PHASE ドット・MISSION は演出表示（中身は連続タイピング）
+ *
+ * 開発中はゲーム内時間停止（GlobalTicker 側）。周辺パネル（左/右/下）は今回スコープ外。
+ */
 export const DevelopScreen = () => {
   const current = useGameStore((s) => s.current);
-  const ghosts = useGameStore((s) => s.ghosts);
-  const employees = useGameStore((s) => s.employees);
-  const trend = useGameStore((s) => s.trend);
-  const currentDate = useGameStore((s) => s.currentDate);
-  const lastFixedCost = useGameStore((s) => s.lastFixedCost);
-  const tickWeek = useGameStore((s) => s.tickWeek);
   const addDevelopLoC = useGameStore((s) => s.addDevelopLoC);
   const finishDevelopment = useGameStore((s) => s.finishDevelopment);
   const reportCombo = useGameStore((s) => s.reportCombo);
   const reportWPM = useGameStore((s) => s.reportWPM);
   const reportAccuracy = useGameStore((s) => s.reportAccuracy);
   const clearBug = useGameStore((s) => s.clearBug);
-  const buyAdDevBoost = useGameStore((s) => s.buyAdDevBoost);
 
-  const [elapsed, setElapsed] = useState(0);
-  const [adRunning, setAdRunning] = useState(false);
-  const [codeLines, setCodeLines] = useState<string[]>([]);
-  const [bugLineIdx, setBugLineIdx] = useState<number | null>(null);
+  const [remainingSec, setRemainingSec] = useState(0);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const lineCounterRef = useRef(0);
-  // 開発開始時点の日付。経過週数・必要週数の計算に使う
-  const startDateRef = useRef<GameDate | null>(null);
-  const projectScale = current?.scale;
+
+  // 打鍵レーティング（COMBO +GREAT!）：直近正打の打鍵間隔から
+  const [rating, setRating] = useState<KeystrokeRating>(null);
+  const lastCorrectAtRef = useRef<number>(0);
+  const ratingTimerRef = useRef<number | null>(null);
 
   const pushToast = (text: string, tone: Toast['tone']) => {
     const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { id, text, tone }]);
     window.setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 2000);
+    }, 1800);
   };
 
   const phrases = useMemo(() => {
@@ -62,247 +57,94 @@ export const DevelopScreen = () => {
     return getPhrases(current.genreId, current.requiredLoC * 3);
   }, [current?.genreId, current?.requiredLoC]);
 
-  // バグフレーズが乗っているときはそれを最優先に挿入
   const effectivePhrases = useMemo(() => {
     if (!current?.bugPhrase) return phrases;
     return [current.bugPhrase, ...phrases];
   }, [phrases, current?.bugPhrase]);
 
-  const genreId = current?.genreId;
-  const themeId = current?.themeId;
-
-  const { view, failCount, combo, wpm } = useTyping({
+  const { view, failCount, combo, wpm, accuracy } = useTyping({
     phrases: effectivePhrases,
     onPhraseComplete: () => {
       if (current?.bugPhrase) {
-        addDevelopLoC(3); // バグ修正は3LoC相当
+        addDevelopLoC(3);
         clearBug();
-        setBugLineIdx(null);
       } else {
         addDevelopLoC(1);
       }
-      if (genreId && themeId) {
-        const idx = lineCounterRef.current;
-        lineCounterRef.current += 1;
-        const line = buildLine({ genreId, themeId, idx });
-        setCodeLines((prev) => [...prev, line]);
-      }
     },
     paused: !current || current.finishedAt !== null,
-    onCorrect: (c) => reportCombo(c),
+    onCorrect: (c) => {
+      reportCombo(c);
+      // 打鍵レーティング：前回正打からの間隔
+      const now = performance.now();
+      const interval = now - lastCorrectAtRef.current;
+      lastCorrectAtRef.current = now;
+      const r = ratingForInterval(interval);
+      if (r) {
+        setRating(r);
+        if (ratingTimerRef.current) window.clearTimeout(ratingTimerRef.current);
+        ratingTimerRef.current = window.setTimeout(() => setRating(null), 600);
+      }
+    },
     onWpm: (w) => reportWPM(w),
     onAccuracy: (a) => reportAccuracy(a),
   });
 
-  // バグフレーズ発生時、最新行にバグマーク + 「+1 週」テロップ
-  const bugPhrase = current?.bugPhrase ?? null;
-  useEffect(() => {
-    if (bugPhrase) {
-      setBugLineIdx(codeLines.length > 0 ? codeLines.length - 1 : null);
-      // バグは「開発が +1 週遅延」する想定。tickWeek を 1 回追加発火
-      tickWeek();
-      pushToast('🐛 バグ発生：+1 週', 'warn');
-    }
-  }, [bugPhrase, tickWeek]);
-
-  // プロジェクトが切り替わったら開始日付・経過状態をリセット
-  useEffect(() => {
-    if (!current) {
-      startDateRef.current = null;
-      lineCounterRef.current = 0;
-      setCodeLines([]);
-      setBugLineIdx(null);
-      setToasts([]);
-    } else if (startDateRef.current === null) {
-      startDateRef.current = currentDate;
-    }
-  }, [projectScale, current, currentDate]);
-
-  // 月初固定費の発生をテロップに変換
-  const lastFixedCostTotal = lastFixedCost?.total ?? null;
-  useEffect(() => {
-    if (lastFixedCostTotal === null) return;
-    pushToast(`💸 月初固定費 -¥${lastFixedCostTotal.toLocaleString()}`, 'warn');
-  }, [lastFixedCostTotal]);
-
-  // v0.10 仕上げ：WPM ショートカット（-1/-2/-3 週）は廃止。
-  //   設計（balance-design §1-3）で「タイピングは指定期間中ずっと打ち続けるもの」と定義。
-  //   時間ベース完了と組み合わせると数語で完了してしまう（B-Crit-2 再発）ので削除。
-  //   早く打てた場合は WPM 記録としてリリース時の品質（performance）寄与に反映される。
-
+  // 制限秒カウントダウン（rAF）。0 到達で finishDevelopment（多重ガード）
   const startedAt = current?.startedAt ?? null;
+  const timeLimitSec = current?.timeLimitSec ?? 60;
+  const finishedAt = current?.finishedAt ?? null;
   useEffect(() => {
     if (startedAt === null) return;
     let raf = 0;
     const loop = () => {
-      setElapsed((performance.now() - startedAt) / 1000);
+      const elapsedSec = (performance.now() - startedAt) / 1000;
+      const rem = Math.max(0, timeLimitSec - elapsedSec);
+      setRemainingSec(rem);
+      if (rem <= 0 && finishedAt === null) {
+        finishDevelopment();
+        return; // 以降ループ停止
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [startedAt]);
+  }, [startedAt, timeLimitSec, finishedAt, finishDevelopment]);
 
-  // v0.10：週進行の進捗（ゲーム内時間）— 完了判定 useEffect から参照されるため先に算出。
-  const scaleDef = current ? SCALE_BY_ID[current.scale] : null;
-  const shortcutWeeks = (current?.timeShortcutsUnlocked ?? []).reduce((sum, wpm) => {
-    if (wpm >= 200) return sum + 3;
-    if (wpm >= 150) return sum + 2;
-    if (wpm >= 100) return sum + 1;
-    return sum;
-  }, 0);
-  const neededWeeks = scaleDef ? Math.max(1, scaleDef.neededWeeks - shortcutWeeks) : 1;
-  const startDate = startDateRef.current ?? currentDate;
-  const elapsedWeeks = Math.max(0, dateToWeekIndex(currentDate) - dateToWeekIndex(startDate));
-
-  // v0.10 仕上げ T-3：自動 LoC tick / 時間進行 / バグ抽選は <GlobalTicker /> に移譲。
-  // ここでは「開発完了判定」のみ責任を持つ。
-  //
-  // v0.10 仕上げ T-4：完了判定を時間ベースに変更。
-  // 旧仕様：`doneLoC >= requiredLoC` で即完了 → 速い人だと 5 秒で 1 本完成（B-Crit-2）
-  // 新仕様：`elapsedWeeks >= neededWeeks` で完了（時間ベース）
-  // タイピングは「指定された開発期間中ずっと打ち続けるもの」として位置付け、
-  // doneLoC は進捗の副指標に降格（達成しても自動完了しない）。
+  // バグ発生をテロップに
+  const bugPhrase = current?.bugPhrase ?? null;
   useEffect(() => {
-    if (!current) return;
-    if (current.finishedAt !== null) return;
-    if (elapsedWeeks >= neededWeeks) {
-      finishDevelopment();
-    }
-  }, [current, elapsedWeeks, neededWeeks, finishDevelopment]);
+    if (bugPhrase) pushToast('🐛 バグ発生：下の文を打ち切れ！', 'warn');
+  }, [bugPhrase]);
 
-  const assignedEmployees = useMemo(() => {
-    if (!current) return [];
-    const set = new Set(current.assignedEmployeeIds);
-    return employees.filter((e) => set.has(e.id));
-  }, [current?.assignedEmployeeIds, employees]);
+  if (!current) return null;
+  const scaleDef = SCALE_BY_ID[current.scale];
+  if (!scaleDef) return null;
 
-  if (!current || !scaleDef) return null;
+  // 残り時間の割合・PHASE ドット
+  const timePct = Math.max(0, Math.min(100, (remainingSec / timeLimitSec) * 100));
+  const TOTAL_PHASES = 6;
+  const litDots = Math.max(
+    1,
+    Math.min(TOTAL_PHASES, Math.ceil((1 - remainingSec / timeLimitSec) * TOTAL_PHASES)),
+  );
 
-  const progressPct = Math.min(100, (current.doneLoC / current.requiredLoC) * 100);
-  const progSpeed = employees
-    .filter((e) => e.role === 'programmer')
-    .reduce((a, b) => a + b.power, 0);
-  const boost = current.devBoostRemainingSec > 0;
-  const autoRate = progSpeed * (boost ? 2 : 1);
-  const tMul = trendMultiplier(trend, current.genreId, current.themeId);
-  const isHot = combo >= 15;
-
-  const weekPct = Math.min(100, (elapsedWeeks / Math.max(1, neededWeeks)) * 100);
-  const dueDate = addWeeks(startDate, neededWeeks);
-  const overdue = compareDate(currentDate, dueDate) > 0;
-
-  const runDevBoost = () => {
-    if (adRunning || boost) return;
-    setAdRunning(true);
-    ads.showRewarded({
-      label: 'dev-boost',
-      onComplete: () => {
-        buyAdDevBoost();
-        setAdRunning(false);
-      },
-      onFail: () => setAdRunning(false),
-    });
-  };
+  // 開発への影響 4 指標
+  const impact = computeDevImpact({ wpm, accuracy });
+  const charsPerMin = toCharsPerMin(wpm);
+  const accuracyPct = Math.round(accuracy * 1000) / 10;
 
   return (
-    <div className={`screen develop-screen ${isHot ? 'is-hot' : ''}`}>
-      {/* v0.11 L4：上部 HUD は PixelStatusBar に統合（日付+進捗込み）。
-       *  さらに「📅 経過/予定週数」「⚠期日超過」を追加表示する細い帯を下に置く。 */}
+    <div className="screen develop-screen" style={{ background: '#0d1626' }}>
       <PixelStatusBar />
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 16,
-          padding: '6px 16px',
-          height: 32,
-          background: '#0f1d33',
-          color: '#ffffff',
-          fontSize: 12,
-          borderBottom: '2px solid #0a1422',
-          flexShrink: 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <JacketView
-            genreId={current.genreId}
-            themeId={current.themeId}
-            title={current.title}
-            size="sm"
-          />
-          <span style={{ fontWeight: 700 }}>💻 {current.title}</span>
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            fontVariantNumeric: 'tabular-nums',
-            color: overdue ? '#ff8888' : '#fff8e0',
-          }}
-        >
-          <span>
-            経過 {elapsedWeeks} 週 / 予定 {neededWeeks} 週（{formatWeeks(neededWeeks)}）
-          </span>
-          {overdue && <span style={{ color: '#ff5555', fontWeight: 700 }}>⚠ 期日超過</span>}
-          <div
-            role="progressbar"
-            aria-label="開発期間プログレス"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(weekPct)}
-            style={{
-              width: 120,
-              height: 8,
-              background: '#0a1422',
-              border: '2px solid #0a1422',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                width: `${weekPct}%`,
-                height: '100%',
-                background: overdue ? '#a03030' : '#ffd54a',
-                transition: 'width 200ms linear',
-              }}
-            />
-          </div>
-          {/* v0.11：開発中断ボタン（オフィスへ戻る） */}
-          <button
-            type="button"
-            onClick={() => {
-              if (confirm('開発を中断してオフィスに戻りますか？\n（進捗は失われます）')) {
-                useGameStore.setState({ current: null, screen: 'office' });
-              }
-            }}
-            style={{
-              padding: '4px 10px',
-              background: '#a03030',
-              color: '#ffffff',
-              border: '2px solid #0a1422',
-              fontFamily: 'inherit',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer',
-              imageRendering: 'pixelated',
-              marginLeft: 8,
-            }}
-            aria-label="開発を中断してオフィスに戻る"
-          >
-            🚪 中断
-          </button>
-        </div>
-      </div>
 
-      {/* テロップ（バグ・固定費） */}
+      {/* テロップ（バグ等） */}
       {toasts.length > 0 && (
         <div
           aria-live="polite"
           style={{
-            position: 'fixed',
-            top: 80,
+            position: 'absolute',
+            top: 52,
             right: 16,
             display: 'flex',
             flexDirection: 'column',
@@ -316,14 +158,11 @@ export const DevelopScreen = () => {
               key={t.id}
               style={{
                 padding: '6px 12px',
-                background:
-                  t.tone === 'warn' ? '#a03030' : t.tone === 'good' ? '#308040' : '#3a2a1e',
+                background: t.tone === 'warn' ? '#a03030' : '#214577',
                 color: '#ffffff',
-                border: '3px solid #0a1422',
-                boxShadow: '3px 3px 0 rgba(0,0,0,0.4)',
+                border: '1px solid #10151c',
                 fontWeight: 700,
                 fontSize: 13,
-                letterSpacing: '0.06em',
               }}
             >
               {t.text}
@@ -332,80 +171,314 @@ export const DevelopScreen = () => {
         </div>
       )}
 
-      {assignedEmployees.length > 0 && (
-        <section className="card assigned-strip">
-          <div className="chip-row">
-            {assignedEmployees.map((e) => (
-              <span key={e.id} className="chip">
-                👤 {e.name}（{ROLE_LABEL[e.role] ?? e.role}）
+      {/* 中央パネル */}
+      <main
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: 0,
+          padding: 12,
+        }}
+      >
+        <PixelWindow
+          title={
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+              }}
+            >
+              <span>{'</> 開発フェーズ'}</span>
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 11,
+                  color: '#bcd0e8',
+                }}
+              >
+                PHASE {litDots} / {TOTAL_PHASES}
+                <span style={{ display: 'flex', gap: 3 }}>
+                  {Array.from({ length: TOTAL_PHASES }, (_, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        width: 9,
+                        height: 9,
+                        borderRadius: '50%',
+                        background: i < litDots ? '#5fd75f' : '#3a4a60',
+                        border: '1px solid #10151c',
+                      }}
+                    />
+                  ))}
+                </span>
               </span>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <div className="develop-2col">
-        <div>
-          <section className="card progress-card">
-            <div className="progress-row">
-              <div className="progress-label">
-                進捗 {current.doneLoC.toFixed(1)} / {current.requiredLoC} LoC
+            </div>
+          }
+          style={{ width: 960 }}
+          bodyStyle={{ padding: 16 }}
+        >
+          {/* 行1: ミッション見出し + 残り時間 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#1d8a3c', fontWeight: 700 }}>
+                {current.missionName ?? 'MISSION_01'}
               </div>
-              <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${progressPct}%` }} />
+              <div style={{ fontSize: 26, fontWeight: 700, color: '#1c2228', margin: '2px 0 6px' }}>
+                {current.missionDesc ?? 'コードを書く'}
+              </div>
+              <p style={{ margin: 0, fontSize: 12, color: '#3a4148', lineHeight: 1.5 }}>
+                制限時間内にできるだけ速く正確に打ち込もう。
+                <br />
+                打鍵の出来が作品の品質・バグ率に直結する。
+              </p>
+            </div>
+            <div
+              style={{
+                background: '#0d1626',
+                border: '1px solid #10151c',
+                padding: 10,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+              }}
+            >
+              <span style={{ fontSize: 11, color: '#9fb6d4' }}>残り時間</span>
+              <span
+                style={{
+                  fontSize: 30,
+                  fontWeight: 700,
+                  color: remainingSec <= 10 ? '#ff6b6b' : '#5fd75f',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {remainingSec.toFixed(1)} <span style={{ fontSize: 14 }}>秒</span>
+              </span>
+              <SegGauge pct={timePct} color={remainingSec <= 10 ? '#ff6b6b' : '#43c059'} track="#0a1422" />
+            </div>
+          </div>
+
+          {/* 行2: 入力エリア + COMBO */}
+          <div
+            style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 16, marginTop: 14 }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 11, color: '#1668a8', fontWeight: 700, marginBottom: 4 }}>
+                  入力する文章
+                </div>
+                <div
+                  style={{
+                    background: '#f7f7f4',
+                    border: '1px solid #10151c',
+                    padding: '10px 12px',
+                    fontSize: 26,
+                    color: '#1c2228',
+                    letterSpacing: '0.04em',
+                    minHeight: 30,
+                  }}
+                >
+                  {view.hiragana}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: '#1668a8', fontWeight: 700, marginBottom: 4 }}>
+                  ローマ字入力
+                </div>
+                <div
+                  style={{
+                    background: '#0d1626',
+                    border: '1px solid #10151c',
+                    padding: '8px 12px',
+                    fontSize: 20,
+                    letterSpacing: '0.08em',
+                    minHeight: 26,
+                  }}
+                >
+                  <span style={{ color: '#5fd75f' }}>{view.completed}</span>
+                  <span className="dev-cursor" style={{ color: '#ffffff' }}>
+                    |
+                  </span>
+                  <span style={{ color: '#7a8aa0' }}>{view.remained}</span>
+                </div>
               </div>
             </div>
-            <GhostBar elapsedSec={elapsed} ghostSec={ghosts[current.scale]} />
-            <ComboGauge combo={combo} />
-            <div className="aux-row aux-grid">
-              <span>WPM: {Math.round(wpm)}</span>
-              <span>最大コンボ: {current.maxCombo}</span>
-              <span className="aux-misses">ミス: {failCount}</span>
-              {autoRate > 0 && (
-                <span>
-                  👥 自動生産: {autoRate.toFixed(1)} LoC/秒
-                  {boost && ` 📺×2 残${Math.ceil(current.devBoostRemainingSec)}s`}
+            {/* COMBO ボックス */}
+            <div
+              style={{
+                background: '#0d1626',
+                border: '1px solid #10151c',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 2,
+                padding: 8,
+              }}
+            >
+              <span style={{ fontSize: 12, color: '#9fb6d4', letterSpacing: '0.1em' }}>COMBO</span>
+              <span
+                key={combo}
+                className="dev-combo"
+                style={{
+                  fontSize: 40,
+                  fontWeight: 700,
+                  color: '#f5a623',
+                  fontVariantNumeric: 'tabular-nums',
+                  lineHeight: 1,
+                }}
+              >
+                {combo}
+              </span>
+              {rating && (
+                <span className="dev-rating" style={{ fontSize: 14, fontWeight: 700, color: '#ffd54a' }}>
+                  +{rating}!
                 </span>
               )}
-              {tMul > 1 && <span className="aux-trend">📈 トレンド合致 ×{tMul.toFixed(1)}</span>}
             </div>
-            {trend && <div className="aux-row trend-line">今月のトレンド: {trendLabel(trend)}</div>}
-            <div className="ad-block">
-              <button
-                className="link-btn ad-btn"
-                disabled={adRunning || boost}
-                onClick={runDevBoost}
+          </div>
+
+          {/* 行3: 3メトリクス */}
+          <div
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 14 }}
+          >
+            <Metric label="入力速度" icon="⏩" value={`${charsPerMin}`} unit="文字/分" />
+            <Metric label="正確さ" icon="🎯" value={`${accuracyPct}`} unit="%" />
+            <Metric label="ミス回数" icon="❌" value={`${failCount}`} unit="回" />
+          </div>
+
+          {/* 行4: 開発への影響 4枠 */}
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 11, color: '#1668a8', fontWeight: 700, marginBottom: 6 }}>
+              開発への影響（この入力結果）
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+              <ImpactBox
+                icon="⚡"
+                label="開発速度"
+                value={`${impact.speedPct >= 0 ? '+' : ''}${impact.speedPct}%`}
+                rank={impact.speedRank}
+                pct={clampPct(impact.speedPct + 30, 70)}
+              />
+              <ImpactBox
+                icon="💎"
+                label="品質"
+                value={`+${impact.qualityDelta}`}
+                rank={impact.qualityRank}
+                pct={impact.qualityDelta * 20}
+              />
+              <ImpactBox
+                icon="🐛"
+                label="バグ率"
+                value={`${impact.bugPct}%`}
+                rank={impact.bugRank}
+                pct={Math.abs(impact.bugPct) * 20}
+              />
+              {/* EXP は今回未実装＝準備中枠 */}
+              <div
+                style={{
+                  background: '#0d1626',
+                  border: '1px dashed #3a4a60',
+                  padding: 8,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  opacity: 0.6,
+                }}
               >
-                {boost
-                  ? `📺 加速中（残${Math.ceil(current.devBoostRemainingSec)}秒）`
-                  : adRunning
-                    ? '広告再生中…'
-                    : '📺 広告で開発加速（30秒・自動生産×2）'}
-              </button>
+                <span style={{ fontSize: 11, color: '#9fb6d4' }}>✨ 獲得EXP</span>
+                <span style={{ fontSize: 12, color: '#7a8aa0' }}>準備中</span>
+              </div>
             </div>
-          </section>
-
-          {current.bugPhrase && (
-            <section className="card bug-card">
-              <h2>🐛 緊急バグ発生！</h2>
-              <p className="bug-msg">下のフレーズを打ち切れば +3 LoC 修正！</p>
-            </section>
-          )}
-
-          <section className="card typing-card">
-            <TypingPanel
-              hiragana={view.hiragana}
-              completed={view.completed}
-              remained={view.remained}
-            />
-          </section>
-          <p className="hint">物理キーボードで打鍵してください（日本語IMEはOFF）</p>
-        </div>
-
-        <div>
-          <CodeEditor lines={codeLines} bugLineIdx={bugLineIdx} mode="develop" />
-        </div>
-      </div>
+          </div>
+        </PixelWindow>
+      </main>
     </div>
   );
 };
+
+const clampPct = (v: number, max: number) => Math.max(0, Math.min(100, (v / max) * 100));
+
+/** 行3 の 1 メトリクス（入力速度・正確さ・ミス） */
+const Metric = ({
+  label,
+  icon,
+  value,
+  unit,
+}: {
+  label: string;
+  icon: string;
+  value: string;
+  unit: string;
+}) => (
+  <div
+    style={{
+      background: '#f2f1ed',
+      border: '1px solid #10151c',
+      padding: '8px 10px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 2,
+    }}
+  >
+    <span style={{ fontSize: 11, color: '#3a4148' }}>{label}</span>
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+      <span style={{ fontSize: 14 }}>{icon}</span>
+      <span
+        style={{
+          fontSize: 22,
+          fontWeight: 700,
+          color: '#1c2228',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {value}
+      </span>
+      <span style={{ fontSize: 11, color: '#6b7280' }}>{unit}</span>
+    </div>
+  </div>
+);
+
+/** 行4 の 1 影響枠（開発速度・品質・バグ率） */
+const ImpactBox = ({
+  icon,
+  label,
+  value,
+  rank,
+  pct,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  rank: ImpactRank;
+  pct: number;
+}) => (
+  <div
+    style={{
+      background: '#0d1626',
+      border: '1px solid #10151c',
+      padding: 8,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 4,
+    }}
+  >
+    <span style={{ fontSize: 11, color: '#9fb6d4' }}>
+      {icon} {label}
+    </span>
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+      <span
+        style={{ fontSize: 18, fontWeight: 700, color: '#ffffff', fontVariantNumeric: 'tabular-nums' }}
+      >
+        {value}
+      </span>
+      <span style={{ fontSize: 16, fontWeight: 700, color: rankColor(rank) }}>{rank}</span>
+    </div>
+    <SegGauge pct={pct} color={rankColor(rank)} track="#0a1422" height={6} />
+  </div>
+);
