@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import type { Scale } from '../data/scales';
+import { clipKeepLeft, clipKeepRight, WS_CHAIR, WS_LAYERS } from '../data/workstation';
 
 /**
  * オフィスの床ビュー（v0.13）。
@@ -24,18 +25,6 @@ const ROOM: Record<Scale, { cols: number; rows: number }> = {
   hit: { cols: 14, rows: 9 },
   aaa: { cols: 14, rows: 11 },
 };
-
-/**
- * ワークステーションの重ね合わせ（WorkstationTuner で確定した値）。
- * 人は NW（背中こちら）向き → 椅子背を最前面(z最大)にして頭＋上背を覗かせる。
- * w=表示サイズ(正方), ox/oy=床アンカーからのオフセット, z=重なり順。
- */
-const WS_LAYERS = [
-  { img: 'desk.png', w: 140, ox: -6, oy: -22, z: 1 },
-  { img: 'laptop.png', w: 66, ox: 10, oy: -99, z: 2 },
-  { img: 'person_sit_nw.png', w: 198, ox: 33, oy: -10, z: 3 },
-  { img: 'chair.png', w: 73, ox: 34, oy: -42, z: 4 },
-];
 
 /** ワークステーションを置くセル（ここを編集すれば配置をずらせる）。 */
 const WORKSTATION_CELLS: { i: number; j: number }[] = [
@@ -143,29 +132,112 @@ export const OfficeView = ({ scale }: Props) => {
   // 「左右中央＝x+ox、下端＝y+oy」で床アンカー基準に置く。
   const renderWorkstation = (i: number, j: number): ReactNode => {
     const { x, y } = cellAnchor(i, j);
-    // セット全体の前後は (i+j) で決め、セット内の重なりは l.z で決める
+    // セット全体の前後は (i+j)、セット内の重なりは z で決める
     const baseZ = (i + j) * 10;
+    const imgEl = (
+      key: string,
+      img: string,
+      sw: number,
+      ox: number,
+      oy: number,
+      z: number,
+      clip?: string,
+    ) => (
+      <img
+        key={key}
+        src={`${SPRITE_BASE}/${img}`}
+        alt=""
+        width={sw}
+        height={sw}
+        style={{
+          position: 'absolute',
+          left: x + ox - sw / 2,
+          top: y + oy - sw,
+          clipPath: clip,
+          imageRendering: 'pixelated',
+          zIndex: baseZ + z,
+          display: 'block',
+        }}
+      />
+    );
+    const c = WS_CHAIR;
     return (
       <div key={`ws-${i}-${j}`}>
-        {WS_LAYERS.map((l) => (
-          <img
-            key={l.img}
-            src={`${SPRITE_BASE}/${l.img}`}
-            alt=""
-            width={l.w}
-            height={l.w}
-            style={{
-              position: 'absolute',
-              left: x + l.ox - l.w / 2,
-              top: y + l.oy - l.w,
-              imageRendering: 'pixelated',
-              zIndex: baseZ + l.z,
-              display: 'block',
-            }}
-          />
-        ))}
+        {WS_LAYERS.map((l) =>
+          imgEl(
+            `l-${l.img}`,
+            l.img,
+            l.w,
+            l.ox,
+            l.oy,
+            l.z,
+            l.clipTop != null && l.clipBot != null ? clipKeepLeft(l.clipTop, l.clipBot) : undefined,
+          ),
+        )}
+        {imgEl('chairBack', c.img, c.w, c.ox, c.oy, c.zBack, clipKeepRight(c.top, c.bot))}
+        {imgEl('chairFront', c.img, c.w, c.ox, c.oy, c.zFront, clipKeepLeft(c.top, c.bot))}
       </div>
     );
+  };
+
+  // 壁：床の菱形の奥2辺（NW・NE）に沿って窓パネル（ドット絵）を並べる。
+  // NE 辺＝(i,0) タイル列、NW 辺＝(0,j) タイル列。パネル自体がアイソメで傾いているので
+  // 辺に沿って 2 タイルおきに置くと窓壁になる。サイズ/オフセットは要調整。
+  const renderWalls = (): ReactNode => {
+    const pW = 110; // パネル表示幅
+    const pH = (pW * 160) / 96; // アスペクト維持
+    const oy = 12; // 縦微調整（床の奥辺に沿わせる）
+    const step = 1; // 何タイルおきに1枚
+    const panels: ReactNode[] = [];
+    // NE 壁（奥右）: (i,0) の NE 辺中点
+    for (let i = 0; i < cols; i += step) {
+      const mx = originX + i * (dW / 2) + 72;
+      const my = originY + i * (dH / 2) + 45;
+      panels.push(
+        <img
+          key={`wne-${i}`}
+          src={`${SPRITE_BASE}/wall_window_ne.png`}
+          alt=""
+          width={pW}
+          height={pH}
+          style={{ position: 'absolute', left: mx - pW / 2, top: my - pH + oy, imageRendering: 'pixelated', zIndex: 0 }}
+        />,
+      );
+    }
+    // NW 壁（奥左）: (0,j) の NW 辺中点
+    for (let j = 0; j < rows; j += step) {
+      const mx = originX - j * (dW / 2) + 24;
+      const my = originY + j * (dH / 2) + 45;
+      panels.push(
+        <img
+          key={`wnw-${j}`}
+          src={`${SPRITE_BASE}/wall_window_nw.png`}
+          alt=""
+          width={pW}
+          height={pH}
+          style={{ position: 'absolute', left: mx - pW / 2, top: my - pH + oy, imageRendering: 'pixelated', zIndex: 0 }}
+        />,
+      );
+    }
+    // 角の柱：2壁の窓が重なる繋ぎ目を隠す（窓枠色のフラットな柱）
+    const cornerX = originX + dW / 2;
+    panels.push(
+      <div
+        key="corner-post"
+        style={{
+          position: 'absolute',
+          left: cornerX - 7,
+          top: originY - 118,
+          width: 14,
+          height: 180,
+          background: '#ecdcab',
+          borderLeft: '2px solid #cdb878',
+          borderRight: '3px solid #a98e50',
+          zIndex: 1,
+        }}
+      />,
+    );
+    return <>{panels}</>;
   };
 
   return (
@@ -179,6 +251,7 @@ export const OfficeView = ({ scale }: Props) => {
         overflow: 'hidden',
       }}
     >
+      {renderWalls()}
       {renderFloor()}
       {WORKSTATION_CELLS.map((c) => renderWorkstation(c.i, c.j))}
     </div>
