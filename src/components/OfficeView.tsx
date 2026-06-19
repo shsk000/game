@@ -184,59 +184,47 @@ export const OfficeView = ({ scale }: Props) => {
   // NE 辺＝(i,0) タイル列、NW 辺＝(0,j) タイル列。パネル自体がアイソメで傾いているので
   // 辺に沿って 2 タイルおきに置くと窓壁になる。サイズ/オフセットは要調整。
   const renderWalls = (): ReactNode => {
-    const pW = 110; // パネル表示幅
-    const pH = (pW * 160) / 96; // アスペクト維持
-    const oy = 12; // 縦微調整（床の奥辺に沿わせる）
-    const step = 1; // 何タイルおきに1枚
+    const topOff = (11 / TILE) * cellPx; // 床タイルの透明上端（ひし形頂点まで）≈33
+    const pW = 96; // パネル表示幅（素材96 等倍＝ドット最もきれい）
+    const pH = 160; // 等倍
+    const stepX = 68; // 横ステップ(px)：窓が隙間なく桟を揃えて並ぶ値（要調整）
+    const sillOy = 24; // 窓台を床奥辺に乗せる縦微調整（要調整）
+    const Tx = originX + dW / 2; // 角（上隅）x
+    const Ty = originY + topOff; // 角（上隅）y
     const panels: ReactNode[] = [];
-    // NE 壁（奥右）: (i,0) の NE 辺中点
-    for (let i = 0; i < cols; i += step) {
-      const mx = originX + i * (dW / 2) + 72;
-      const my = originY + i * (dH / 2) + 45;
+    // NE 壁（角→右下）。床の NE 奥辺 y = Ty + (cx-Tx)*0.5。
+    // 角を越えて NW 壁と交差しないよう、窓の中身左端が角(Tx)に来る位置から始める。
+    const neMaxX = originX + (cols - 1) * (dW / 2) + dW;
+    let k = 0;
+    for (let cx = Tx + 36; cx <= neMaxX; cx += stepX, k++) {
+      const floorY = Ty + (cx - Tx) * 0.5;
       panels.push(
         <img
-          key={`wne-${i}`}
+          key={`wne-${k}`}
           src={`${SPRITE_BASE}/wall_window_ne.png`}
           alt=""
           width={pW}
           height={pH}
-          style={{ position: 'absolute', left: mx - pW / 2, top: my - pH + oy, imageRendering: 'pixelated', zIndex: 0 }}
+          style={{ position: 'absolute', left: cx - pW / 2, top: floorY + sillOy - pH, imageRendering: 'pixelated', zIndex: 1 }}
         />,
       );
     }
-    // NW 壁（奥左）: (0,j) の NW 辺中点
-    for (let j = 0; j < rows; j += step) {
-      const mx = originX - j * (dW / 2) + 24;
-      const my = originY + j * (dH / 2) + 45;
+    // NW 壁（角→左下）。窓の中身右端が角(Tx)に来る位置から始める。
+    const nwMinX = originX - (rows - 1) * (dW / 2);
+    let m = 0;
+    for (let cx = Tx - 36; cx >= nwMinX; cx -= stepX, m++) {
+      const floorY = Ty + (Tx - cx) * 0.5;
       panels.push(
         <img
-          key={`wnw-${j}`}
+          key={`wnw-${m}`}
           src={`${SPRITE_BASE}/wall_window_nw.png`}
           alt=""
           width={pW}
           height={pH}
-          style={{ position: 'absolute', left: mx - pW / 2, top: my - pH + oy, imageRendering: 'pixelated', zIndex: 0 }}
+          style={{ position: 'absolute', left: cx - pW / 2, top: floorY + sillOy - pH, imageRendering: 'pixelated', zIndex: 1 }}
         />,
       );
     }
-    // 角の柱：2壁の窓が重なる繋ぎ目を隠す（窓枠色のフラットな柱）
-    const cornerX = originX + dW / 2;
-    panels.push(
-      <div
-        key="corner-post"
-        style={{
-          position: 'absolute',
-          left: cornerX - 7,
-          top: originY - 118,
-          width: 14,
-          height: 180,
-          background: '#ecdcab',
-          borderLeft: '2px solid #cdb878',
-          borderRight: '3px solid #a98e50',
-          zIndex: 1,
-        }}
-      />,
-    );
     return <>{panels}</>;
   };
 
