@@ -164,7 +164,8 @@ export const OfficeScreen = () => {
     aaa: { w: 1344, h: 1056 },
   };
   const stageSize = STAGE_SIZE[currentScale] ?? STAGE_SIZE.mini;
-  const stageScale = Math.min(1280 / stageSize.w, 720 / stageSize.h);
+  // 等倍を上限に（画面に収まらない大きい規模だけ縮小）。mini を画面いっぱいに拡大しない＝?layout と同サイズ。
+  const stageScale = Math.min(1, 1280 / stageSize.w, 720 / stageSize.h);
 
   // G5：お知らせ（リファレンスの左上窓）。store の状態から直近の出来事を導出
   const news: { icon: string; text: string; tone?: 'warn' | 'good' }[] = [];
