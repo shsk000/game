@@ -18,6 +18,9 @@ export function Workstation({
   dir: Dir;
 }) {
   const cfg: WsConfig = dir === 'SE' ? WS_SE : WS_NW;
+  // セット全体のセル内位置（tuner の全体移動で設定）
+  const DROP_X = cfg.cellOffset.x;
+  const DROP_Y = cfg.cellOffset.y;
   const imgEl = (
     key: string,
     img: string,
@@ -36,8 +39,8 @@ export function Workstation({
       height={sw}
       style={{
         position: 'absolute',
-        left: x + ox - sw / 2,
-        top: y + oy - sw,
+        left: x + DROP_X + ox - sw / 2,
+        top: y + DROP_Y + oy - sw,
         clipPath: clip,
         transform: flip ? 'scaleX(-1)' : undefined,
         imageRendering: 'pixelated',

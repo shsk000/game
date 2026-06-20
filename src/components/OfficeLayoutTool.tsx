@@ -9,50 +9,36 @@ import {
   ROOM,
   SPRITE_BASE,
 } from '../lib/officeGeometry';
+import {
+  DEFAULT_WORKSTATIONS,
+  type DoorCfg,
+  loadDoor,
+  loadWorkstations,
+  saveDoor,
+  saveWorkstations,
+} from '../lib/officeLayout';
 import { Workstation } from './Workstation';
 
 /**
  * オフィス配置ツール（dev 専用、?layout）。
  * 床セルをクリックして「空 → SE → NW → 空」と切り替え、ワークステーションを並べる。
- * ライブプレビュー＋配置配列を出力。確定値は OfficeView の WORKSTATION_CELLS に転記する。
+ * 配置・ドア・規模は src/lib/officeLayout 経由で localStorage に保存され、本番 OfficeView もそれを読む。
  */
-
-const LS_KEY = 'office-layout-v1';
-
-const DEFAULT: Placement[] = [
-  { i: 2, j: 1, dir: 'SE' },
-  { i: 3, j: 2, dir: 'NW' },
-  { i: 5, j: 3, dir: 'SE' },
-  { i: 6, j: 4, dir: 'NW' },
-];
-
-function load(): Placement[] {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) return JSON.parse(raw) as Placement[];
-  } catch {
-    // ignore
-  }
-  return DEFAULT;
-}
 
 // 床ひし形天面に合わせたクリック領域の clip-path（cellPx 正方内）
 const DIAMOND = 'polygon(50% 34%, 100% 59%, 50% 84%, 0% 59%)';
 
 export function OfficeLayoutTool() {
   const [scale, setScale] = useState<Scale>('mini');
-  const [placements, setPlacements] = useState<Placement[]>(load());
+  const [placements, setPlacements] = useState<Placement[]>(loadWorkstations());
+  const [hover, setHover] = useState<{ i: number; j: number } | null>(null);
 
   const { cols, rows } = ROOM[scale];
   const geo = makeGeometry(cols, rows);
 
   const save = (next: Placement[]) => {
     setPlacements(next);
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(next));
-    } catch {
-      // ignore
-    }
+    saveWorkstations(next);
   };
 
   // クリックでセル状態を巡回：空 → SE → NW → 空
@@ -68,6 +54,27 @@ export function OfficeLayoutTool() {
   };
 
   const at = (i: number, j: number) => placements.find((p) => p.i === i && p.j === j);
+
+  const [door, setDoorState] = useState<DoorCfg>(loadDoor());
+  const persistDoor = (d: DoorCfg) => {
+    setDoorState(d);
+    saveDoor(d);
+  };
+  const updDoor = (patch: Partial<DoorCfg>) => persistDoor({ ...door, ...patch });
+
+  const numField = (
+    label: string,
+    val: number,
+    min: number,
+    max: number,
+    on: (v: number) => void,
+  ) => (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginTop: 4 }}>
+      <span style={{ width: 52 }}>{label}</span>
+      <input type="range" min={min} max={max} value={val} onChange={(e) => on(Number(e.target.value))} style={{ flex: 1 }} />
+      <input type="number" value={val} onChange={(e) => on(Number(e.target.value))} style={{ width: 52 }} />
+    </label>
+  );
 
   const cells = eachCell(cols, rows);
 
@@ -123,12 +130,42 @@ export function OfficeLayoutTool() {
           {/* ワークステーション（クリックは下のセルに通すため pointer-events 無効） */}
           {placements.map((p) => {
             const { x, y } = geo.cellAnchor(p.i, p.j);
+            const lit = hover?.i === p.i && hover?.j === p.j;
             return (
-              <div key={`ws-${p.i}-${p.j}`} style={{ pointerEvents: 'none' }}>
+              <div
+                key={`ws-${p.i}-${p.j}`}
+                style={{
+                  pointerEvents: 'none',
+                  filter: lit
+                    ? 'drop-shadow(0 0 2px #7cf) drop-shadow(0 0 2px #7cf) brightness(1.15)'
+                    : undefined,
+                }}
+              >
                 <Workstation x={x} y={y} baseZ={geo.baseZ(p.i, p.j)} dir={p.dir} />
               </div>
             );
           })}
+
+          {/* ドア（セル基準＋セル内オフセット。pointer-events 無効） */}
+          {(() => {
+            const { x, y } = geo.cellAnchor(door.i, door.j);
+            return (
+              <img
+                src={`${SPRITE_BASE}/${door.img}`}
+                width={door.w}
+                height={door.w}
+                alt=""
+                style={{
+                  position: 'absolute',
+                  left: x + door.ox - door.w / 2,
+                  top: y + door.oy - door.w,
+                  imageRendering: 'pixelated',
+                  zIndex: geo.baseZ(door.i, door.j) + 50,
+                  pointerEvents: 'none',
+                }}
+              />
+            );
+          })()}
 
           {/* クリック可能なセル（ひし形）。最前面でホバー強調＋ラベル表示 */}
           {cells.map(({ i, j }) => {
@@ -155,26 +192,57 @@ export function OfficeLayoutTool() {
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = 'rgba(120,200,140,0.30)';
+                  setHover({ i, j });
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = p ? 'rgba(90,140,220,0.18)' : 'transparent';
+                  setHover(null);
                 }}
               >
-                <span
-                  style={{
-                    position: 'absolute',
-                    left: '50%',
-                    top: '55%',
-                    transform: 'translate(-50%,-50%)',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: p ? '#fff' : 'rgba(255,255,255,0.25)',
-                    textShadow: '0 1px 2px #000',
-                  }}
-                >
-                  {p ? p.dir : '·'}
-                </span>
+                {!p && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      top: '55%',
+                      transform: 'translate(-50%,-50%)',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: 'rgba(255,255,255,0.25)',
+                      textShadow: '0 1px 2px #000',
+                    }}
+                  >
+                    ·
+                  </span>
+                )}
               </button>
+            );
+          })}
+
+          {/* 占有セルのラベルは物体の上に重ねる（床セルだとズレて見えるため） */}
+          {placements.map((p) => {
+            const { x, y } = geo.cellAnchor(p.i, p.j);
+            return (
+              <div
+                key={`lbl-${p.i}-${p.j}`}
+                style={{
+                  position: 'absolute',
+                  left: x,
+                  top: y - 52,
+                  transform: 'translate(-50%,-50%)',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: '#fff',
+                  background: p.dir === 'SE' ? 'rgba(60,120,200,0.92)' : 'rgba(150,90,55,0.92)',
+                  padding: '1px 5px',
+                  borderRadius: 3,
+                  whiteSpace: 'nowrap',
+                  zIndex: 9000,
+                  pointerEvents: 'none',
+                }}
+              >
+                {p.dir} {p.i},{p.j}
+              </div>
             );
           })}
         </div>
@@ -205,13 +273,22 @@ export function OfficeLayoutTool() {
           <button type="button" onClick={() => save([])}>
             全消去
           </button>
-          <button type="button" onClick={() => save(DEFAULT)}>
+          <button type="button" onClick={() => save(DEFAULT_WORKSTATIONS)}>
             既定に戻す
           </button>
         </div>
 
+        <div style={{ border: '1px solid #66c', borderRadius: 4, padding: 8, marginBottom: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>出入口ドア（どのセルか）</div>
+          {numField('i (列)', door.i, 0, cols - 1, (v) => updDoor({ i: v }))}
+          {numField('j (行)', door.j, 0, rows - 1, (v) => updDoor({ j: v }))}
+          <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
+            セル内位置・大きさは <strong>?tuner</strong> →「ドア」タブで設定
+          </div>
+        </div>
+
         <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 4 }}>
-          OfficeView の WORKSTATION_CELLS に転記:
+          OfficeView の WORKSTATION_CELLS / DOOR に転記:
         </div>
         <pre
           style={{
@@ -222,7 +299,7 @@ export function OfficeLayoutTool() {
             borderRadius: 4,
           }}
         >
-          {`const WORKSTATION_CELLS: Placement[] = [\n${output}\n];`}
+          {`const WORKSTATION_CELLS: Placement[] = [\n${output}\n];\n\nconst DOOR = { img: '${door.img}', i: ${door.i}, j: ${door.j}, w: ${door.w}, ox: ${door.ox}, oy: ${door.oy} };`}
         </pre>
       </div>
     </div>

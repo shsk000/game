@@ -1,21 +1,16 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import type { Scale } from '../data/scales';
-import { cellPx, makeGeometry, type Placement, ROOM, SPRITE_BASE, TILE } from '../lib/officeGeometry';
+import { cellPx, makeGeometry, ROOM, SPRITE_BASE, TILE } from '../lib/officeGeometry';
+import { DEFAULT_DOOR, DEFAULT_WORKSTATIONS } from '../lib/officeLayout';
 import { Workstation } from './Workstation';
 
 /**
  * オフィスの床ビュー（v0.13）。
  * office-visual-design §2 準拠：視点はアイソメ 30°×30°（2:1 dimetric）。
  * ジオメトリ・ワークステーション描画は src/lib/officeGeometry + Workstation に一元化。
+ * 配置（机/ドア）は src/lib/officeLayout のコード定数（=配信される確定レイアウト）。
+ * 調整は OfficeLayoutTool(?layout) で行い、出力値を officeLayout.ts の DEFAULT_* に転記してコミットする。
  */
-
-/** ワークステーション配置（OfficeLayoutTool `?layout` で調整 → ここに転記）。 */
-const WORKSTATION_CELLS: Placement[] = [
-  { i: 3, j: 3, dir: 'SE' },
-  { i: 3, j: 4, dir: 'SE' },
-  { i: 4, j: 3, dir: 'NW' },
-  { i: 4, j: 4, dir: 'NW' },
-];
 
 /** スプライト存在チェック（Vite dev は存在しないパスにも index.html を返すため content-type で判定） */
 const spriteCache = new Map<string, boolean>();
@@ -55,6 +50,9 @@ export const OfficeView = ({ scale }: Props) => {
   const { cols, rows } = ROOM[scale] ?? ROOM.mini;
   const geo = makeGeometry(cols, rows);
   const { w, h, dW, originX, originY } = geo;
+  // 配置（配信される確定レイアウト。officeLayout.ts のコード定数）
+  const workstations = DEFAULT_WORKSTATIONS;
+  const door = DEFAULT_DOOR;
 
   // 床：アイソメひし形タイルを菱形グリッドで敷く
   const renderFloor = (): ReactNode => {
@@ -147,12 +145,31 @@ export const OfficeView = ({ scale }: Props) => {
     >
       {renderWalls()}
       {renderFloor()}
-      {WORKSTATION_CELLS.map((c) => {
+      {workstations.map((c) => {
         const { x, y } = geo.cellAnchor(c.i, c.j);
         return (
           <Workstation key={`ws-${c.i}-${c.j}`} x={x} y={y} baseZ={geo.baseZ(c.i, c.j)} dir={c.dir} />
         );
       })}
+      {(() => {
+        const { x, y } = geo.cellAnchor(door.i, door.j);
+        return (
+          <img
+            key="se-door"
+            src={`${SPRITE_BASE}/${door.img}`}
+            alt=""
+            width={door.w}
+            height={door.w}
+            style={{
+              position: 'absolute',
+              left: x + door.ox - door.w / 2,
+              top: y + door.oy - door.w,
+              imageRendering: 'pixelated',
+              zIndex: geo.baseZ(door.i, door.j) + 50,
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };

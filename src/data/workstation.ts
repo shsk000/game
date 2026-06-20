@@ -36,7 +36,8 @@ export type WsChair = {
   flip?: boolean; // （非推奨）水平反転
 };
 
-export type WsConfig = { layers: WsLayer[]; chair: WsChair };
+/** cellOffset = このセット全体をセル基準点に対しどこに置くか（セル内位置）。tuner の「全体移動」で設定。 */
+export type WsConfig = { layers: WsLayer[]; chair: WsChair; cellOffset: { x: number; y: number } };
 
 /** NW（背中こちら）。 */
 export const WS_NW: WsConfig = {
@@ -46,6 +47,7 @@ export const WS_NW: WsConfig = {
     { img: 'person_sit_nw.png', w: 118, ox: -3, oy: -9, z: 6, clipTop: 79, clipBot: 28, clipSide: 'left' },
   ],
   chair: { img: 'chair.png', w: 56, ox: -2, oy: -23, zBack: 2, zFront: 5, top: 57, bot: 24 },
+  cellOffset: { x: 2, y: 28 },
 };
 
 /** SE（カメラ向き）。正規の向き別スプライト：机=north-west回転、椅子=SE向きオブジェクト、人=SE着席。 */
@@ -56,6 +58,7 @@ export const WS_SE: WsConfig = {
     { img: 'person_sit.png', w: 118, ox: -16, oy: -9, z: 6 },
   ],
   chair: { img: 'chair_se.png', w: 56, ox: -17, oy: -26, zBack: 2, zFront: 5, top: 57, bot: 24, backSide: 'left' },
+  cellOffset: { x: 2, y: 28 },
 };
 
 /** 後方互換（旧名）。 */

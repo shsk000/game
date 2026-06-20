@@ -8,12 +8,14 @@ import {
   type WsConfig,
   type WsLayer,
 } from '../data/workstation';
+import { type DoorCfg, loadDoor, saveDoor } from '../lib/officeLayout';
 
 /**
- * ワークステーション調整ツール（dev 専用、?tuner）。
- * NW（背中こちら）/ SE（カメラ向き・向かい側）を切り替えて、それぞれの机/PC/人/椅子を調整する。
- * 椅子は 1 枚画像を clip-path で「背もたれ(奥)/座面+前脚(手前)」に分割し、人をその間に挟む。
- * SE は家具を水平反転(flip)、人は SE 着席スプライト。確定値は src/data/workstation.ts に転記する。
+ * 物体エディタ（dev 専用、?tuner）。1つの URL で全物体の「セル内の置き方」を定義する。
+ * - セット物体（ワークステーション＝机/PC/人/椅子）：NW/SE 別に各レイヤー＋椅子＋セル内位置。
+ * - 単体物体（ドア）：画像＋セル内位置(ox/oy)＋大きさ。
+ * どのセルに置くかは ?layout 側。確定値は workstation.ts / officeLayout.ts に転記する。
+ * 将来オブジェクトが増えても、この target セレクタに足すだけで1 URL に集約できる。
  */
 
 const SPRITE_BASE = '/sprites/office';
@@ -21,7 +23,7 @@ const TILE = 32;
 const SCALE = 3;
 const cellPx = TILE * SCALE; // 96
 
-const LS_KEY = 'ws-tuner-v3';
+const LS_KEY = 'ws-tuner-v4';
 type Saved = { nw: WsConfig; se: WsConfig };
 function load(): Saved {
   try {
@@ -39,14 +41,16 @@ export function WorkstationTuner() {
   const [se, setSe] = useState<WsConfig>(init.se);
   const [editing, setEditing] = useState<'NW' | 'SE'>('NW');
   const [pair, setPair] = useState(false); // 向かい側を隣に表示して整合を取る
-  // 全体オフセット（机/椅子/人/PC をまとめて移動）。確定時は出力で各 ox/oy に加算される。
-  const [g, setG] = useState<{ NW: { x: number; y: number }; SE: { x: number; y: number } }>({
-    NW: { x: 0, y: 0 },
-    SE: { x: 0, y: 0 },
-  });
+  const [target, setTarget] = useState<'ws' | 'door'>('ws'); // 編集対象の物体
+  const [door, setDoorState] = useState<DoorCfg>(loadDoor());
+  const updDoor = (patch: Partial<DoorCfg>) => {
+    const next = { ...door, ...patch };
+    setDoorState(next);
+    saveDoor(next);
+  };
 
   const cfg = editing === 'NW' ? nw : se;
-  const gg = g[editing]; // 編集中の全体オフセット（出力で各 ox/oy に加算）
+  const gg = cfg.cellOffset; // セット全体のセル内位置（全体移動）
   const save = (n: WsConfig, s: WsConfig) => {
     try {
       localStorage.setItem(LS_KEY, JSON.stringify({ nw: n, se: s }));
@@ -76,39 +80,37 @@ export function WorkstationTuner() {
     }
   };
 
-  // アイソメ床グリッド
-  const cols = 7;
-  const rows = 6;
-  const w = cols * cellPx;
-  const h = rows * cellPx;
-  const dW = cellPx;
-  const dH = cellPx / 2;
-  const spanX = (cols + rows - 2) * (dW / 2) + dW;
-  const spanY = (cols + rows - 2) * (dH / 2) + dH;
-  const originX = (w - spanX) / 2 + (rows - 1) * (dW / 2);
-  const originY = (h - spanY) / 2;
-  const ax = originX + cellPx / 2;
-  const ay = originY + 3 * dH + cellPx * 0.6;
+  // 1マスだけ表示（セルの範囲＝菱形を明示）。物体はこの1セル基準で置く。
+  const dW = cellPx; // 96
+  const dH = cellPx / 2; // 48
+  const w = 480;
+  const h = 480;
+  const tileLeft = (w - cellPx) / 2;
+  const tileTop = (h - cellPx) / 2;
+  const ax = tileLeft + cellPx / 2; // セル基準点 x（菱形中心）
+  const ay = tileTop + cellPx * 0.6; // セル基準点 y（officeGeometry と同じ）
 
-  const tiles = [];
-  for (let s = 0; s <= cols + rows - 2; s++) {
-    for (let i = 0; i < cols; i++) {
-      const j = s - i;
-      if (j < 0 || j >= rows) continue;
-      const left = originX + (i - j) * (dW / 2);
-      const top = originY + (i + j) * (dH / 2);
-      tiles.push(
-        <img
-          key={`f-${i}-${j}`}
-          src={`${SPRITE_BASE}/floor_iso.png`}
-          width={cellPx}
-          height={cellPx}
-          alt=""
-          style={{ position: 'absolute', left, top, imageRendering: 'pixelated' }}
-        />,
-      );
-    }
-  }
+  // セル天面の菱形（幅 dW × 高 dH、中心 = 基準点）の4頂点
+  const diamond = `${ax},${ay - dH / 2} ${ax + dW / 2},${ay} ${ax},${ay + dH / 2} ${ax - dW / 2},${ay}`;
+
+  const tiles = [
+    <img
+      key="floor"
+      src={`${SPRITE_BASE}/floor_iso.png`}
+      width={cellPx}
+      height={cellPx}
+      alt=""
+      style={{ position: 'absolute', left: tileLeft, top: tileTop, imageRendering: 'pixelated' }}
+    />,
+    <svg
+      key="cell-outline"
+      width={w}
+      height={h}
+      style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none', zIndex: 200 }}
+    >
+      <polygon points={diamond} fill="rgba(120,200,255,0.10)" stroke="#5ad" strokeWidth={2} />
+    </svg>,
+  ];
 
   const numField = (
     label: string,
@@ -137,10 +139,10 @@ export function WorkstationTuner() {
   );
 
   const fmtLayer = (l: WsLayer) =>
-    `{ img: '${l.img}', w: ${l.w}, ox: ${l.ox + gg.x}, oy: ${l.oy + gg.y}, z: ${l.z}${l.clipTop !== undefined ? `, clipTop: ${l.clipTop}, clipBot: ${l.clipBot ?? 100}, clipSide: '${l.clipSide ?? 'left'}'` : ''}${l.flip ? ', flip: true' : ''} },`;
+    `{ img: '${l.img}', w: ${l.w}, ox: ${l.ox}, oy: ${l.oy}, z: ${l.z}${l.clipTop !== undefined ? `, clipTop: ${l.clipTop}, clipBot: ${l.clipBot ?? 100}, clipSide: '${l.clipSide ?? 'left'}'` : ''}${l.flip ? ', flip: true' : ''} },`;
   const fmtChair = (c: WsChair) =>
-    `chair: { img: '${c.img}', w: ${c.w}, ox: ${c.ox + gg.x}, oy: ${c.oy + gg.y}, zBack: ${c.zBack}, zFront: ${c.zFront}, top: ${c.top}, bot: ${c.bot}${c.backSide ? `, backSide: '${c.backSide}'` : ''} }`;
-  const output = `// ${editing}\n${cfg.layers.map(fmtLayer).join('\n')}\n${fmtChair(cfg.chair)}`;
+    `chair: { img: '${c.img}', w: ${c.w}, ox: ${c.ox}, oy: ${c.oy}, zBack: ${c.zBack}, zFront: ${c.zFront}, top: ${c.top}, bot: ${c.bot}${c.backSide ? `, backSide: '${c.backSide}'` : ''} }`;
+  const output = `// ${editing}\nlayers: [\n${cfg.layers.map((l) => `  ${fmtLayer(l)}`).join('\n')}\n],\n${fmtChair(cfg.chair)},\ncellOffset: { x: ${gg.x}, y: ${gg.y} },`;
 
   // 1セットを (cx,cy) に描画（編集中=ライブ、向かい側=相手 config）
   const renderWs = (c: WsConfig, cx: number, cy: number, base: number, kp: string) => (
@@ -206,10 +208,9 @@ export function WorkstationTuner() {
 
   // 向かい側パートナー：編集SE→相手NWを +1セル(右下)、編集NW→相手SEを -1セル(左上)
   const updG = (patch: Partial<{ x: number; y: number }>) =>
-    setG({ ...g, [editing]: { ...gg, ...patch } });
-  const partnerDir = editing === 'SE' ? 'NW' : 'SE';
+    setCfg({ ...cfg, cellOffset: { ...cfg.cellOffset, ...patch } });
   const partnerCfg = editing === 'SE' ? nw : se;
-  const partnerG = g[partnerDir];
+  const partnerG = partnerCfg.cellOffset;
   const partnerDx = editing === 'SE' ? cellPx / 2 : -cellPx / 2; // ±48
   const partnerDy = editing === 'SE' ? cellPx / 4 : -cellPx / 4; // ±24
   const partnerBase = editing === 'SE' ? 60 : 40;
@@ -254,9 +255,24 @@ export function WorkstationTuner() {
           }}
         >
           {tiles}
-          {pair &&
+          {target === 'ws' && pair &&
             renderWs(partnerCfg, ax + partnerDx + partnerG.x, ay + partnerDy + partnerG.y, partnerBase, 'partner')}
-          {renderWs(cfg, ax + gg.x, ay + gg.y, 50, 'edit')}
+          {target === 'ws' && renderWs(cfg, ax + gg.x, ay + gg.y, 50, 'edit')}
+          {target === 'door' && (
+            <img
+              src={`${SPRITE_BASE}/${door.img}`}
+              width={door.w}
+              height={door.w}
+              alt=""
+              style={{
+                position: 'absolute',
+                left: ax + door.ox - door.w / 2,
+                top: ay + door.oy - door.w,
+                imageRendering: 'pixelated',
+                zIndex: 50,
+              }}
+            />
+          )}
           <div
             style={{ position: 'absolute', left: ax - 1, top: ay - 10, width: 2, height: 20, background: 'lime', zIndex: 99 }}
           />
@@ -267,7 +283,43 @@ export function WorkstationTuner() {
       </div>
 
       <div style={{ width: 340, padding: 12, overflowY: 'auto', borderLeft: '1px solid #333' }}>
-        <h3 style={{ marginTop: 0 }}>ワークステーション調整</h3>
+        <h3 style={{ marginTop: 0 }}>物体エディタ（セル内の置き方）</h3>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          {btn('ワークステーション', target === 'ws', () => setTarget('ws'))}
+          {btn('ドア', target === 'door', () => setTarget('door'))}
+        </div>
+
+        {target === 'door' && (
+          <>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+              <span style={{ fontSize: 12, width: 40 }}>画像</span>
+              <input
+                type="text"
+                value={door.img}
+                onChange={(e) => updDoor({ img: e.target.value })}
+                style={{ flex: 1, width: 0 }}
+              />
+            </div>
+            {numField('セル内X', door.ox, -200, 200, (v) => updDoor({ ox: v }))}
+            {numField('セル内Y', door.oy, -200, 200, (v) => updDoor({ oy: v }))}
+            {numField('大きさ', door.w, 48, 260, (v) => updDoor({ w: v }))}
+            <pre
+              style={{
+                whiteSpace: 'pre-wrap',
+                fontSize: 11,
+                marginTop: 10,
+                background: '#000',
+                padding: 8,
+                borderRadius: 4,
+              }}
+            >
+              {`// officeLayout.ts DEFAULT_DOOR（i,j は ?layout 側）\n{ img: '${door.img}', i: ${door.i}, j: ${door.j}, w: ${door.w}, ox: ${door.ox}, oy: ${door.oy} }`}
+            </pre>
+          </>
+        )}
+
+        {target === 'ws' && (
+        <>
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
           {btn('NW（背中）', editing === 'NW', () => setEditing('NW'))}
           {btn('SE（向かい/顔）', editing === 'SE', () => setEditing('SE'))}
@@ -278,7 +330,7 @@ export function WorkstationTuner() {
         </label>
         <div style={{ border: '1px solid #66c', borderRadius: 4, padding: 8, marginBottom: 10 }}>
           <div style={{ fontSize: 12, fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
-            <span>全体移動（机・椅子・人・PC 一括）</span>
+            <span>セル内位置（全体移動：机・椅子・人・PC 一括）</span>
             <button type="button" style={{ fontSize: 11 }} onClick={() => updG({ x: 0, y: 0 })}>
               0に戻す
             </button>
@@ -393,6 +445,8 @@ export function WorkstationTuner() {
         >
           {output}
         </pre>
+        </>
+        )}
       </div>
     </div>
   );
