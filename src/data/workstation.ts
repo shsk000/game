@@ -58,7 +58,7 @@ export const WS_SE: WsConfig = {
     { img: 'person_sit.png', w: 118, ox: -16, oy: -9, z: 6 },
   ],
   chair: { img: 'chair_se.png', w: 56, ox: -17, oy: -26, zBack: 2, zFront: 5, top: 57, bot: 24, backSide: 'left' },
-  cellOffset: { x: 14, y: 41 },
+  cellOffset: { x: 9, y: 39 },
 };
 
 /** 後方互換（旧名）。 */
