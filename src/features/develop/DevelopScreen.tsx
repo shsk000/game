@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
-import { getPhrases } from '../../data/genres';
+import { GENRE_BY_ID, getPhrases } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
+import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
-import { dateToWeekIndex } from '../../state/types';
+import { DEV_PHASE_META, DEV_PHASE_ORDER, type DevPhase, dateToWeekIndex } from '../../state/types';
 import {
   computeDevImpact,
   type ImpactRank,
@@ -18,32 +19,33 @@ import { useTyping } from './useTyping';
 type Toast = { id: number; text: string; tone: 'warn' | 'good' | 'info' };
 
 /**
- * v0.11 開発フェーズ画面（中央パネル）。
+ * v0.14 開発フェーズ画面（3 カラム・テイクオーバー）。
  *
- * モックアップ（ui/phase/development.png）の中央「開発フェーズ」パネルを再現。
- * - 制限秒カウントダウン（neededWeeks 秒換算。0 で finishDevelopment → release）
- * - 入力文章（かな）/ ローマ字 / COMBO レーティング
- * - 入力速度（文字/分）/ 正確さ / ミス回数
- * - 開発への影響 4 枠（開発速度 / 品質 / バグ率 / EXP=準備中）
- * - PHASE ドット・MISSION は演出表示（中身は連続タイピング）
+ * モック `ui/phase/development_ui.png` 準拠：
+ * - 左：フェーズ進行リスト（1〜6・🔒/▶/✓）＋ 現在の作業 ＋ チーム状態
+ * - 中央：現在の `current.phase` に応じたメインパネル（開発＝タイピング、他＝舞台＋次へ）
+ * - 右：現在のプロジェクト（タイトル/ジャンル/フェーズ画像/完成度/開発期間）
  *
- * 開発中はゲーム内時間停止（GlobalTicker 側）。周辺パネル（左/右/下）は今回スコープ外。
+ * フェーズは `current.phase` の内部状態で進める（planning→development→testing→debugging）。
+ * debugging から先（発売・開発完了）は既存リリースフローへ委譲（advancePhase → finishDevelopment）。
  */
 export const DevelopScreen = () => {
   const current = useGameStore((s) => s.current);
   const currentDate = useGameStore((s) => s.currentDate);
+  const employees = useGameStore((s) => s.employees);
   const addDevelopLoC = useGameStore((s) => s.addDevelopLoC);
-  const finishDevelopment = useGameStore((s) => s.finishDevelopment);
+  const advancePhase = useGameStore((s) => s.advancePhase);
   const reportCombo = useGameStore((s) => s.reportCombo);
   const reportWPM = useGameStore((s) => s.reportWPM);
   const reportAccuracy = useGameStore((s) => s.reportAccuracy);
   const clearBug = useGameStore((s) => s.clearBug);
 
+  const phase: DevPhase = current?.phase ?? 'development';
+  const isDevelopment = phase === 'development';
+
   const [toasts, setToasts] = useState<Toast[]>([]);
-  // 速度ボーナス算出用：最新 wpm を保持（onWpm で更新）
   const wpmRef = useRef(0);
 
-  // 打鍵レーティング（COMBO +GREAT!）：直近正打の打鍵間隔から
   const [rating, setRating] = useState<KeystrokeRating>(null);
   const lastCorrectAtRef = useRef<number>(0);
   const ratingTimerRef = useRef<number | null>(null);
@@ -69,23 +71,21 @@ export const DevelopScreen = () => {
   const { view, failCount, combo, wpm, accuracy } = useTyping({
     phrases: effectivePhrases,
     onPhraseComplete: () => {
-      // 進捗を加算（速く打つほど 1 本の寄与が増える＝ある程度早く完了）
       const isBug = !!current?.bugPhrase;
       addDevelopLoC(progressGain(wpmRef.current, isBug));
       if (isBug) clearBug();
-      // 完了判定は「入力」起点のみ（残り時間＝締切は廃止）。
-      // 作業量目標 workTarget に達したら finishDevelopment。打たなければ永遠に終わらない。
+      // v0.14：作業量目標に達したら「開発フェーズ完了」＝次フェーズ（テスト）へ進む。
       const s = useGameStore.getState();
       const done = s.current?.doneLoC ?? 0;
       const target = s.current?.workTarget ?? 1;
-      if (done >= target && s.current?.finishedAt == null) {
-        finishDevelopment();
+      if (done >= target && (s.current?.phase ?? 'development') === 'development') {
+        advancePhase();
       }
     },
-    paused: !current || current.finishedAt !== null,
+    // タイピングは開発フェーズ中のみ作動（他フェーズではキー入力を拾わない）
+    paused: !current || !isDevelopment,
     onCorrect: (c) => {
       reportCombo(c);
-      // 打鍵レーティング：前回正打からの間隔
       const now = performance.now();
       const interval = now - lastCorrectAtRef.current;
       lastCorrectAtRef.current = now;
@@ -105,7 +105,6 @@ export const DevelopScreen = () => {
 
   const workTarget = current?.workTarget ?? 1;
 
-  // バグ発生をテロップに
   const bugPhrase = current?.bugPhrase ?? null;
   useEffect(() => {
     if (bugPhrase) pushToast('🐛 バグ発生：下の文を打ち切れ！', 'warn');
@@ -115,31 +114,29 @@ export const DevelopScreen = () => {
   const scaleDef = SCALE_BY_ID[current.scale];
   if (!scaleDef) return null;
 
-  // 開発への影響 4 指標
   const impact = computeDevImpact({ wpm, accuracy });
   const charsPerMin = toCharsPerMin(wpm);
   const accuracyPct = Math.round(accuracy * 1000) / 10;
-  // 進捗（作業量）：打って workTarget まで埋めると完了。速く打つほど早く 100% に達する。
   const progressPct = Math.max(0, Math.min(100, (current.doneLoC / workTarget) * 100));
-  // PHASE ドットは進捗に連動（演出）
-  const TOTAL_PHASES = 6;
-  const litDots = Math.max(1, Math.min(TOTAL_PHASES, Math.ceil((progressPct / 100) * TOTAL_PHASES)));
 
-  // 開発期間：裏で時間が進むので、経過週・予定週・その差を表示（速く打つほど短く済む）
+  // 開発期間（裏で進む時間。早く打つほど短く済む）
   const plannedWeeks = Math.max(1, scaleDef.neededWeeks);
   const elapsedWeeks = current.startDate
     ? Math.max(0, dateToWeekIndex(currentDate) - dateToWeekIndex(current.startDate))
     : 0;
-  const weekDiff = elapsedWeeks - plannedWeeks; // + 超過 / - 予定内
-  const weeksLeft = Math.max(0, plannedWeeks - elapsedWeeks); // 予定までの残り週
-  // 予定消化率（バー）：予定 100% に近づくほど急げ、超過分は赤で 100% 超え表示
+  const weekDiff = elapsedWeeks - plannedWeeks;
+  const weeksLeft = Math.max(0, plannedWeeks - elapsedWeeks);
   const budgetPct = Math.min(130, (elapsedWeeks / plannedWeeks) * 100);
   const overBudget = weekDiff > 0;
-  // 予定内＝緑→残り少で黄、超過＝赤
   const periodColor = overBudget ? '#ff6b6b' : weeksLeft <= 1 ? DEV.orange : DEV.timeGreen;
   const periodNote = overBudget
     ? `予定超過 +${weekDiff} 週（固定費がかさむ！）`
     : `予定内：残り ${weeksLeft} 週`;
+
+  const genre = GENRE_BY_ID[current.genreId];
+  const theme = THEME_BY_ID[current.themeId];
+  const phaseMeta = DEV_PHASE_META[phase];
+  const phaseImage = `${import.meta.env.BASE_URL}phase/${phaseMeta.image}.png`;
 
   return (
     <div className="screen develop-screen" style={{ background: '#05080c' }}>
@@ -178,256 +175,417 @@ export const DevelopScreen = () => {
         </div>
       )}
 
-      {/* 中央パネル（ターミナル/コードエディタ風ダークテーマ） */}
-      <main
+      {/* 3 カラム本体 */}
+      <div
         style={{
           flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
           minHeight: 0,
+          display: 'grid',
+          gridTemplateColumns: '240px 1fr 300px',
+          gap: 12,
           padding: 12,
         }}
       >
-        <div
-          style={{
-            width: 960,
-            background: DEV.panelBg,
-            border: `2px solid ${DEV.panelBorder}`,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
-            imageRendering: 'pixelated',
-          }}
-        >
-          {/* タイトルバー */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              padding: '8px 12px',
-              borderBottom: `2px solid ${DEV.panelBorder}`,
-            }}
-          >
-            <span style={{ color: DEV.green, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}>
-              {'</> 開発フェーズ'}
+        {/* 左：フェーズ進行 ＋ チーム */}
+        <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
+          <PhaseProgressList phase={phase} />
+          <div style={{ ...devBox(), gap: 4 }}>
+            <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>現在の作業</span>
+            <span style={{ fontSize: 13, color: DEV.cream, fontWeight: 700 }}>
+              {phaseMeta.label}フェーズ
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: DEV.sub }}>
-              PHASE {litDots} / {TOTAL_PHASES}
-              <span style={{ display: 'flex', gap: 4 }}>
-                {Array.from({ length: TOTAL_PHASES }, (_, i) => (
-                  <span
-                    key={i}
-                    style={{
-                      width: 9,
-                      height: 9,
-                      borderRadius: '50%',
-                      background: i < litDots ? DEV.green : '#1e2a14',
-                      border: '1px solid #05080c',
-                    }}
-                  />
-                ))}
-              </span>
-            </span>
+            <span style={{ fontSize: 11, color: DEV.sub }}>{PHASE_WORK_NOTE[phase]}</span>
           </div>
+          <TeamStatus employeeIds={current.assignedEmployeeIds} allEmployees={employees} />
+        </aside>
 
-          <div style={{ padding: 16 }}>
-            {/* 行1: 入力エリア（主役） + 残り時間 / 進捗 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div>
-                  <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
-                    入力する文章
-                  </div>
-                  <div
-                    style={{
-                      background: '#0c1207',
-                      border: `1px solid ${DEV.panelBorder}`,
-                      padding: '14px 14px',
-                      fontSize: 34,
-                      color: DEV.cream,
-                      letterSpacing: '0.04em',
-                      minHeight: 40,
-                    }}
-                  >
-                    {view.hiragana}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
-                    ローマ字入力
-                  </div>
-                  <div
-                    style={{
-                      background: '#0c1207',
-                      border: `1px solid ${DEV.panelBorder}`,
-                      padding: '10px 14px',
-                      fontSize: 24,
-                      letterSpacing: '0.08em',
-                      minHeight: 30,
-                    }}
-                  >
-                    <span style={{ color: DEV.green }}>{view.completed}</span>
-                    <span className="dev-cursor" style={{ color: DEV.white }}>
-                      |
-                    </span>
-                    <span style={{ color: '#5a6e3a' }}>{view.remained}</span>
-                  </div>
-                </div>
-              </div>
-              {/* 右カラム：進捗 + 開発期間（裏で進む時間を可視化） */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {/* 進捗（打って埋めると完成。速いほど早く 100% に達する） */}
-                <div style={{ ...devBox(), gap: 6 }}>
-                  <span style={{ fontSize: 11, color: DEV.sub }}>進捗（速いほど早く完成）</span>
-                  <span
-                    style={{
-                      fontSize: 38,
-                      fontWeight: 700,
-                      color: DEV.greenBright,
-                      fontVariantNumeric: 'tabular-nums',
-                      lineHeight: 1,
-                    }}
-                  >
-                    {Math.floor(progressPct)} <span style={{ fontSize: 14 }}>%</span>
-                  </span>
-                  <SegGauge pct={progressPct} color={DEV.greenBright} track="#0c1207" height={12} />
-                  <span style={{ fontSize: 11, color: DEV.sub }}>
-                    完成まであと{' '}
-                    <span style={{ color: DEV.cream, fontWeight: 700 }}>
-                      {Math.max(0, Math.ceil(workTarget - current.doneLoC))}
-                    </span>{' '}
-                    本
-                  </span>
-                </div>
+        {/* 中央：フェーズ別メインパネル */}
+        <main style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {isDevelopment ? (
+            <DevelopCenter
+              phaseLabel={phaseMeta.label}
+              missionName={current.missionName}
+              missionDesc={current.missionDesc}
+              view={view}
+              combo={combo}
+              rating={rating}
+              charsPerMin={charsPerMin}
+              accuracyPct={accuracyPct}
+              failCount={failCount}
+              impact={impact}
+            />
+          ) : (
+            <PhasePlaceholder phase={phase} label={phaseMeta.label} onAdvance={advancePhase} />
+          )}
+        </main>
 
-                {/* 開発期間：経過週・予定週・差（早く打つほど短く済む＝コスト節約） */}
-                <div style={{ ...devBox(), gap: 6 }}>
-                  <span style={{ fontSize: 11, color: DEV.sub }}>
-                    開発期間（予定 {plannedWeeks} 週）
-                  </span>
-                  <span
-                    style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: 6,
-                      fontVariantNumeric: 'tabular-nums',
-                    }}
-                  >
-                    <span style={{ fontSize: 11, color: DEV.sub }}>経過</span>
-                    <span style={{ fontSize: 32, fontWeight: 700, color: periodColor, lineHeight: 1 }}>
-                      {elapsedWeeks}
-                    </span>
-                    <span style={{ fontSize: 13, color: periodColor }}>週</span>
-                  </span>
-                  <SegGauge pct={budgetPct} color={periodColor} track="#0c1207" height={12} />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: periodColor }}>
-                    {periodNote}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 行2: COMBO（横長） */}
+        {/* 右：現在のプロジェクト（フェーズ画像＋情報） */}
+        <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
+          <div style={{ ...devBox(), gap: 6 }}>
+            <span style={{ fontSize: 11, color: DEV.sub }}>現在のプロジェクト</span>
+            <span style={{ fontSize: 18, fontWeight: 700, color: DEV.cream, lineHeight: 1.1 }}>
+              {genre?.emoji} {current.title}
+            </span>
+            <span style={{ fontSize: 11, color: DEV.sub }}>
+              {genre?.name} / {theme?.name} / {scaleDef.name}
+            </span>
             <div
               style={{
-                ...devBox(),
-                marginTop: 14,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 12,
+                marginTop: 2,
+                border: `1px solid ${DEV.panelBorder}`,
+                background: '#0c1207',
+                aspectRatio: '3 / 2',
+                overflow: 'hidden',
               }}
             >
-              <span style={{ fontSize: 13, color: DEV.sub, letterSpacing: '0.1em' }}>COMBO</span>
-              <span
-                key={combo}
-                className="dev-combo"
+              <img
+                src={phaseImage}
+                alt={`${phaseMeta.label}フェーズ`}
                 style={{
-                  fontSize: 40,
-                  fontWeight: 700,
-                  color: DEV.orange,
-                  fontVariantNumeric: 'tabular-nums',
-                  lineHeight: 1,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  imageRendering: 'pixelated',
                 }}
-              >
-                {combo}
-              </span>
-              {rating && (
-                <span
-                  className="dev-rating"
-                  style={{ fontSize: 16, fontWeight: 700, color: DEV.orange }}
-                >
-                  +{rating}!
-                </span>
-              )}
-            </div>
-
-            {/* 行3: 3メトリクス */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 10,
-                marginTop: 14,
-              }}
-            >
-              <Metric label="入力速度" icon="⏩" value={`${charsPerMin}`} unit="文字/分" />
-              <Metric label="正確さ" icon="🎯" value={`${accuracyPct}`} unit="%" />
-              <Metric label="ミス回数" icon="❌" value={`${failCount}`} unit="回" />
-            </div>
-
-            {/* 行4: 開発への影響 4枠 */}
-            <div style={{ marginTop: 14 }}>
-              <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 6 }}>
-                開発への影響（この入力結果）
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-                <ImpactBox
-                  icon="⚡"
-                  label="開発速度"
-                  value={`${impact.speedPct >= 0 ? '+' : ''}${impact.speedPct}%`}
-                  rank={impact.speedRank}
-                  pct={clampPct(impact.speedPct + 30, 70)}
-                />
-                <ImpactBox
-                  icon="💎"
-                  label="品質"
-                  value={`+${impact.qualityDelta}`}
-                  rank={impact.qualityRank}
-                  pct={impact.qualityDelta * 20}
-                />
-                <ImpactBox
-                  icon="🐛"
-                  label="バグ率"
-                  value={`${impact.bugPct}%`}
-                  rank={impact.bugRank}
-                  pct={Math.abs(impact.bugPct) * 20}
-                />
-                {/* EXP は今回未実装＝準備中枠 */}
-                <div
-                  style={{
-                    ...devBox(),
-                    border: `1px dashed ${DEV.panelBorder}`,
-                    opacity: 0.55,
-                  }}
-                >
-                  <span style={{ fontSize: 11, color: DEV.sub }}>✨ 獲得EXP</span>
-                  <span style={{ fontSize: 12, color: '#5a6e3a' }}>準備中</span>
-                </div>
-              </div>
+              />
             </div>
           </div>
-        </div>
-      </main>
+
+          <div style={{ ...devBox(), gap: 6 }}>
+            <span style={{ fontSize: 11, color: DEV.sub }}>現在の完成度</span>
+            <span
+              style={{
+                fontSize: 32,
+                fontWeight: 700,
+                color: DEV.greenBright,
+                fontVariantNumeric: 'tabular-nums',
+                lineHeight: 1,
+              }}
+            >
+              {Math.floor(progressPct)} <span style={{ fontSize: 13 }}>%</span>
+            </span>
+            <SegGauge pct={progressPct} color={DEV.greenBright} track="#0c1207" height={12} />
+          </div>
+
+          <div style={{ ...devBox(), gap: 6 }}>
+            <span style={{ fontSize: 11, color: DEV.sub }}>開発期間（予定 {plannedWeeks} 週）</span>
+            <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <span style={{ fontSize: 11, color: DEV.sub }}>経過</span>
+              <span style={{ fontSize: 28, fontWeight: 700, color: periodColor, lineHeight: 1 }}>
+                {elapsedWeeks}
+              </span>
+              <span style={{ fontSize: 12, color: periodColor }}>週</span>
+            </span>
+            <SegGauge pct={budgetPct} color={periodColor} track="#0c1207" height={10} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: periodColor }}>{periodNote}</span>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 };
 
-/**
- * v0.11 開発フェーズのダークパレット（リファレンス ui/phase/development.png から実測）。
- * ターミナル/コードエディタ風：ほぼ黒の本体 + 緑系アクセント + オフホワイト文字 + オレンジ COMBO。
- */
+/** 左カラム：フェーズ進行リスト（1〜6・🔒/▶/✓） */
+const PhaseProgressList = ({ phase }: { phase: DevPhase }) => {
+  const activeIdx = DEV_PHASE_ORDER.indexOf(phase);
+  return (
+    <div style={{ ...devBox(), gap: 6 }}>
+      <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700, letterSpacing: '0.06em' }}>
+        フェーズ進行
+      </span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {DEV_PHASE_ORDER.map((p, i) => {
+          const state = i < activeIdx ? 'done' : i === activeIdx ? 'active' : 'locked';
+          const mark = state === 'done' ? '✓' : state === 'active' ? '▶' : '🔒';
+          const color = state === 'active' ? DEV.white : state === 'done' ? DEV.green : '#5a6e3a';
+          return (
+            <div
+              key={p}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 8px',
+                background: state === 'active' ? '#234012' : 'transparent',
+                border: `1px solid ${state === 'active' ? DEV.green : 'transparent'}`,
+              }}
+            >
+              <span style={{ fontSize: 11, color: DEV.sub, width: 12 }}>{i + 1}</span>
+              <span
+                style={{ fontSize: 13, fontWeight: state === 'active' ? 700 : 400, color, flex: 1 }}
+              >
+                {DEV_PHASE_META[p].label}
+              </span>
+              <span style={{ fontSize: 12 }}>{mark}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+/** 左カラム：チーム状態（割り当て社員） */
+const TeamStatus = ({
+  employeeIds,
+  allEmployees,
+}: {
+  employeeIds: string[];
+  allEmployees: { id: string; name: string; role: string }[];
+}) => {
+  const team = allEmployees.filter((e) => employeeIds.includes(e.id));
+  const roleEmoji: Record<string, string> = {
+    programmer: '🧑‍💻',
+    designer: '🎨',
+    pr: '📣',
+  };
+  return (
+    <div style={{ ...devBox(), gap: 6, flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>チーム状態</span>
+      {team.length === 0 && (
+        <span style={{ fontSize: 11, color: DEV.sub }}>社員なし（あなた一人で開発中）</span>
+      )}
+      {team.map((e) => (
+        <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 16 }}>{roleEmoji[e.role] ?? '🧑‍💻'}</span>
+          <span style={{ fontSize: 12, color: DEV.cream }}>{e.name}</span>
+          <span style={{ marginLeft: 'auto', fontSize: 12 }}>🙂</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/** 中央：開発フェーズ（タイピング） */
+const DevelopCenter = ({
+  phaseLabel,
+  missionName,
+  missionDesc,
+  view,
+  combo,
+  rating,
+  charsPerMin,
+  accuracyPct,
+  failCount,
+  impact,
+}: {
+  phaseLabel: string;
+  missionName?: string;
+  missionDesc?: string;
+  view: { hiragana: string; completed: string; remained: string };
+  combo: number;
+  rating: KeystrokeRating;
+  charsPerMin: number;
+  accuracyPct: number;
+  failCount: number;
+  impact: ReturnType<typeof computeDevImpact>;
+}) => (
+  <div
+    style={{
+      flex: 1,
+      minHeight: 0,
+      overflow: 'auto',
+      background: DEV.panelBg,
+      border: `2px solid ${DEV.panelBorder}`,
+      boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+      imageRendering: 'pixelated',
+      display: 'flex',
+      flexDirection: 'column',
+    }}
+  >
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        padding: '8px 12px',
+        borderBottom: `2px solid ${DEV.panelBorder}`,
+      }}
+    >
+      <span style={{ color: DEV.green, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}>
+        {'</> '}
+        {phaseLabel}フェーズ
+      </span>
+    </div>
+
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {(missionName || missionDesc) && (
+        <div>
+          {missionName && (
+            <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>{missionName}</div>
+          )}
+          {missionDesc && (
+            <div style={{ fontSize: 22, color: DEV.cream, fontWeight: 700 }}>{missionDesc}</div>
+          )}
+        </div>
+      )}
+
+      <div>
+        <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
+          入力する文章
+        </div>
+        <div
+          style={{
+            background: '#0c1207',
+            border: `1px solid ${DEV.panelBorder}`,
+            padding: '14px 14px',
+            fontSize: 34,
+            color: DEV.cream,
+            letterSpacing: '0.04em',
+            minHeight: 40,
+          }}
+        >
+          {view.hiragana}
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
+          ローマ字入力
+        </div>
+        <div
+          style={{
+            background: '#0c1207',
+            border: `1px solid ${DEV.panelBorder}`,
+            padding: '10px 14px',
+            fontSize: 24,
+            letterSpacing: '0.08em',
+            minHeight: 30,
+          }}
+        >
+          <span style={{ color: DEV.green }}>{view.completed}</span>
+          <span className="dev-cursor" style={{ color: DEV.white }}>
+            |
+          </span>
+          <span style={{ color: '#5a6e3a' }}>{view.remained}</span>
+        </div>
+      </div>
+
+      {/* COMBO */}
+      <div
+        style={{
+          ...devBox(),
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 12,
+        }}
+      >
+        <span style={{ fontSize: 13, color: DEV.sub, letterSpacing: '0.1em' }}>COMBO</span>
+        <span
+          key={combo}
+          className="dev-combo"
+          style={{
+            fontSize: 40,
+            fontWeight: 700,
+            color: DEV.orange,
+            fontVariantNumeric: 'tabular-nums',
+            lineHeight: 1,
+          }}
+        >
+          {combo}
+        </span>
+        {rating && (
+          <span className="dev-rating" style={{ fontSize: 16, fontWeight: 700, color: DEV.orange }}>
+            +{rating}!
+          </span>
+        )}
+      </div>
+
+      {/* 3 メトリクス */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+        <Metric label="入力速度" icon="⏩" value={`${charsPerMin}`} unit="文字/分" />
+        <Metric label="正確さ" icon="🎯" value={`${accuracyPct}`} unit="%" />
+        <Metric label="ミス回数" icon="❌" value={`${failCount}`} unit="回" />
+      </div>
+
+      {/* 開発への影響 */}
+      <div>
+        <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 6 }}>
+          開発への影響（この入力結果）
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+          <ImpactBox
+            icon="⚡"
+            label="開発速度"
+            value={`${impact.speedPct >= 0 ? '+' : ''}${impact.speedPct}%`}
+            rank={impact.speedRank}
+            pct={clampPct(impact.speedPct + 30, 70)}
+          />
+          <ImpactBox
+            icon="💎"
+            label="品質"
+            value={`+${impact.qualityDelta}`}
+            rank={impact.qualityRank}
+            pct={impact.qualityDelta * 20}
+          />
+          <ImpactBox
+            icon="🐛"
+            label="バグ率"
+            value={`${impact.bugPct}%`}
+            rank={impact.bugRank}
+            pct={Math.abs(impact.bugPct) * 20}
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+/** 中央：開発以外のフェーズ（舞台＋「次へ」）。中身は後続版で作り込む。 */
+const PhasePlaceholder = ({
+  phase,
+  label,
+  onAdvance,
+}: {
+  phase: DevPhase;
+  label: string;
+  onAdvance: () => void;
+}) => (
+  <div
+    style={{
+      flex: 1,
+      minHeight: 0,
+      background: DEV.panelBg,
+      border: `2px solid ${DEV.panelBorder}`,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 18,
+      padding: 24,
+      textAlign: 'center',
+    }}
+  >
+    <span style={{ fontSize: 22, fontWeight: 700, color: DEV.green, letterSpacing: '0.06em' }}>
+      {label}フェーズ
+    </span>
+    <span style={{ fontSize: 13, color: DEV.sub, maxWidth: 420, lineHeight: 1.6 }}>
+      {PHASE_WORK_NOTE[phase]}
+      <br />
+      （このフェーズの中身・ランダムイベントは次の版で実装します）
+    </span>
+    <button
+      type="button"
+      onClick={onAdvance}
+      style={{
+        marginTop: 8,
+        padding: '12px 28px',
+        background: '#234012',
+        border: `2px solid ${DEV.green}`,
+        color: DEV.white,
+        fontWeight: 700,
+        fontSize: 15,
+        cursor: 'pointer',
+      }}
+    >
+      ▶ {NEXT_LABEL[phase]}
+    </button>
+  </div>
+);
+
+/** v0.14 開発フェーズのダークパレット（ターミナル風）。 */
 const DEV = {
   panelBg: '#06090e',
   panelBorder: '#2b3a1c',
@@ -441,7 +599,24 @@ const DEV = {
   sub: '#7f9a52',
 } as const;
 
-/** ダーク内枠の共通スタイル */
+const PHASE_WORK_NOTE: Record<DevPhase, string> = {
+  planning: '企画を固める：ジャンル・テーマ・コンセプトの確認',
+  development: 'ゲームシステムを実装する（コードを打つ）',
+  testing: 'プレイテストでテストケースを消化する',
+  debugging: 'バグを駆除して品質を仕上げる',
+  release: '発売して売上を監視する',
+  complete: '開発完了・打ち上げ',
+};
+
+const NEXT_LABEL: Record<DevPhase, string> = {
+  planning: '開発を始める',
+  development: 'テストへ進む',
+  testing: 'テスト完了',
+  debugging: 'デバッグ完了（発売へ）',
+  release: '結果を見る',
+  complete: 'オフィスへ戻る',
+};
+
 const devBox = (): React.CSSProperties => ({
   background: '#0a0f08',
   border: `1px solid ${DEV.panelBorder}`,
@@ -453,7 +628,6 @@ const devBox = (): React.CSSProperties => ({
 
 const clampPct = (v: number, max: number) => Math.max(0, Math.min(100, (v / max) * 100));
 
-/** 行3 の 1 メトリクス（入力速度・正確さ・ミス） */
 const Metric = ({
   label,
   icon,
@@ -484,7 +658,6 @@ const Metric = ({
   </div>
 );
 
-/** 行4 の 1 影響枠（開発速度・品質・バグ率） */
 const ImpactBox = ({
   icon,
   label,
@@ -504,7 +677,12 @@ const ImpactBox = ({
     </span>
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
       <span
-        style={{ fontSize: 18, fontWeight: 700, color: DEV.cream, fontVariantNumeric: 'tabular-nums' }}
+        style={{
+          fontSize: 18,
+          fontWeight: 700,
+          color: DEV.cream,
+          fontVariantNumeric: 'tabular-nums',
+        }}
       >
         {value}
       </span>

@@ -146,11 +146,45 @@ export type Work = {
   developWeeks?: number;
 };
 
+/**
+ * v0.14：1 作の開発フェーズ。1 つのテイクオーバー画面の中で `current.phase` を進める。
+ * 企画 → 開発 → テスト → デバッグ → 発売 → 開発完了。
+ */
+export type DevPhase =
+  | 'planning'
+  | 'development'
+  | 'testing'
+  | 'debugging'
+  | 'release'
+  | 'complete';
+
+/** フェーズの並び順（遷移と進行リスト表示に使う） */
+export const DEV_PHASE_ORDER: DevPhase[] = [
+  'planning',
+  'development',
+  'testing',
+  'debugging',
+  'release',
+  'complete',
+];
+
+/** フェーズの表示メタ（左の進行リスト用）。番号は 1 始まり */
+export const DEV_PHASE_META: Record<DevPhase, { label: string; image: string }> = {
+  planning: { label: '企画', image: 'planning' },
+  development: { label: '開発', image: 'development' },
+  testing: { label: 'テスト', image: 'testing' },
+  debugging: { label: 'デバッグ', image: 'debugging' },
+  release: { label: '発売', image: 'release' },
+  complete: { label: '開発完了', image: 'complete' },
+};
+
 export type CurrentProject = {
   title: string;
   genreId: GenreId;
   themeId: ThemeId;
   scale: Scale;
+  /** v0.14：現在の開発フェーズ。未設定の旧データは development 扱い（防御） */
+  phase?: DevPhase;
   requiredLoC: number;
   doneLoC: number;
   /** ノリ／コンボ最大値（このプロジェクト内） */

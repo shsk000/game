@@ -35,6 +35,7 @@ import type {
   Achievement,
   Candidate,
   CurrentProject,
+  DevPhase,
   Employee,
   GameDate,
   MonthlyFixedCost,
@@ -42,7 +43,7 @@ import type {
   Work,
   WorkBreakdown,
 } from './types';
-import { addWeeks, INITIAL_GAME_DATE } from './types';
+import { addWeeks, DEV_PHASE_ORDER, INITIAL_GAME_DATE } from './types';
 
 const persisted = storage.load() ?? storage.defaults();
 
@@ -248,6 +249,12 @@ type Actions = {
   reportWPM: (wpm: number) => void;
   reportAccuracy: (acc: number) => void;
   finishDevelopment: () => void;
+  /**
+   * v0.14：開発フェーズを次へ進める。
+   * planning→development→testing→debugging の遷移はテイクオーバー内で完結。
+   * debugging から先（release 相当）に進むときは既存リリースフロー finishDevelopment に委譲する。
+   */
+  advancePhase: () => void;
   releaseWork: (opts?: ReleaseOpts) => Work;
   buyAdDevBoost: () => void;
   buyAdSurvey: (g: GenreId, t: ThemeId) => void;
@@ -354,6 +361,7 @@ export const useGameStore = create<GameState>()(
         genreId,
         themeId,
         scale,
+        phase: 'planning',
         requiredLoC: def.requiredLoC,
         doneLoC: 0,
         maxCombo: 0,
@@ -564,6 +572,21 @@ export const useGameStore = create<GameState>()(
         ghosts: { ...get().ghosts, [cur.scale]: newGhost },
         screen: 'release',
       });
+    },
+
+    advancePhase: () => {
+      const cur = get().current;
+      if (!cur) return;
+      const phase: DevPhase = cur.phase ?? 'development';
+      const idx = DEV_PHASE_ORDER.indexOf(phase);
+      const next = DEV_PHASE_ORDER[idx + 1];
+      if (!next) return;
+      // 発売以降は既存リリースフロー（finishDevelopment → ReleaseScreen）に委譲。
+      if (next === 'release' || next === 'complete') {
+        get().finishDevelopment();
+        return;
+      }
+      set({ current: { ...cur, phase: next } });
     },
 
     releaseWork: (opts) => {
