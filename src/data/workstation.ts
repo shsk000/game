@@ -47,7 +47,7 @@ export const WS_NW: WsConfig = {
     { img: 'person_sit_nw.png', w: 118, ox: -3, oy: -9, z: 6, clipTop: 79, clipBot: 28, clipSide: 'left' },
   ],
   chair: { img: 'chair.png', w: 56, ox: -2, oy: -23, zBack: 2, zFront: 5, top: 57, bot: 24 },
-  cellOffset: { x: 2, y: 28 },
+  cellOffset: { x: 9, y: 37 },
 };
 
 /** SE（カメラ向き）。正規の向き別スプライト：机=north-west回転、椅子=SE向きオブジェクト、人=SE着席。 */
@@ -58,7 +58,7 @@ export const WS_SE: WsConfig = {
     { img: 'person_sit.png', w: 118, ox: -16, oy: -9, z: 6 },
   ],
   chair: { img: 'chair_se.png', w: 56, ox: -17, oy: -26, zBack: 2, zFront: 5, top: 57, bot: 24, backSide: 'left' },
-  cellOffset: { x: 2, y: 28 },
+  cellOffset: { x: 14, y: 41 },
 };
 
 /** 後方互換（旧名）。 */
