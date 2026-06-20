@@ -15,6 +15,7 @@ import { REFRESH_COST, roleLabel, sumMonthlySalaries } from '../../data/employee
 import { GENRE_BY_ID } from '../../data/genres';
 import { nextLockedScale, SCALE_BY_ID, SCALES } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
+import { MAX_EMPLOYEES } from '../../lib/officeLayout';
 import { useGameStore } from '../../state/gameStore';
 import { formatYen } from '../../utils/format';
 
@@ -585,10 +586,15 @@ export const OfficeScreen = () => {
               </span>
             </div>
             <div style={{ fontSize: 13 }}>{formatPower(candidate.role, candidate.power)}</div>
+            {employees.length >= MAX_EMPLOYEES && (
+              <div style={{ fontSize: 12, color: '#c66' }}>
+                満席です（最大 {MAX_EMPLOYEES} 人）。採用するには席を空けてください。
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <PixelButton
                 variant="primary"
-                disabled={funds < candidate.wage}
+                disabled={funds < candidate.wage || employees.length >= MAX_EMPLOYEES}
                 onClick={() => hireCandidate()}
               >
                 採用 ¥{candidate.wage.toLocaleString()}

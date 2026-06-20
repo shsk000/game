@@ -19,6 +19,7 @@ import type { ThemeId } from '../data/themes';
 import { THEMES } from '../data/themes';
 import { generateTitle } from '../data/titleGenerator';
 import { ensureTrend, type Trend, trendMultiplier } from '../data/trend';
+import { MAX_EMPLOYEES } from '../lib/officeLayout';
 import { computeGenreAffinityScore } from '../utils/affinity';
 import { computeCharacterScore } from '../utils/character';
 import {
@@ -759,6 +760,7 @@ export const useGameStore = create<GameState>()(
     hireCandidate: () => {
       const cand = get().candidate;
       if (!cand) return false;
+      if (get().employees.length >= MAX_EMPLOYEES) return false; // 席数=最大人数で打ち止め
       if (get().funds < cand.wage) return false;
       const emp: Employee = {
         ...cand,

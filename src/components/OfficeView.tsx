@@ -37,7 +37,7 @@ const useSprite = (path: string) => {
 
 type Props = {
   scale: Scale;
-  // 以下は呼び出し側互換のため受けるが、床のみの現段階では未使用
+  /** 在籍社員数。席はこの数だけ埋まる（最大 = 席数）。未指定なら全席表示（ツール/プレビュー用）。 */
   employeeCount?: number;
   working?: boolean;
   deskId?: string;
@@ -45,13 +45,15 @@ type Props = {
   monitorId?: string;
 };
 
-export const OfficeView = ({ scale }: Props) => {
+export const OfficeView = ({ scale, employeeCount }: Props) => {
   const floor = useSprite(`${SPRITE_BASE}/floor_iso.png`);
   const { cols, rows } = ROOM[scale] ?? ROOM.mini;
   const geo = makeGeometry(cols, rows);
   const { w, h, dW, originX, originY } = geo;
   // 配置（配信される確定レイアウト。officeLayout.ts のコード定数）
-  const workstations = DEFAULT_WORKSTATIONS;
+  // 在籍社員数だけ席を埋める（最大 = 席数）。employeeCount 未指定なら全席。
+  const seatCount = employeeCount == null ? DEFAULT_WORKSTATIONS.length : Math.min(employeeCount, DEFAULT_WORKSTATIONS.length);
+  const workstations = DEFAULT_WORKSTATIONS.slice(0, seatCount);
   const door = DEFAULT_DOOR;
 
   // 床：アイソメひし形タイルを菱形グリッドで敷く

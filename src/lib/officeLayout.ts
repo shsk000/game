@@ -12,16 +12,21 @@ import type { Placement } from './officeGeometry';
 /** ドアもセル基準＋セル内オフセット（ox,oy）で置く。机と同じ「セル＋セル内位置」方式。 */
 export type DoorCfg = { img: string; i: number; j: number; w: number; ox: number; oy: number };
 
-/** 出荷時のワークステーション配置（向かい合わせ 2×2 島）。 */
+/** 出荷時のワークステーション配置（向かい合わせ 3×2 島・最大6席）。 */
 export const DEFAULT_WORKSTATIONS: Placement[] = [
+  { i: 3, j: 2, dir: 'SE' },
   { i: 3, j: 3, dir: 'SE' },
+  { i: 4, j: 2, dir: 'NW' },
   { i: 3, j: 4, dir: 'SE' },
   { i: 4, j: 3, dir: 'NW' },
   { i: 4, j: 4, dir: 'NW' },
 ];
 
-/** 出荷時の出入口ドア（mini 部屋の SE 手前セル）。?layout の セル(i,j)＋セル内ox/oy/大きさ で調整。 */
-export const DEFAULT_DOOR: DoorCfg = { img: 'door_se.png', i: 7, j: 6, w: 120, ox: 23, oy: 31 };
+/** 出荷時の出入口ドア。?layout の セル(i,j)＋セル内ox/oy/大きさ で調整。 */
+export const DEFAULT_DOOR: DoorCfg = { img: 'door_se.png', i: 7, j: 3, w: 120, ox: 23, oy: 31 };
+
+/** 社員の最大数（＝オフィスの席数）。採用上限とオフィス表示が同じ値で連動する。 */
+export const MAX_EMPLOYEES = DEFAULT_WORKSTATIONS.length;
 
 const WS_KEY = 'office-layout-v2';
 const DOOR_KEY = 'office-door-v4';
