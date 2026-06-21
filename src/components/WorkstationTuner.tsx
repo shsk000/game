@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import {
   clipKeepLeft,
   clipKeepRight,
@@ -8,7 +8,26 @@ import {
   type WsConfig,
   type WsLayer,
 } from '../data/workstation';
-import { type DoorCfg, loadDoor, saveDoor } from '../lib/officeLayout';
+import {
+  DEFAULT_DECOR_CATALOG,
+  DEFAULT_WALL_CATALOG,
+  type DecorDir,
+  type DecorItem,
+  decorGeom,
+  decorImg,
+  type DoorCfg,
+  loadDecorCatalog,
+  loadDoor,
+  loadWallCatalog,
+  saveDecorCatalog,
+  saveDoor,
+  saveWallCatalog,
+  type WallItem,
+  wallImg,
+  wallOffset,
+  wallSkewDeg,
+} from '../lib/officeLayout';
+import { wallSpanOffset } from '../lib/officeGeometry';
 
 /**
  * 物体エディタ（dev 専用、?tuner）。1つの URL で全物体の「セル内の置き方」を定義する。
@@ -23,7 +42,7 @@ const TILE = 32;
 const SCALE = 3;
 const cellPx = TILE * SCALE; // 96
 
-const LS_KEY = 'ws-tuner-v4';
+const LS_KEY = 'ws-tuner';
 type Saved = { nw: WsConfig; se: WsConfig };
 function load(): Saved {
   try {
@@ -41,14 +60,45 @@ export function WorkstationTuner() {
   const [se, setSe] = useState<WsConfig>(init.se);
   const [editing, setEditing] = useState<'NW' | 'SE'>('NW');
   const [pair, setPair] = useState(false); // 向かい側を隣に表示して整合を取る
-  const [target, setTarget] = useState<'ws' | 'door'>('ws'); // 編集対象の物体
+  const [target, setTarget] = useState<'ws' | 'door' | 'decor' | 'wall'>('ws'); // 編集対象の物体
   const [door, setDoorState] = useState<DoorCfg>(loadDoor());
   const updDoor = (patch: Partial<DoorCfg>) => {
     const next = { ...door, ...patch };
     setDoorState(next);
     saveDoor(next);
   };
-
+  // 家具カタログ（種類ごとのセル内の見え方）
+  const [catalog, setCatalog] = useState<DecorItem[]>(loadDecorCatalog());
+  const [decorId, setDecorId] = useState<string>(loadDecorCatalog()[0]?.id ?? '');
+  const [decorDir, setDecorDir] = useState<DecorDir>('SE'); // プレビュー向き
+  const decorItem = catalog.find((c) => c.id === decorId) ?? catalog[0];
+  const updDecor = (patch: Partial<DecorItem>) => {
+    const next = catalog.map((c) => (c.id === decorId ? { ...c, ...patch } : c));
+    setCatalog(next);
+    saveDecorCatalog(next);
+  };
+  const resetDecor = () => {
+    setCatalog(DEFAULT_DECOR_CATALOG);
+    saveDecorCatalog(DEFAULT_DECOR_CATALOG);
+    setDecorId(DEFAULT_DECOR_CATALOG[0]?.id ?? '');
+  };
+  // 壁カタログ（種類ごとの辺での見え方）
+  const [wallCat, setWallCat] = useState<WallItem[]>(loadWallCatalog());
+  const [wallId, setWallId] = useState<string>(loadWallCatalog()[0]?.id ?? '');
+  const [wallDir, setWallDir] = useState<'SE' | 'SW'>('SE'); // プレビュー向き（家具と同じSW/SE）
+  const [wallStack, setWallStack] = useState<number>(1); // 縦積み数（1/2/3, 上方向にリピート）
+  const [wallLoop, setWallLoop] = useState<number>(3); // 辺方向に何枚タイルしてプレビューするか
+  const wallItem = wallCat.find((c) => c.id === wallId) ?? wallCat[0];
+  const updWall = (patch: Partial<WallItem>) => {
+    const next = wallCat.map((c) => (c.id === wallId ? { ...c, ...patch } : c));
+    setWallCat(next);
+    saveWallCatalog(next);
+  };
+  const resetWall = () => {
+    setWallCat(DEFAULT_WALL_CATALOG);
+    saveWallCatalog(DEFAULT_WALL_CATALOG);
+    setWallId(DEFAULT_WALL_CATALOG[0]?.id ?? '');
+  };
   const cfg = editing === 'NW' ? nw : se;
   const gg = cfg.cellOffset; // セット全体のセル内位置（全体移動）
   const save = (n: WsConfig, s: WsConfig) => {
@@ -80,35 +130,72 @@ export function WorkstationTuner() {
     }
   };
 
-  // 1マスだけ表示（セルの範囲＝菱形を明示）。物体はこの1セル基準で置く。
+  // セルの範囲（菱形）を明示。家具タブでは占有マス数(footprint)だけ +i 方向に並べる。
   const dW = cellPx; // 96
   const dH = cellPx / 2; // 48
   const w = 480;
   const h = 480;
-  const tileLeft = (w - cellPx) / 2;
-  const tileTop = (h - cellPx) / 2;
-  const ax = tileLeft + cellPx / 2; // セル基準点 x（菱形中心）
-  const ay = tileTop + cellPx * 0.6; // セル基準点 y（officeGeometry と同じ）
+  // 家具は向き(decorDir)で実効ジオメトリ（SW は鏡映）
+  const decorG = target === 'decor' && decorItem ? decorGeom(decorItem, decorDir) : null;
+  // 壁：辺方向にループ表示（SW=+i方向, SE=+j方向）。縦積みは描画側でリピート。
+  const fcw = decorG ? decorG.cw : target === 'wall' && wallDir === 'SW' ? wallLoop : 1; // i軸マス数
+  const fch = decorG ? decorG.ch : target === 'wall' && wallDir === 'SE' ? wallLoop : 1; // j軸マス数
+  // 床グリッドの軸ステップ（i=右下↘ / j=左下↙）
+  const iStep = { x: dW / 2, y: dH / 2 };
+  const jStep = { x: -dW / 2, y: dH / 2 };
+  // footprint 全体が中央に来るよう先頭マス位置を寄せる
+  const ctrI = (fcw - 1) / 2;
+  const ctrJ = (fch - 1) / 2;
+  const tileLeft = (w - cellPx) / 2 - (ctrI * iStep.x + ctrJ * jStep.x);
+  const tileTop = (h - cellPx) / 2 - (ctrI * iStep.y + ctrJ * jStep.y);
+  const ax = tileLeft + cellPx / 2; // 先頭マス(0,0)の中心 x
+  const ay = tileTop + cellPx * 0.6; // 先頭マス中心 y
+  // 物体のアンカー＝footprint の中心
+  const cx0 = ax + ctrI * iStep.x + ctrJ * jStep.x;
+  const cy0 = ay + ctrI * iStep.y + ctrJ * jStep.y;
 
-  // セル天面の菱形（幅 dW × 高 dH、中心 = 基準点）の4頂点
-  const diamond = `${ax},${ay - dH / 2} ${ax + dW / 2},${ay} ${ax},${ay + dH / 2} ${ax - dW / 2},${ay}`;
+  const diamondAt = (cx: number, cy: number) =>
+    `${cx},${cy - dH / 2} ${cx + dW / 2},${cy} ${cx},${cy + dH / 2} ${cx - dW / 2},${cy}`;
 
   const tiles = [
-    <img
-      key="floor"
-      src={`${SPRITE_BASE}/floor_iso.png`}
-      width={cellPx}
-      height={cellPx}
-      alt=""
-      style={{ position: 'absolute', left: tileLeft, top: tileTop, imageRendering: 'pixelated' }}
-    />,
+    ...Array.from({ length: fcw * fch }, (_, k) => {
+      const ci = k % fcw;
+      const cj = Math.floor(k / fcw);
+      return (
+        <img
+          key={`floor-${k}`}
+          src={`${SPRITE_BASE}/floor_iso.png`}
+          width={cellPx}
+          height={cellPx}
+          alt=""
+          style={{
+            position: 'absolute',
+            left: tileLeft + ci * iStep.x + cj * jStep.x,
+            top: tileTop + ci * iStep.y + cj * jStep.y,
+            imageRendering: 'pixelated',
+          }}
+        />
+      );
+    }),
     <svg
       key="cell-outline"
       width={w}
       height={h}
       style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none', zIndex: 200 }}
     >
-      <polygon points={diamond} fill="rgba(120,200,255,0.10)" stroke="#5ad" strokeWidth={2} />
+      {Array.from({ length: fcw * fch }, (_, k) => {
+        const ci = k % fcw;
+        const cj = Math.floor(k / fcw);
+        return (
+          <polygon
+            key={`dia-${k}`}
+            points={diamondAt(ax + ci * iStep.x + cj * jStep.x, ay + ci * iStep.y + cj * jStep.y)}
+            fill="rgba(120,200,255,0.10)"
+            stroke="#5ad"
+            strokeWidth={2}
+          />
+        );
+      })}
     </svg>,
   ];
 
@@ -273,11 +360,94 @@ export function WorkstationTuner() {
               }}
             />
           )}
+          {target === 'decor' && wallItem && (() => {
+            // 家具設置の参考に、背後の壁を2段プレビュー表示（SE家具→NW辺の壁, それ以外→NE辺の壁）
+            const wdir = decorDir === 'SE' ? 'SE' : 'SW';
+            const edx = wdir === 'SW' ? dW / 4 : -dW / 4;
+            const edy = -dH / 4;
+            const wox = wdir === 'SW' ? -wallItem.ox : wallItem.ox;
+            const sdy = wallItem.stackDy ?? 90;
+            const step = wdir === 'SW' ? iStep : jStep;
+            const n = wdir === 'SW' ? fcw : fch;
+            const panels: ReactNode[] = [];
+            for (let l = 0; l < n; l++) {
+              const lx = ax + l * step.x;
+              const ly = ay + l * step.y;
+              for (let k = 0; k < 2; k++) {
+                panels.push(
+                  <img
+                    key={`dwall-${l}-${k}`}
+                    src={`${SPRITE_BASE}/${wallItem.imgBase}_${wdir.toLowerCase()}.png`}
+                    width={wallItem.w}
+                    height={wallItem.h}
+                    alt=""
+                    style={{
+                      position: 'absolute',
+                      left: lx + edx + wox - wallItem.w / 2,
+                      top: ly + edy + wallItem.oy - wallItem.h - k * sdy,
+                      imageRendering: 'pixelated',
+                      zIndex: 1 + k,
+                    }}
+                  />,
+                );
+              }
+            }
+            return <>{panels}</>;
+          })()}
+          {target === 'decor' && decorItem && decorG && (
+            <img
+              src={`${SPRITE_BASE}/${decorImg(decorItem.imgBase, decorDir)}`}
+              width={decorItem.w}
+              height={decorItem.w}
+              alt=""
+              style={{
+                position: 'absolute',
+                left: cx0 + decorG.ox - decorItem.w / 2,
+                top: cy0 + decorG.oy - decorItem.w,
+                imageRendering: 'pixelated',
+                transform: decorItem.onWall ? `skewY(${wallSkewDeg(decorDir)}deg)` : undefined,
+                zIndex: 50,
+              }}
+            />
+          )}
+          {target === 'wall' && wallItem && (() => {
+            // 向き SW/SE（鏡面）。SW=奥右辺(+i方向にループ), SE=奥左辺(+j方向にループ)。
+            const edx = wallDir === 'SW' ? dW / 4 : -dW / 4;
+            const edy = -dH / 4;
+            const ox = wallDir === 'SW' ? -wallItem.ox : wallItem.ox;
+            const sdy = wallItem.stackDy ?? 90;
+            const step = wallDir === 'SW' ? iStep : jStep;
+            const panels: ReactNode[] = [];
+            for (let l = 0; l < wallLoop; l++) {
+              const lx = ax + l * step.x;
+              const ly = ay + l * step.y;
+              for (let k = 0; k < wallStack; k++) {
+                panels.push(
+                  <img
+                    key={`wall-${l}-${k}`}
+                    src={`${SPRITE_BASE}/${wallItem.imgBase}_${wallDir.toLowerCase()}.png`}
+                    width={wallItem.w}
+                    height={wallItem.h}
+                    alt=""
+                    style={{
+                      position: 'absolute',
+                      left: lx + edx + ox - wallItem.w / 2,
+                      top: ly + edy + wallItem.oy - wallItem.h - k * sdy,
+                      imageRendering: 'pixelated',
+                      transform: wallItem.rot ? `rotate(${wallItem.rot}deg)` : undefined,
+                      zIndex: 50 + l * 4 + k,
+                    }}
+                  />,
+                );
+              }
+            }
+            return <>{panels}</>;
+          })()}
           <div
-            style={{ position: 'absolute', left: ax - 1, top: ay - 10, width: 2, height: 20, background: 'lime', zIndex: 99 }}
+            style={{ position: 'absolute', left: cx0 - 1, top: cy0 - 10, width: 2, height: 20, background: 'lime', zIndex: 99 }}
           />
           <div
-            style={{ position: 'absolute', left: ax - 10, top: ay - 1, width: 20, height: 2, background: 'lime', zIndex: 99 }}
+            style={{ position: 'absolute', left: cx0 - 10, top: cy0 - 1, width: 20, height: 2, background: 'lime', zIndex: 99 }}
           />
         </div>
       </div>
@@ -287,7 +457,120 @@ export function WorkstationTuner() {
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
           {btn('ワークステーション', target === 'ws', () => setTarget('ws'))}
           {btn('ドア', target === 'door', () => setTarget('door'))}
+          {btn('家具', target === 'decor', () => setTarget('decor'))}
+          {btn('壁', target === 'wall', () => setTarget('wall'))}
         </div>
+
+        {target === 'decor' && decorItem && (
+          <>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
+              家具
+              <select value={decorId} onChange={(e) => setDecorId(e.target.value)} style={{ flex: 1 }}>
+                {catalog.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
+              向き(プレビュー)
+              <label>
+                <input type="radio" checked={decorDir === 'SE'} onChange={() => setDecorDir('SE')} /> SE
+              </label>
+              <label>
+                <input type="radio" checked={decorDir === 'SW'} onChange={() => setDecorDir('SW')} /> SW
+              </label>
+              <label>
+                <input type="radio" checked={decorDir === 'NW'} onChange={() => setDecorDir('NW')} /> NW
+              </label>
+            </div>
+            {numField('iマス(↘)', decorItem.cw ?? 1, 1, 4, (v) => updDecor({ cw: v }))}
+            {numField('jマス(↙)', decorItem.ch ?? 1, 1, 4, (v) => updDecor({ ch: v }))}
+            {numField('大きさ', decorItem.w, 24, 260, (v) => updDecor({ w: v }))}
+            {numField('セル内X', decorItem.ox, -200, 200, (v) => updDecor({ ox: v }))}
+            {numField('セル内Y', decorItem.oy, -200, 200, (v) => updDecor({ oy: v }))}
+            <pre
+              style={{
+                whiteSpace: 'pre-wrap',
+                fontSize: 11,
+                marginTop: 10,
+                background: '#000',
+                padding: 8,
+                borderRadius: 4,
+              }}
+            >
+              {`// DEFAULT_DECOR_CATALOG の ${decorId}\n{ id: '${decorItem.id}', name: '${decorItem.name}', imgBase: '${decorItem.imgBase}', w: ${decorItem.w}, ox: ${decorItem.ox}, oy: ${decorItem.oy}, cw: ${decorItem.cw ?? 1}, ch: ${decorItem.ch ?? 1} },`}
+            </pre>
+            <button type="button" onClick={resetDecor} style={{ marginTop: 8 }}>
+              リセット（家具カタログを既定に戻す）
+            </button>
+          </>
+        )}
+
+        {target === 'wall' && wallItem && (
+          <>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
+              壁
+              <select value={wallId} onChange={(e) => setWallId(e.target.value)} style={{ flex: 1 }}>
+                {wallCat.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
+              向き(プレビュー)
+              <label>
+                <input type="radio" checked={wallDir === 'SE'} onChange={() => setWallDir('SE')} /> SE
+              </label>
+              <label>
+                <input type="radio" checked={wallDir === 'SW'} onChange={() => setWallDir('SW')} /> SW
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
+              縦積み(プレビュー)
+              {[1, 2, 3].map((n) => (
+                <label key={n}>
+                  <input type="radio" checked={wallStack === n} onChange={() => setWallStack(n)} /> {n}
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
+              辺ループ(プレビュー)
+              {[1, 2, 3, 4].map((n) => (
+                <label key={n}>
+                  <input type="radio" checked={wallLoop === n} onChange={() => setWallLoop(n)} /> {n}
+                </label>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 6 }}>
+              1セル基準。SE=基準/SW=鏡面。縦積みは段数の見え方を確認する<b>プレビュー専用</b>（実際の段数は layout で壁ごとに指定。カタログ出力には入りません）。
+            </div>
+            {numField('幅', wallItem.w, 24, 200, (v) => updWall({ w: v }))}
+            {numField('高さ', wallItem.h, 48, 320, (v) => updWall({ h: v }))}
+            {numField('セル内X', wallItem.ox, -200, 200, (v) => updWall({ ox: v }))}
+            {numField('セル内Y', wallItem.oy, -200, 200, (v) => updWall({ oy: v }))}
+            {numField('回転°', wallItem.rot ?? 0, -180, 180, (v) => updWall({ rot: v }))}
+            {numField('積み間隔', wallItem.stackDy ?? 90, 0, 200, (v) => updWall({ stackDy: v }))}
+            <button type="button" onClick={resetWall} style={{ marginTop: 8 }}>
+              リセット（壁を既定に戻す）
+            </button>
+            <pre
+              style={{
+                whiteSpace: 'pre-wrap',
+                fontSize: 11,
+                marginTop: 10,
+                background: '#000',
+                padding: 8,
+                borderRadius: 4,
+              }}
+            >
+              {`// DEFAULT_WALL_CATALOG の ${wallId}\n{ id: '${wallItem.id}', name: '${wallItem.name}', imgBase: '${wallItem.imgBase}', w: ${wallItem.w}, h: ${wallItem.h}, ox: ${wallItem.ox}, oy: ${wallItem.oy}, rot: ${wallItem.rot ?? 0}, stackDy: ${wallItem.stackDy ?? 90} },`}
+            </pre>
+          </>
+        )}
 
         {target === 'door' && (
           <>

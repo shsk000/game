@@ -4,6 +4,7 @@ import {
   cellPx,
   type Dir,
   eachCell,
+  footprintCenterOffset,
   makeGeometry,
   type Placement,
   ROOM,
@@ -11,11 +12,26 @@ import {
 } from '../lib/officeGeometry';
 import {
   DEFAULT_WORKSTATIONS,
+  type DecorDir,
+  type DecorPlacement,
+  decorGeom,
+  decorImg,
   type DoorCfg,
+  loadDecorCatalog,
+  loadDecorPlacements,
   loadDoor,
+  loadWallCatalog,
+  loadWallPlacements,
   loadWorkstations,
+  saveDecorPlacements,
   saveDoor,
+  saveWallPlacements,
   saveWorkstations,
+  type WallDir,
+  type WallPlacement,
+  wallImg,
+  wallOffset,
+  wallSkewDeg,
 } from '../lib/officeLayout';
 import { Workstation } from './Workstation';
 
@@ -32,6 +48,39 @@ export function OfficeLayoutTool() {
   const [scale, setScale] = useState<Scale>('mini');
   const [placements, setPlacements] = useState<Placement[]>(loadWorkstations());
   const [hover, setHover] = useState<{ i: number; j: number } | null>(null);
+  // 配置モード：机 / 家具 / 壁
+  const [mode, setMode] = useState<'ws' | 'decor' | 'wall'>('ws');
+  const catalog = loadDecorCatalog();
+  const [decorPlace, setDecorPlace] = useState<DecorPlacement[]>(loadDecorPlacements());
+  const [selDecor, setSelDecor] = useState<string>(catalog[0]?.id ?? '');
+  const [selDir, setSelDir] = useState<DecorDir>('SE'); // 置く向き
+  const saveDecorP = (next: DecorPlacement[]) => {
+    setDecorPlace(next);
+    saveDecorPlacements(next);
+  };
+  // 家具セルクリック：選択中の種類・向きを置く / 既にあれば消す
+  const toggleDecor = (i: number, j: number) => {
+    const idx = decorPlace.findIndex((d) => d.i === i && d.j === j && d.catalogId === selDecor);
+    if (idx >= 0) saveDecorP(decorPlace.filter((_, k) => k !== idx));
+    else saveDecorP([...decorPlace, { catalogId: selDecor, i, j, dir: selDir }]);
+  };
+
+  // 壁
+  const wallCat = loadWallCatalog();
+  const [wallPlace, setWallPlace] = useState<WallPlacement[]>(loadWallPlacements());
+  const [selWall, setSelWall] = useState<string>(wallCat[0]?.id ?? '');
+  const [selWallDir, setSelWallDir] = useState<WallDir>('SE'); // 置く向き（家具と同じSW/SE）
+  const [selWallStack, setSelWallStack] = useState<number>(1); // 縦積み段数
+  const saveWallP = (next: WallPlacement[]) => {
+    setWallPlace(next);
+    saveWallPlacements(next);
+  };
+  // 壁セルクリック：選択中の種類を選択向きで置く / 既にあれば消す
+  const toggleWall = (i: number, j: number) => {
+    const idx = wallPlace.findIndex((d) => d.i === i && d.j === j && d.dir === selWallDir);
+    if (idx >= 0) saveWallP(wallPlace.filter((_, k) => k !== idx));
+    else saveWallP([...wallPlace, { catalogId: selWall, i, j, dir: selWallDir, stack: selWallStack }]);
+  };
 
   const { cols, rows } = ROOM[scale];
   const geo = makeGeometry(cols, rows);
@@ -167,6 +216,69 @@ export function OfficeLayoutTool() {
             );
           })()}
 
+          {/* 家具配置（pointer-events 無効） */}
+          {decorPlace.map((d, idx) => {
+            const item = catalog.find((c) => c.id === d.catalogId);
+            if (!item) return null;
+            const { x, y } = geo.cellAnchor(d.i, d.j);
+            const g = decorGeom(item, d.dir);
+            const off = footprintCenterOffset(g.cw, g.ch);
+            const cx = x + off.dx;
+            const cy = y + off.dy;
+            return (
+              <img
+                key={`decor-${idx}`}
+                src={`${SPRITE_BASE}/${decorImg(item.imgBase, d.dir)}`}
+                width={item.w}
+                height={item.w}
+                alt=""
+                style={{
+                  position: 'absolute',
+                  left: cx + g.ox - item.w / 2,
+                  top: cy + g.oy - item.w,
+                  imageRendering: 'pixelated',
+                  // 壁掛け（窓）は壁面 slope 0.5 へ skew して同一平面に載せる。
+                  transform: item.onWall ? `skewY(${wallSkewDeg(d.dir)}deg)` : undefined,
+                  // 壁掛けは壁の奥行き（壁パネルの上・手前の家具の背後）。それ以外は footprint 最前セル基準。
+                  zIndex: item.onWall
+                    ? geo.baseZ(d.i, d.j) + 2
+                    : geo.baseZ(d.i, d.j) + (g.cw + g.ch - 2) * 10 + 5,
+                  pointerEvents: 'none',
+                }}
+              />
+            );
+          })}
+
+          {/* 壁配置（pointer-events 無効）。向き SW/SE＋縦積み stack 段。 */}
+          {wallPlace.flatMap((d, idx) => {
+            const item = wallCat.find((c) => c.id === d.catalogId);
+            if (!item) return [];
+            const { x, y } = geo.cellAnchor(d.i, d.j);
+            const edx = d.dir === 'SW' ? cellPx / 4 : -cellPx / 4;
+            const edy = -cellPx / 8;
+            const off = wallOffset(item, d.dir);
+            const sdy = item.stackDy ?? 90;
+            const base = geo.baseZ(d.i, d.j);
+            return Array.from({ length: d.stack ?? 1 }, (_, k) => (
+              <img
+                key={`wall-${idx}-${k}`}
+                src={`${SPRITE_BASE}/${wallImg(item.imgBase, d.dir)}`}
+                width={item.w}
+                height={item.h}
+                alt=""
+                style={{
+                  position: 'absolute',
+                  left: x + edx + off.ox - item.w / 2,
+                  top: y + edy + off.oy - item.h - k * sdy,
+                  imageRendering: 'pixelated',
+                  transform: item.rot ? `rotate(${item.rot}deg)` : undefined,
+                  zIndex: base + k,
+                  pointerEvents: 'none',
+                }}
+              />
+            ));
+          })}
+
           {/* クリック可能なセル（ひし形）。最前面でホバー強調＋ラベル表示 */}
           {cells.map(({ i, j }) => {
             const { left, top } = geo.tileTopLeft(i, j);
@@ -175,7 +287,7 @@ export function OfficeLayoutTool() {
               <button
                 type="button"
                 key={`c-${i}-${j}`}
-                onClick={() => cycle(i, j)}
+                onClick={() => (mode === 'ws' ? cycle(i, j) : mode === 'decor' ? toggleDecor(i, j) : toggleWall(i, j))}
                 title={`(${i},${j})`}
                 style={{
                   position: 'absolute',
@@ -250,11 +362,129 @@ export function OfficeLayoutTool() {
 
       <div style={{ width: 320, padding: 12, overflowY: 'auto', borderLeft: '1px solid #333' }}>
         <h3 style={{ marginTop: 0 }}>オフィス配置ツール</h3>
-        <p style={{ fontSize: 12, opacity: 0.8, lineHeight: 1.6 }}>
-          床のマスをクリックで切替：
-          <br />
-          空 → <strong>SE</strong>(顔こちら) → <strong>NW</strong>(背中) → 空
-        </p>
+
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          <button
+            type="button"
+            onClick={() => setMode('ws')}
+            style={{ flex: 1, padding: '6px 0', background: mode === 'ws' ? '#3a5a9a' : '#222', color: '#fff', border: '1px solid #444', cursor: 'pointer' }}
+          >
+            机（社員）
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('decor')}
+            style={{ flex: 1, padding: '6px 0', background: mode === 'decor' ? '#3a5a9a' : '#222', color: '#fff', border: '1px solid #444', cursor: 'pointer' }}
+          >
+            家具
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('wall')}
+            style={{ flex: 1, padding: '6px 0', background: mode === 'wall' ? '#3a5a9a' : '#222', color: '#fff', border: '1px solid #444', cursor: 'pointer' }}
+          >
+            壁
+          </button>
+        </div>
+
+        {mode === 'ws' && (
+          <p style={{ fontSize: 12, opacity: 0.8, lineHeight: 1.6 }}>
+            床のマスをクリックで切替：
+            <br />
+            空 → <strong>SE</strong>(顔こちら) → <strong>NW</strong>(背中) → 空
+          </p>
+        )}
+        {mode === 'decor' && (
+          <p style={{ fontSize: 12, opacity: 0.8, lineHeight: 1.6 }}>
+            家具を選び、置くマスをクリック（同じマスを再クリックで撤去）。
+            <br />
+            セル内の位置・大きさは <strong>?tuner</strong>→「家具」で。
+          </p>
+        )}
+        {mode === 'wall' && (
+          <p style={{ fontSize: 12, opacity: 0.8, lineHeight: 1.6 }}>
+            向き(SE/SW)と段数を選び、置くマスをクリック（同じ向きを再クリックで撤去）。
+            <br />
+            SW=奥右辺、SE=奥左辺。見た目は <strong>?tuner</strong>→「壁」で。
+          </p>
+        )}
+
+        {mode === 'decor' && (
+          <>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 6 }}>
+              置く向き
+              <label>
+                <input type="radio" checked={selDir === 'SE'} onChange={() => setSelDir('SE')} /> SE
+              </label>
+              <label>
+                <input type="radio" checked={selDir === 'SW'} onChange={() => setSelDir('SW')} /> SW
+              </label>
+              <label>
+                <input type="radio" checked={selDir === 'NW'} onChange={() => setSelDir('NW')} /> NW
+              </label>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 10 }}>
+              {catalog.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setSelDecor(c.id)}
+                  style={{
+                    fontSize: 11,
+                    padding: '4px 6px',
+                    background: selDecor === c.id ? '#3a7a4a' : '#222',
+                    color: '#fff',
+                    border: '1px solid #444',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {mode === 'wall' && (
+          <>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 6 }}>
+              置く向き
+              <label>
+                <input type="radio" checked={selWallDir === 'SE'} onChange={() => setSelWallDir('SE')} /> SE
+              </label>
+              <label>
+                <input type="radio" checked={selWallDir === 'SW'} onChange={() => setSelWallDir('SW')} /> SW
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 6 }}>
+              縦積み
+              {[1, 2, 3].map((n) => (
+                <label key={n}>
+                  <input type="radio" checked={selWallStack === n} onChange={() => setSelWallStack(n)} /> {n}
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 10 }}>
+              {wallCat.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setSelWall(c.id)}
+                  style={{
+                    fontSize: 11,
+                    padding: '4px 6px',
+                    background: selWall === c.id ? '#3a7a4a' : '#222',
+                    color: '#fff',
+                    border: '1px solid #444',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         <label style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
           規模
@@ -287,9 +517,7 @@ export function OfficeLayoutTool() {
           </div>
         </div>
 
-        <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 4 }}>
-          OfficeView の WORKSTATION_CELLS / DOOR に転記:
-        </div>
+        <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 4 }}>officeLayout.ts に転記:</div>
         <pre
           style={{
             whiteSpace: 'pre-wrap',
@@ -299,7 +527,15 @@ export function OfficeLayoutTool() {
             borderRadius: 4,
           }}
         >
-          {`const WORKSTATION_CELLS: Placement[] = [\n${output}\n];\n\nconst DOOR = { img: '${door.img}', i: ${door.i}, j: ${door.j}, w: ${door.w}, ox: ${door.ox}, oy: ${door.oy} };`}
+          {`DEFAULT_WORKSTATIONS = [\n${output}\n];\n\nDEFAULT_DOOR = { img: '${door.img}', i: ${door.i}, j: ${door.j}, w: ${door.w}, ox: ${door.ox}, oy: ${door.oy} };\n\nDEFAULT_DECOR_PLACEMENTS = [\n${decorPlace
+            .slice()
+            .sort((a, b) => a.i + a.j - (b.i + b.j))
+            .map((d) => `  { catalogId: '${d.catalogId}', i: ${d.i}, j: ${d.j}, dir: '${d.dir}' },`)
+            .join('\n')}\n];\n\nDEFAULT_WALL_PLACEMENTS = [\n${wallPlace
+            .slice()
+            .sort((a, b) => a.i + a.j - (b.i + b.j))
+            .map((d) => `  { catalogId: '${d.catalogId}', i: ${d.i}, j: ${d.j}, dir: '${d.dir}', stack: ${d.stack ?? 1} },`)
+            .join('\n')}\n];`}
         </pre>
       </div>
     </div>

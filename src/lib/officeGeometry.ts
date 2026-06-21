@@ -79,3 +79,42 @@ export function eachCell(cols: number, rows: number): { i: number; j: number }[]
 
 export type Dir = 'NW' | 'SE';
 export type Placement = { i: number; j: number; dir: Dir };
+
+/**
+ * セル(i,j)の奥辺の中点（壁を立てる基準点）。cellAnchor からの相対で返す用に dx,dy。
+ * NE辺＝菱形の上→右の中点（+dW/4, -dH/4）、NW辺＝上→左の中点（-dW/4, -dH/4）。
+ */
+export function wallEdgeOffset(dir: 'NE' | 'NW'): { dx: number; dy: number } {
+  const dW = cellPx;
+  const dH = cellPx / 2;
+  return { dx: dir === 'NE' ? dW / 4 : -dW / 4, dy: -dH / 4 };
+}
+
+/**
+ * cells セル分をまとめた壁の中心オフセット（先頭セル(i,j)のアンカーからの相対）。
+ * 壁は辺方向に伸びる：NE辺＝+i方向(+dW/2,+dH/2 ステップ)、NW辺＝+j方向(-dW/2,+dH/2 ステップ)。
+ * cells=1 は wallEdgeOffset と同じ（単セルの辺中点）。
+ */
+export function wallSpanOffset(dir: 'NE' | 'NW', cells: number): { dx: number; dy: number } {
+  const dW = cellPx;
+  const dH = cellPx / 2;
+  const e = wallEdgeOffset(dir);
+  const stepX = dir === 'NE' ? dW / 2 : -dW / 2;
+  const k = (cells - 1) / 2;
+  return { dx: e.dx + k * stepX, dy: e.dy + k * (dH / 2) };
+}
+
+/**
+ * footprint（cw×ch マス）の中心アンカーのオフセット。先頭セル(i,j)から footprint 中心までの (dx,dy)。
+ * i軸（+i, 画面 右下↘）= +dW/2,+dH/2 ステップ。j軸（+j, 画面 左下↙）= -dW/2,+dH/2 ステップ。
+ */
+export function footprintCenterOffset(cw: number, ch: number): { dx: number; dy: number } {
+  const hi = (cw - 1) / 2; // i軸の中心まで
+  const hj = (ch - 1) / 2; // j軸の中心まで
+  const dW = cellPx;
+  const dH = cellPx / 2;
+  return {
+    dx: hi * (dW / 2) + hj * (-dW / 2),
+    dy: hi * (dH / 2) + hj * (dH / 2),
+  };
+}
