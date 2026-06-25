@@ -15,6 +15,7 @@ import { REFRESH_COST, roleLabel, sumMonthlySalaries } from '../../data/employee
 import { GENRE_BY_ID } from '../../data/genres';
 import { nextLockedScale, SCALE_BY_ID, SCALES } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
+import { MAX_EMPLOYEES } from '../../lib/officeLayout';
 import { useGameStore } from '../../state/gameStore';
 import { formatYen } from '../../utils/format';
 
@@ -163,7 +164,8 @@ export const OfficeScreen = () => {
     aaa: { w: 1344, h: 1056 },
   };
   const stageSize = STAGE_SIZE[currentScale] ?? STAGE_SIZE.mini;
-  const stageScale = Math.min(1280 / stageSize.w, 720 / stageSize.h);
+  // 等倍を上限に（画面に収まらない大きい規模だけ縮小）。mini を画面いっぱいに拡大しない＝?layout と同サイズ。
+  const stageScale = Math.min(1, 1280 / stageSize.w, 720 / stageSize.h);
 
   // G5：お知らせ（リファレンスの左上窓）。store の状態から直近の出来事を導出
   const news: { icon: string; text: string; tone?: 'warn' | 'good' }[] = [];
@@ -585,10 +587,15 @@ export const OfficeScreen = () => {
               </span>
             </div>
             <div style={{ fontSize: 13 }}>{formatPower(candidate.role, candidate.power)}</div>
+            {employees.length >= MAX_EMPLOYEES && (
+              <div style={{ fontSize: 12, color: '#c66' }}>
+                満席です（最大 {MAX_EMPLOYEES} 人）。採用するには席を空けてください。
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <PixelButton
                 variant="primary"
-                disabled={funds < candidate.wage}
+                disabled={funds < candidate.wage || employees.length >= MAX_EMPLOYEES}
                 onClick={() => hireCandidate()}
               >
                 採用 ¥{candidate.wage.toLocaleString()}

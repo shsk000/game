@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { PixelWindow } from './PixelWindow';
 
 /**
@@ -49,7 +50,10 @@ export const PixelModal = ({
 
   if (!open) return null;
 
-  return (
+  // document.body へ portal する。ゲーム本体（.game-root）は CSS transform で拡縮しており、
+  // transform 祖先の内側だと position:fixed がビューポートでなく game-root 基準になり画面外へズレる。
+  // body 直下に出すことで fixed が本来のビューポート中央基準に戻る。
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -92,6 +96,7 @@ export const PixelModal = ({
           {children}
         </PixelWindow>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
