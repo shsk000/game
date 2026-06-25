@@ -43,7 +43,8 @@ import type {
   Work,
   WorkBreakdown,
 } from './types';
-import { addWeeks, DEV_PHASE_ORDER, INITIAL_GAME_DATE } from './types';
+import type { DevAxis } from './types';
+import { addWeeks, DEV_PHASE_ORDER, INITIAL_GAME_DATE, ZERO_AXES } from './types';
 
 const persisted = storage.load() ?? storage.defaults();
 
@@ -255,6 +256,8 @@ type Actions = {
    * debugging から先（release 相当）に進むときは既存リリースフロー finishDevelopment に委譲する。
    */
   advancePhase: () => void;
+  /** v0.14：イベント/ミッション結果の新軸デルタを current.axes に適用 */
+  applyAxisDelta: (delta: Partial<Record<DevAxis, number>>) => void;
   releaseWork: (opts?: ReleaseOpts) => Work;
   buyAdDevBoost: () => void;
   buyAdSurvey: (g: GenreId, t: ThemeId) => void;
@@ -362,6 +365,7 @@ export const useGameStore = create<GameState>()(
         themeId,
         scale,
         phase: 'planning',
+        axes: { ...ZERO_AXES },
         requiredLoC: def.requiredLoC,
         doneLoC: 0,
         maxCombo: 0,
@@ -589,6 +593,16 @@ export const useGameStore = create<GameState>()(
       set({ current: { ...cur, phase: next } });
     },
 
+    applyAxisDelta: (delta) => {
+      const cur = get().current;
+      if (!cur) return;
+      const axes = { ...(cur.axes ?? ZERO_AXES) };
+      (Object.keys(delta) as DevAxis[]).forEach((k) => {
+        axes[k] = (axes[k] ?? 0) + (delta[k] ?? 0);
+      });
+      set({ current: { ...cur, axes } });
+    },
+
     releaseWork: (opts) => {
       const cur = get().current;
       if (!cur) throw new Error('no current project');
@@ -618,11 +632,17 @@ export const useGameStore = create<GameState>()(
       );
 
       // 4) computeQualityV10 で合成（運の基底 50 ± 揺らぎ）。神ゲーガチャは v0.10 で廃止。
-      const { Q: quality, breakdown: qBreakdown } = computeQualityV10({
+      const { Q: quality0, breakdown: qBreakdown } = computeQualityV10({
         charPower: charResult.score,
         genreAffinity: affResult.score,
         typingScore: performance,
       });
+
+      // v0.14：イベント新軸の合流（品質系 + バグ罰）。既存 4 要素は不変、加点/減点として上乗せ。
+      const axes = cur.axes ?? ZERO_AXES;
+      const axisQualityBonus =
+        (axes.funFactor + axes.usability + axes.balance) * 0.3 - axes.bugRate * 0.2;
+      const quality = Math.max(0, Math.min(100, Math.round(quality0 + axisQualityBonus)));
 
       const trend = get().trend;
       const meta = computeMetascore(quality, cur.genreId, cur.themeId, trend);
@@ -631,7 +651,7 @@ export const useGameStore = create<GameState>()(
         (w) => w.genreId === cur.genreId && w.themeId === cur.themeId,
       );
       const pioneerBonus = pioneer ? 0.3 : 0;
-      const totalRevenue = computeRevenue(
+      const baseTotalRevenue = computeRevenue(
         meta.metascore,
         cur.genreId,
         cur.themeId,
@@ -642,11 +662,19 @@ export const useGameStore = create<GameState>()(
         prBonus,
         pioneerBonus,
       );
+      // v0.14：市場系新軸（売上予測・話題性 − 炎上リスク）で売上を補正（0.5〜2.0 倍にクランプ）。
+      const axisSalesMul = Math.max(
+        0.5,
+        Math.min(2, 1 + (axes.salesForecast + axes.buzz) / 100 - axes.reputationRisk / 100),
+      );
+      const totalRevenue = Math.round(baseTotalRevenue * axisSalesMul);
       const initialRevenue = Math.round(totalRevenue * INITIAL_SHARE);
       const salesPool = totalRevenue - initialRevenue;
       const decayPerSec = decayRateFor(meta.metascore);
-      const gainedFans = Math.max(0, fanDelta(meta.metascore, prBonus));
-      const newFans = Math.max(0, get().fans + fanDelta(meta.metascore, prBonus));
+      // v0.14：期待/話題/信頼でファン上乗せ、炎上リスクで減（spec §5-6）。
+      const axisFans = Math.round(axes.hype + axes.buzz * 0.5 + axes.trust - axes.reputationRisk);
+      const gainedFans = Math.max(0, fanDelta(meta.metascore, prBonus) + axisFans);
+      const newFans = Math.max(0, get().fans + gainedFans);
       const developSec = cur.finishedAt !== null ? (cur.finishedAt - cur.startedAt) / 1000 : 0;
       const prevGhost = get().ghosts[cur.scale];
       const ghostBeaten = prevGhost !== null && developSec <= prevGhost;

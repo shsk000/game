@@ -168,6 +168,39 @@ export const DEV_PHASE_ORDER: DevPhase[] = [
   'complete',
 ];
 
+/**
+ * v0.14：イベント効果の新名称軸（オーナー決定「新名称軸を追加」）。
+ * `current.axes` に蓄積し、リリース時に既存の品質→メタスコア→売上/ファンへ合流する（spec §5-6）。
+ */
+export type DevAxis =
+  | 'funFactor' // 面白さ → 品質
+  | 'usability' // 操作性 → 品質
+  | 'balance' // バランス → 品質
+  | 'hype' // 期待度 → ファン/初動
+  | 'buzz' // 話題性 → ファン/売上
+  | 'salesForecast' // 売上予測% → 売上
+  | 'bugRate' // バグ率±（+ で品質減）
+  | 'reputationRisk' // 炎上リスク（+ で売上/ファン減）
+  | 'devWeeksDelta' // 開発期間±週
+  | 'costMod' // コスト%（- で節約）
+  | 'trust'; // 信頼度 → ファン微増
+
+export type DevAxes = Record<DevAxis, number>;
+
+export const ZERO_AXES: DevAxes = {
+  funFactor: 0,
+  usability: 0,
+  balance: 0,
+  hype: 0,
+  buzz: 0,
+  salesForecast: 0,
+  bugRate: 0,
+  reputationRisk: 0,
+  devWeeksDelta: 0,
+  costMod: 0,
+  trust: 0,
+};
+
 /** フェーズの表示メタ（左の進行リスト用）。番号は 1 始まり */
 export const DEV_PHASE_META: Record<DevPhase, { label: string; image: string }> = {
   planning: { label: '企画', image: 'planning' },
@@ -185,6 +218,8 @@ export type CurrentProject = {
   scale: Scale;
   /** v0.14：現在の開発フェーズ。未設定の旧データは development 扱い（防御） */
   phase?: DevPhase;
+  /** v0.14：イベントで蓄積する新名称軸。リリース時に既存パイプラインへ合流（spec §5-6） */
+  axes?: DevAxes;
   requiredLoC: number;
   doneLoC: number;
   /** ノリ／コンボ最大値（このプロジェクト内） */

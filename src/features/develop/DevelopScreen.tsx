@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
+import {
+  type AxisDelta,
+  EVENT_CATEGORY_META,
+  PHASE_BASE_MISSION,
+  PHASE_EVENTS,
+  formatAxisDelta,
+} from '../../data/events';
 import { GENRE_BY_ID, getPhrases } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
@@ -35,6 +42,7 @@ export const DevelopScreen = () => {
   const employees = useGameStore((s) => s.employees);
   const addDevelopLoC = useGameStore((s) => s.addDevelopLoC);
   const advancePhase = useGameStore((s) => s.advancePhase);
+  const applyAxisDelta = useGameStore((s) => s.applyAxisDelta);
   const reportCombo = useGameStore((s) => s.reportCombo);
   const reportWPM = useGameStore((s) => s.reportWPM);
   const reportAccuracy = useGameStore((s) => s.reportAccuracy);
@@ -215,7 +223,13 @@ export const DevelopScreen = () => {
               impact={impact}
             />
           ) : (
-            <PhasePlaceholder phase={phase} label={phaseMeta.label} onAdvance={advancePhase} />
+            <MissionFlow
+              key={phase}
+              phase={phase}
+              label={phaseMeta.label}
+              onAllDone={advancePhase}
+              applyDelta={applyAxisDelta}
+            />
           )}
         </main>
 
@@ -281,6 +295,9 @@ export const DevelopScreen = () => {
           </div>
         </aside>
       </div>
+
+      {/* 下部：このフェーズで起こりうるイベント */}
+      <EventBar phase={phase} />
     </div>
   );
 };
@@ -533,57 +550,242 @@ const DevelopCenter = ({
   </div>
 );
 
-/** 中央：開発以外のフェーズ（舞台＋「次へ」）。中身は後続版で作り込む。 */
-const PhasePlaceholder = ({
+type QueuedMission = {
+  kind: 'base' | 'event';
+  name?: string;
+  label: string;
+  flavor?: string;
+  mission: string;
+  success: AxisDelta;
+  fail: AxisDelta;
+};
+
+/** フェーズ入場時にミッション列を組む：必ずベース 1 件＋発生率で当たったイベント */
+const buildMissionQueue = (phase: DevPhase): QueuedMission[] => {
+  const q: QueuedMission[] = [];
+  const base = PHASE_BASE_MISSION[phase];
+  if (base) q.push({ kind: 'base', label: base.label, mission: base.mission, success: {}, fail: {} });
+  for (const ev of PHASE_EVENTS[phase]) {
+    if (Math.random() < ev.rate) {
+      q.push({
+        kind: 'event',
+        name: ev.name,
+        label: ev.missionLabel,
+        flavor: ev.flavor,
+        mission: ev.mission,
+        success: ev.success,
+        fail: ev.fail,
+      });
+    }
+  }
+  return q;
+};
+
+/** 中央：開発以外のフェーズ（ベース入力ミッション＋発生イベントを順に打つ） */
+const MissionFlow = ({
   phase,
   label,
-  onAdvance,
+  onAllDone,
+  applyDelta,
 }: {
   phase: DevPhase;
   label: string;
-  onAdvance: () => void;
-}) => (
+  onAllDone: () => void;
+  applyDelta: (delta: AxisDelta) => void;
+}) => {
+  const [queue] = useState(() => buildMissionQueue(phase));
+  const [i, setI] = useState(0);
+  const [log, setLog] = useState<string[]>([]);
+  const cur = queue[i];
+
+  const resolve = (delta: AxisDelta, label2: string, ok: boolean) => {
+    applyDelta(delta);
+    setLog((l) => [`${ok ? '✓' : '✕'} ${label2}：${formatAxisDelta(delta)}`, ...l].slice(0, 5));
+    if (i + 1 >= queue.length) onAllDone();
+    else setI((n) => n + 1);
+  };
+
+  if (!cur) {
+    // 念のため（base も event も無い）：そのまま次フェーズへ
+    return (
+      <PhaseShell label={label}>
+        <button type="button" onClick={onAllDone} style={advanceBtnStyle}>
+          ▶ 次のフェーズへ
+        </button>
+      </PhaseShell>
+    );
+  }
+
+  return (
+    <PhaseShell label={label}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ fontSize: 11, color: DEV.sub }}>
+          ミッション {i + 1} / {queue.length}
+          {cur.kind === 'event' && (
+            <span style={{ color: DEV.orange, fontWeight: 700, marginLeft: 8 }}>⚡ イベント発生</span>
+          )}
+        </div>
+        {cur.name && (
+          <div style={{ fontSize: 14, color: DEV.orange, fontWeight: 700 }}>{cur.name}</div>
+        )}
+        <div style={{ fontSize: 22, color: DEV.cream, fontWeight: 700 }}>{cur.label}</div>
+        {cur.flavor && <div style={{ fontSize: 12, color: DEV.sub }}>{cur.flavor}</div>}
+
+        <MissionTyping
+          key={i}
+          phrase={cur.mission}
+          onComplete={() => resolve(cur.success, cur.label, true)}
+        />
+
+        <button
+          type="button"
+          onClick={() => resolve(cur.fail, cur.label, false)}
+          style={{
+            alignSelf: 'flex-start',
+            padding: '6px 14px',
+            background: 'transparent',
+            border: `1px solid ${DEV.panelBorder}`,
+            color: DEV.sub,
+            fontSize: 12,
+            cursor: 'pointer',
+          }}
+        >
+          スキップ（打たない）
+        </button>
+
+        {log.length > 0 && (
+          <div style={{ ...devBox(), gap: 2 }}>
+            {log.map((line, idx) => (
+              <span key={idx} style={{ fontSize: 12, color: DEV.cream }}>
+                {line}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </PhaseShell>
+  );
+};
+
+/** フェーズ中央の外枠 */
+const PhaseShell = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div
     style={{
       flex: 1,
       minHeight: 0,
+      overflow: 'auto',
       background: DEV.panelBg,
       border: `2px solid ${DEV.panelBorder}`,
       display: 'flex',
       flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 18,
-      padding: 24,
-      textAlign: 'center',
     }}
   >
-    <span style={{ fontSize: 22, fontWeight: 700, color: DEV.green, letterSpacing: '0.06em' }}>
-      {label}フェーズ
-    </span>
-    <span style={{ fontSize: 13, color: DEV.sub, maxWidth: 420, lineHeight: 1.6 }}>
-      {PHASE_WORK_NOTE[phase]}
-      <br />
-      （このフェーズの中身・ランダムイベントは次の版で実装します）
-    </span>
-    <button
-      type="button"
-      onClick={onAdvance}
-      style={{
-        marginTop: 8,
-        padding: '12px 28px',
-        background: '#234012',
-        border: `2px solid ${DEV.green}`,
-        color: DEV.white,
-        fontWeight: 700,
-        fontSize: 15,
-        cursor: 'pointer',
-      }}
-    >
-      ▶ {NEXT_LABEL[phase]}
-    </button>
+    <div style={{ padding: '8px 12px', borderBottom: `2px solid ${DEV.panelBorder}` }}>
+      <span style={{ color: DEV.green, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}>
+        {'</> '}
+        {label}フェーズ
+      </span>
+    </div>
+    <div style={{ padding: 16 }}>{children}</div>
   </div>
 );
+
+/** ミッション 1 件分のタイピング（打ち切りで onComplete） */
+const MissionTyping = ({ phrase, onComplete }: { phrase: string; onComplete: () => void }) => {
+  const phrases = useMemo(() => [phrase], [phrase]);
+  const { view } = useTyping({ phrases, onPhraseComplete: onComplete });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>入力する文章</div>
+      <div
+        style={{
+          background: '#0c1207',
+          border: `1px solid ${DEV.panelBorder}`,
+          padding: '14px',
+          fontSize: 30,
+          color: DEV.cream,
+          letterSpacing: '0.04em',
+        }}
+      >
+        {view.hiragana}
+      </div>
+      <div
+        style={{
+          background: '#0c1207',
+          border: `1px solid ${DEV.panelBorder}`,
+          padding: '10px 14px',
+          fontSize: 22,
+          letterSpacing: '0.08em',
+        }}
+      >
+        <span style={{ color: DEV.green }}>{view.completed}</span>
+        <span className="dev-cursor" style={{ color: DEV.white }}>
+          |
+        </span>
+        <span style={{ color: '#5a6e3a' }}>{view.remained}</span>
+      </div>
+    </div>
+  );
+};
+
+/** 下部バー：そのフェーズで起こりうるイベントだけを表示（spec §5-4） */
+const EventBar = ({ phase }: { phase: DevPhase }) => {
+  const events = PHASE_EVENTS[phase];
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '8px 12px',
+        margin: '0 12px 12px',
+        background: '#0a0f08',
+        border: `1px solid ${DEV.panelBorder}`,
+        minHeight: 44,
+        overflowX: 'auto',
+      }}
+    >
+      <span style={{ fontSize: 11, color: DEV.sub, whiteSpace: 'nowrap' }}>
+        このフェーズで起こりうるイベント
+      </span>
+      {events.length === 0 && (
+        <span style={{ fontSize: 12, color: '#5a6e3a' }}>（このフェーズはイベントなし）</span>
+      )}
+      {events.map((ev) => (
+        <div
+          key={ev.id}
+          title={ev.flavor}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '4px 10px',
+            background: '#11180b',
+            border: `1px solid ${DEV.panelBorder}`,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <span style={{ fontSize: 14 }}>{EVENT_CATEGORY_META[ev.category].icon}</span>
+          <span style={{ fontSize: 12, color: DEV.cream }}>{ev.name}</span>
+          <span style={{ fontSize: 11, color: DEV.orange, fontWeight: 700 }}>
+            {Math.round(ev.rate * 100)}%
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const advanceBtnStyle: React.CSSProperties = {
+  marginTop: 8,
+  padding: '12px 28px',
+  background: '#234012',
+  border: '2px solid #8fd02a',
+  color: '#fffdf2',
+  fontWeight: 700,
+  fontSize: 15,
+  cursor: 'pointer',
+};
 
 /** v0.14 開発フェーズのダークパレット（ターミナル風）。 */
 const DEV = {
@@ -606,15 +808,6 @@ const PHASE_WORK_NOTE: Record<DevPhase, string> = {
   debugging: 'バグを駆除して品質を仕上げる',
   release: '発売して売上を監視する',
   complete: '開発完了・打ち上げ',
-};
-
-const NEXT_LABEL: Record<DevPhase, string> = {
-  planning: '開発を始める',
-  development: 'テストへ進む',
-  testing: 'テスト完了',
-  debugging: 'デバッグ完了（発売へ）',
-  release: '結果を見る',
-  complete: 'オフィスへ戻る',
 };
 
 const devBox = (): React.CSSProperties => ({
