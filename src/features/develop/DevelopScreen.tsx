@@ -5,10 +5,10 @@ import {
   type AxisDelta,
   type DevEvent,
   EVENT_CATEGORY_META,
-  PHASE_BASE_MISSION,
   PHASE_EVENTS,
   formatAxisDelta,
 } from '../../data/events';
+import { sfx } from '../../utils/sfx';
 import { GENRE_BY_ID, getPhrases } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
@@ -34,7 +34,6 @@ import {
 } from './devImpact';
 import { useTyping } from './useTyping';
 
-type Toast = { id: number; text: string; tone: 'warn' | 'good' | 'info' };
 
 /**
  * v0.14 開発フェーズ画面（3 カラム・テイクオーバー）。
@@ -61,7 +60,6 @@ export const DevelopScreen = () => {
   const phase: DevPhase = current?.phase ?? 'development';
   const isDevelopment = phase === 'development';
 
-  const [toasts, setToasts] = useState<Toast[]>([]);
   const wpmRef = useRef(0);
   // ノリゲージ：最新コンボ（progressGain の倍率に使う）
   const comboRef = useRef(0);
@@ -69,45 +67,47 @@ export const DevelopScreen = () => {
   const phraseRef = useRef('');
   // 開発ログ：フレーズ完了ごとの「見える成果」（最新 4 行）
   const [devLog, setDevLog] = useState<{ id: number; text: string }[]>([]);
-  // v0.14：開発フェーズ中のイベント割り込み（発生中はイベント文を打ち切るまで通常フレーズを中断）
-  const [devEvent, setDevEvent] = useState<DevEvent | null>(null);
-  const devEventRef = useRef<DevEvent | null>(null);
-  devEventRef.current = devEvent;
+  // v0.14 後期：イベントはキュー方式（オーナーFB：打っている文を途中で差し替えない・ずらさない）。
+  // 発生（pending）→ 今の文を打ち切ったら次の文としてイベント文（active）→ 打ち切りで成功。
+  const [pendingEvent, setPendingEvent] = useState<DevEvent | null>(null);
+  const [activeEvent, setActiveEvent] = useState<DevEvent | null>(null);
+  const pendingRef = useRef<DevEvent | null>(null);
+  const activeRef = useRef<DevEvent | null>(null);
+  pendingRef.current = pendingEvent;
+  activeRef.current = activeEvent;
+  // イベント発生の全画面フラッシュ（文字を見ていなくても気づく）
+  const [flash, setFlash] = useState(0);
+  // フレーズ完了の「+N」フロート（視線の先＝入力枠のそばに出す）
+  const [gainPop, setGainPop] = useState<{ id: number; text: string } | null>(null);
 
   const [rating, setRating] = useState<KeystrokeRating>(null);
   const lastCorrectAtRef = useRef<number>(0);
   const ratingTimerRef = useRef<number | null>(null);
-
-  const pushToast = (text: string, tone: Toast['tone']) => {
-    const id = Date.now() + Math.random();
-    setToasts((prev) => [...prev, { id, text, tone }]);
-    window.setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 1800);
-  };
 
   const phrases = useMemo(() => {
     if (!current) return [];
     return getPhrases(current.genreId, current.requiredLoC * 3);
   }, [current?.genreId, current?.requiredLoC]);
 
-  // イベント発生中はイベント文だけを出す（打ち切るまで通常フレーズを中断）
+  // active になったイベントの文だけを出す（今打っている文は絶対に差し替えない）
   const effectivePhrases = useMemo(() => {
-    if (devEvent) return [devEvent.mission];
+    if (activeEvent) return [activeEvent.mission];
     return phrases;
-  }, [phrases, devEvent]);
+  }, [phrases, activeEvent]);
 
-  // 開発フェーズ中のイベント抽選：8 秒ごとに 1 回、未発生時のみ判定
+  // 開発フェーズ中のイベント抽選：8 秒ごとに 1 回、未発生時のみ判定。
+  // 発生しても pending 止まり＝音＋全画面フラッシュで告知し、今の文の完了を待つ。
   useEffect(() => {
     if (!isDevelopment || !current) return;
     const timer = window.setInterval(() => {
-      if (devEventRef.current) return;
+      if (pendingRef.current || activeRef.current) return;
       const pool = PHASE_EVENTS.development;
       for (const ev of pool) {
         // フェーズ間より頻度を抑える（rate × 0.5 / 8 秒判定）
         if (Math.random() < ev.rate * 0.5) {
-          setDevEvent(ev);
-          pushToast(`${EVENT_CATEGORY_META[ev.category].icon} ${ev.name}！ ${ev.missionLabel}`, 'warn');
+          setPendingEvent(ev);
+          sfx.alert();
+          setFlash((n) => n + 1);
           break;
         }
       }
@@ -118,12 +118,14 @@ export const DevelopScreen = () => {
   const { view, failCount, combo, wpm, accuracy } = useTyping({
     phrases: effectivePhrases,
     onPhraseComplete: () => {
-      const ev = devEventRef.current;
+      const ev = activeRef.current;
       if (ev) {
         // イベントミッション打ち切り＝成功：新軸へ効果を適用し、通常フレーズに復帰
         applyAxisDelta(ev.success);
+        sfx.success();
         const gain = progressGain(wpmRef.current, ev.category === 'trouble', comboRef.current);
         addDevelopLoC(gain);
+        setGainPop({ id: Date.now(), text: `${ev.name} 成功！ ${formatAxisDelta(ev.success)}` });
         setDevLog((l) =>
           [
             {
@@ -133,18 +135,25 @@ export const DevelopScreen = () => {
             ...l,
           ].slice(0, 4),
         );
-        setDevEvent(null);
+        setActiveEvent(null);
       } else {
         // 通常フレーズ：ノリ倍率（コンボ）を乗せた進捗。打ち続けるほど 1 本の価値が上がる
         const gain = progressGain(wpmRef.current, false, comboRef.current);
         addDevelopLoC(gain);
-        // 3 秒ループの成果可視化：何をいくら進めたかをログに流す
+        sfx.complete();
+        // 成果は視線の先（入力枠のそば）にフロート表示＋ログにも残す
+        setGainPop({ id: Date.now(), text: `+${gain.toFixed(1)}` });
         setDevLog((l) =>
           [
             { id: Date.now() + Math.random(), text: `⚡ +${gain.toFixed(1)} 「${phraseRef.current}」実装完了！` },
             ...l,
           ].slice(0, 4),
         );
+        // 待機中のイベントがあれば、次の文としてイベント文を投入（途中差し替えしない）
+        if (pendingRef.current) {
+          setActiveEvent(pendingRef.current);
+          setPendingEvent(null);
+        }
       }
       // v0.14：作業量目標に達したら「開発フェーズ完了」＝次フェーズ（テスト）へ進む。
       const s = useGameStore.getState();
@@ -158,6 +167,7 @@ export const DevelopScreen = () => {
     paused: !current || !isDevelopment,
     onCorrect: (c) => {
       comboRef.current = c;
+      sfx.key();
       reportCombo(c);
       const now = performance.now();
       const interval = now - lastCorrectAtRef.current;
@@ -171,6 +181,7 @@ export const DevelopScreen = () => {
     },
     onComboBreak: () => {
       comboRef.current = 0;
+      sfx.miss();
     },
     onWpm: (w) => {
       wpmRef.current = w;
@@ -217,41 +228,11 @@ export const DevelopScreen = () => {
   const phaseImage = `${import.meta.env.BASE_URL}phase/${phaseMeta.image}.png`;
 
   return (
-    <div className="screen develop-screen" style={{ background: '#05080c' }}>
+    <div className="screen develop-screen" style={{ background: '#05080c', position: 'relative' }}>
       <PixelStatusBar />
 
-      {/* テロップ（バグ等） */}
-      {toasts.length > 0 && (
-        <div
-          aria-live="polite"
-          style={{
-            position: 'absolute',
-            top: 52,
-            right: 16,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-            zIndex: 30,
-            pointerEvents: 'none',
-          }}
-        >
-          {toasts.map((t) => (
-            <div
-              key={t.id}
-              style={{
-                padding: '6px 12px',
-                background: t.tone === 'warn' ? '#7a1d1d' : '#1e3a10',
-                color: '#f4ecd9',
-                border: `1px solid ${t.tone === 'warn' ? '#c84a3a' : DEV.greenLine}`,
-                fontWeight: 700,
-                fontSize: 13,
-              }}
-            >
-              {t.text}
-            </div>
-          ))}
-        </div>
-      )}
+      {/* イベント発生の全画面フラッシュ（key 再生・操作は透過） */}
+      {flash > 0 && <div key={`flash-${flash}`} className="dev-flash-vignette" />}
 
       {/* 3 カラム本体 */}
       <div
@@ -292,7 +273,9 @@ export const DevelopScreen = () => {
               failCount={failCount}
               impact={impact}
               devLog={devLog}
-              activeEvent={devEvent}
+              activeEvent={activeEvent}
+              pendingEvent={pendingEvent}
+              gainPop={gainPop}
             />
           ) : (
             <MissionFlow
@@ -474,6 +457,8 @@ const DevelopCenter = ({
   impact,
   devLog,
   activeEvent,
+  pendingEvent,
+  gainPop,
 }: {
   phaseLabel: string;
   missionName?: string;
@@ -487,6 +472,8 @@ const DevelopCenter = ({
   impact: ReturnType<typeof computeDevImpact>;
   devLog: { id: number; text: string }[];
   activeEvent: DevEvent | null;
+  pendingEvent: DevEvent | null;
+  gainPop: { id: number; text: string } | null;
 }) => (
   <div
     style={{
@@ -529,46 +516,63 @@ const DevelopCenter = ({
         </div>
       )}
 
-      {/* イベント割り込みバナー */}
-      {activeEvent && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '6px 10px',
-            background: '#3a2a05',
-            border: `2px solid ${DEV.orange}`,
-          }}
-        >
-          <span style={{ fontSize: 16 }}>{EVENT_CATEGORY_META[activeEvent.category].icon}</span>
-          <span style={{ fontSize: 14, fontWeight: 700, color: DEV.orange }}>
-            {activeEvent.name}
+      {/* イベント枠：常時同じ高さで確保（レイアウトシフトさせない） */}
+      <div
+        className={activeEvent ? 'dev-event-active' : undefined}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '6px 10px',
+          minHeight: 34,
+          background: activeEvent ? '#3a2a05' : pendingEvent ? '#2a2005' : '#0a0f08',
+          border: `2px solid ${activeEvent || pendingEvent ? DEV.orange : DEV.panelBorder}`,
+        }}
+      >
+        {activeEvent ? (
+          <>
+            <span style={{ fontSize: 16 }}>{EVENT_CATEGORY_META[activeEvent.category].icon}</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: DEV.orange }}>
+              {activeEvent.name}
+            </span>
+            <span style={{ fontSize: 12, color: DEV.cream }}>
+              {activeEvent.missionLabel} — 打ち切れば {formatAxisDelta(activeEvent.success)}
+            </span>
+          </>
+        ) : pendingEvent ? (
+          <span style={{ fontSize: 13, fontWeight: 700, color: DEV.orange }}>
+            ⚠ {EVENT_CATEGORY_META[pendingEvent.category].icon} {pendingEvent.name}発生！
+            この文を打ち切ったら対応する
           </span>
-          <span style={{ fontSize: 12, color: DEV.cream }}>
-            {activeEvent.missionLabel} — 打ち切れば {formatAxisDelta(activeEvent.success)}
-          </span>
-        </div>
-      )}
+        ) : (
+          <span style={{ fontSize: 12, color: '#5a6e3a' }}>開発は順調…（イベント警戒中）</span>
+        )}
+      </div>
 
-      <div>
+      <div style={{ position: 'relative' }}>
         <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
           入力する文章
         </div>
         <div
-          className={activeEvent ? 'dev-event-active' : undefined}
           style={{
             background: '#0c1207',
             border: `2px solid ${activeEvent ? DEV.orange : DEV.panelBorder}`,
             padding: '14px 14px',
             fontSize: 34,
-            color: DEV.cream,
+            // イベント文はテキスト自体をオレンジに（視線の先で伝える）
+            color: activeEvent ? DEV.orange : DEV.cream,
             letterSpacing: '0.04em',
             minHeight: 40,
           }}
         >
           {view.hiragana}
         </div>
+        {/* フレーズ完了の成果を視線の先にフロート表示（レイアウトに影響しない absolute） */}
+        {gainPop && (
+          <span key={gainPop.id} className="dev-gain-float">
+            {gainPop.text}
+          </span>
+        )}
       </div>
 
       <div>
@@ -709,38 +713,17 @@ const DevelopCenter = ({
   </div>
 );
 
-type QueuedMission = {
-  kind: 'base' | 'event';
-  name?: string;
-  label: string;
-  flavor?: string;
-  mission: string;
-  success: AxisDelta;
-  fail: AxisDelta;
-};
+/**
+ * フェーズ入場時に発生率で当たったイベントだけを積む。
+ * v0.14 後期：ベース固定文（「企画書を書く」等）は廃止（効果ゼロの打鍵は意味が無い＝オーナーFB）。
+ */
+const buildMissionQueue = (phase: DevPhase): DevEvent[] =>
+  PHASE_EVENTS[phase].filter((ev) => Math.random() < ev.rate);
 
-/** フェーズ入場時にミッション列を組む：必ずベース 1 件＋発生率で当たったイベント */
-const buildMissionQueue = (phase: DevPhase): QueuedMission[] => {
-  const q: QueuedMission[] = [];
-  const base = PHASE_BASE_MISSION[phase];
-  if (base) q.push({ kind: 'base', label: base.label, mission: base.mission, success: {}, fail: {} });
-  for (const ev of PHASE_EVENTS[phase]) {
-    if (Math.random() < ev.rate) {
-      q.push({
-        kind: 'event',
-        name: ev.name,
-        label: ev.missionLabel,
-        flavor: ev.flavor,
-        mission: ev.mission,
-        success: ev.success,
-        fail: ev.fail,
-      });
-    }
-  }
-  return q;
-};
-
-/** 中央：開発以外のフェーズ（ベース入力ミッション＋発生イベントを順に打つ） */
+/**
+ * 中央：開発以外のフェーズ。
+ * イベントが発生していれば入力ミッションで対応、無ければ「✓ 完了」演出で自動進行。
+ */
 const MissionFlow = ({
   phase,
   label,
@@ -757,20 +740,40 @@ const MissionFlow = ({
   const [log, setLog] = useState<string[]>([]);
   const cur = queue[i];
 
+  // イベント無し（or 全消化）→ 完了チャイム＋✓ を見せて自動で次フェーズへ
+  useEffect(() => {
+    if (cur) return;
+    sfx.phase();
+    const t = window.setTimeout(onAllDone, 900);
+    return () => window.clearTimeout(t);
+  }, [cur]);
+
   const resolve = (delta: AxisDelta, label2: string, ok: boolean) => {
     applyDelta(delta);
+    if (ok) sfx.success();
     setLog((l) => [`${ok ? '✓' : '✕'} ${label2}：${formatAxisDelta(delta)}`, ...l].slice(0, 5));
-    if (i + 1 >= queue.length) onAllDone();
-    else setI((n) => n + 1);
+    setI((n) => n + 1);
   };
 
   if (!cur) {
-    // 念のため（base も event も無い）：そのまま次フェーズへ
     return (
       <PhaseShell label={label}>
-        <button type="button" onClick={onAllDone} style={advanceBtnStyle}>
-          ▶ 次のフェーズへ
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+          <span style={{ fontSize: 26, fontWeight: 700, color: DEV.greenBright }}>
+            ✓ {label}フェーズ 完了
+          </span>
+          {log.length > 0 ? (
+            <div style={{ ...devBox(), gap: 2, alignSelf: 'stretch' }}>
+              {log.map((line, idx) => (
+                <span key={idx} style={{ fontSize: 12, color: DEV.cream }}>
+                  {line}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span style={{ fontSize: 12, color: DEV.sub }}>問題なし。次の工程へ…</span>
+          )}
+        </div>
       </PhaseShell>
     );
   }
@@ -779,26 +782,26 @@ const MissionFlow = ({
     <PhaseShell label={label}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ fontSize: 11, color: DEV.sub }}>
-          ミッション {i + 1} / {queue.length}
-          {cur.kind === 'event' && (
-            <span style={{ color: DEV.orange, fontWeight: 700, marginLeft: 8 }}>⚡ イベント発生</span>
-          )}
+          イベント {i + 1} / {queue.length}
+          <span style={{ color: DEV.orange, fontWeight: 700, marginLeft: 8 }}>⚡ 発生中</span>
         </div>
-        {cur.name && (
-          <div style={{ fontSize: 14, color: DEV.orange, fontWeight: 700 }}>{cur.name}</div>
-        )}
-        <div style={{ fontSize: 22, color: DEV.cream, fontWeight: 700 }}>{cur.label}</div>
-        {cur.flavor && <div style={{ fontSize: 12, color: DEV.sub }}>{cur.flavor}</div>}
+        <div style={{ fontSize: 14, color: DEV.orange, fontWeight: 700 }}>
+          {EVENT_CATEGORY_META[cur.category].icon} {cur.name}
+        </div>
+        <div style={{ fontSize: 22, color: DEV.cream, fontWeight: 700 }}>{cur.missionLabel}</div>
+        <div style={{ fontSize: 12, color: DEV.sub }}>
+          {cur.flavor} — 打ち切れば {formatAxisDelta(cur.success)}
+        </div>
 
         <MissionTyping
           key={i}
           phrase={cur.mission}
-          onComplete={() => resolve(cur.success, cur.label, true)}
+          onComplete={() => resolve(cur.success, cur.missionLabel, true)}
         />
 
         <button
           type="button"
-          onClick={() => resolve(cur.fail, cur.label, false)}
+          onClick={() => resolve(cur.fail, cur.missionLabel, false)}
           style={{
             alignSelf: 'flex-start',
             padding: '6px 14px',
@@ -852,7 +855,12 @@ const PhaseShell = ({ label, children }: { label: string; children: React.ReactN
 /** ミッション 1 件分のタイピング（打ち切りで onComplete） */
 const MissionTyping = ({ phrase, onComplete }: { phrase: string; onComplete: () => void }) => {
   const phrases = useMemo(() => [phrase], [phrase]);
-  const { view } = useTyping({ phrases, onPhraseComplete: onComplete });
+  const { view } = useTyping({
+    phrases,
+    onPhraseComplete: onComplete,
+    onCorrect: () => sfx.key(),
+    onComboBreak: () => sfx.miss(),
+  });
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>入力する文章</div>
@@ -999,16 +1007,6 @@ const EventBar = ({ phase }: { phase: DevPhase }) => {
   );
 };
 
-const advanceBtnStyle: React.CSSProperties = {
-  marginTop: 8,
-  padding: '12px 28px',
-  background: '#234012',
-  border: '2px solid #8fd02a',
-  color: '#fffdf2',
-  fontWeight: 700,
-  fontSize: 15,
-  cursor: 'pointer',
-};
 
 /** v0.14 開発フェーズのダークパレット（ターミナル風）。 */
 const DEV = {

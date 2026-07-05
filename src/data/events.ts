@@ -46,15 +46,9 @@ export const EVENT_CATEGORY_META: Record<EventCategory, { label: string; icon: s
   quality: { label: '品質', icon: '🎯' },
 };
 
-/** フェーズのベース入力ミッション（必ず 1 回打つ）。development は既存タイピング、complete は演出のみ＝null */
-export const PHASE_BASE_MISSION: Record<DevPhase, { mission: string; label: string } | null> = {
-  planning: { mission: 'きかくしょをかく', label: '企画書を書く' },
-  development: null,
-  testing: { mission: 'ふぐあいをかくにんする', label: 'テストケースを確認する' },
-  debugging: { mission: 'ばぐをあらいだす', label: 'バグを洗い出す' },
-  release: { mission: 'はつばいさぎょうをする', label: '発売作業をする' },
-  complete: null,
-};
+// v0.14 後期：ベース入力ミッション（「企画書を書く」等の固定文）は廃止（オーナーFB 2026-07-05）。
+// 効果ゼロの固定文を毎回打たせても意味が無い。打つのは「効果があるもの＝イベント」だけにし、
+// イベントが発生しないフェーズは完了演出で自動進行する。
 
 /** フェーズ別イベント表（spec §5-2）。 */
 export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
