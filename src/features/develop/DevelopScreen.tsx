@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
 import {
+  AXIS_META,
   type AxisDelta,
+  type DevEvent,
   EVENT_CATEGORY_META,
   PHASE_BASE_MISSION,
   PHASE_EVENTS,
@@ -11,7 +13,14 @@ import { GENRE_BY_ID, getPhrases } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
-import { DEV_PHASE_META, DEV_PHASE_ORDER, type DevPhase, dateToWeekIndex } from '../../state/types';
+import {
+  DEV_PHASE_META,
+  DEV_PHASE_ORDER,
+  type DevAxes,
+  type DevPhase,
+  ZERO_AXES,
+  dateToWeekIndex,
+} from '../../state/types';
 import {
   computeDevImpact,
   type ImpactRank,
@@ -48,7 +57,6 @@ export const DevelopScreen = () => {
   const reportCombo = useGameStore((s) => s.reportCombo);
   const reportWPM = useGameStore((s) => s.reportWPM);
   const reportAccuracy = useGameStore((s) => s.reportAccuracy);
-  const clearBug = useGameStore((s) => s.clearBug);
 
   const phase: DevPhase = current?.phase ?? 'development';
   const isDevelopment = phase === 'development';
@@ -61,6 +69,10 @@ export const DevelopScreen = () => {
   const phraseRef = useRef('');
   // 開発ログ：フレーズ完了ごとの「見える成果」（最新 4 行）
   const [devLog, setDevLog] = useState<{ id: number; text: string }[]>([]);
+  // v0.14：開発フェーズ中のイベント割り込み（発生中はイベント文を打ち切るまで通常フレーズを中断）
+  const [devEvent, setDevEvent] = useState<DevEvent | null>(null);
+  const devEventRef = useRef<DevEvent | null>(null);
+  devEventRef.current = devEvent;
 
   const [rating, setRating] = useState<KeystrokeRating>(null);
   const lastCorrectAtRef = useRef<number>(0);
@@ -79,24 +91,61 @@ export const DevelopScreen = () => {
     return getPhrases(current.genreId, current.requiredLoC * 3);
   }, [current?.genreId, current?.requiredLoC]);
 
+  // イベント発生中はイベント文だけを出す（打ち切るまで通常フレーズを中断）
   const effectivePhrases = useMemo(() => {
-    if (!current?.bugPhrase) return phrases;
-    return [current.bugPhrase, ...phrases];
-  }, [phrases, current?.bugPhrase]);
+    if (devEvent) return [devEvent.mission];
+    return phrases;
+  }, [phrases, devEvent]);
+
+  // 開発フェーズ中のイベント抽選：8 秒ごとに 1 回、未発生時のみ判定
+  useEffect(() => {
+    if (!isDevelopment || !current) return;
+    const timer = window.setInterval(() => {
+      if (devEventRef.current) return;
+      const pool = PHASE_EVENTS.development;
+      for (const ev of pool) {
+        // フェーズ間より頻度を抑える（rate × 0.5 / 8 秒判定）
+        if (Math.random() < ev.rate * 0.5) {
+          setDevEvent(ev);
+          pushToast(`${EVENT_CATEGORY_META[ev.category].icon} ${ev.name}！ ${ev.missionLabel}`, 'warn');
+          break;
+        }
+      }
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [isDevelopment, !current]);
 
   const { view, failCount, combo, wpm, accuracy } = useTyping({
     phrases: effectivePhrases,
     onPhraseComplete: () => {
-      const isBug = !!current?.bugPhrase;
-      // ノリ倍率（コンボ）を乗せた進捗。打ち続けるほど 1 本の価値が上がる
-      const gain = progressGain(wpmRef.current, isBug, comboRef.current);
-      addDevelopLoC(gain);
-      // 3 秒ループの成果可視化：何をいくら進めたかをログに流す
-      const label = isBug ? '🐛 バグ修正' : `「${phraseRef.current}」実装`;
-      setDevLog((l) =>
-        [{ id: Date.now() + Math.random(), text: `⚡ +${gain.toFixed(1)} ${label}完了！` }, ...l].slice(0, 4),
-      );
-      if (isBug) clearBug();
+      const ev = devEventRef.current;
+      if (ev) {
+        // イベントミッション打ち切り＝成功：新軸へ効果を適用し、通常フレーズに復帰
+        applyAxisDelta(ev.success);
+        const gain = progressGain(wpmRef.current, ev.category === 'trouble', comboRef.current);
+        addDevelopLoC(gain);
+        setDevLog((l) =>
+          [
+            {
+              id: Date.now() + Math.random(),
+              text: `${EVENT_CATEGORY_META[ev.category].icon} ${ev.name} 成功！ ${formatAxisDelta(ev.success)}`,
+            },
+            ...l,
+          ].slice(0, 4),
+        );
+        setDevEvent(null);
+      } else {
+        // 通常フレーズ：ノリ倍率（コンボ）を乗せた進捗。打ち続けるほど 1 本の価値が上がる
+        const gain = progressGain(wpmRef.current, false, comboRef.current);
+        addDevelopLoC(gain);
+        // 3 秒ループの成果可視化：何をいくら進めたかをログに流す
+        setDevLog((l) =>
+          [
+            { id: Date.now() + Math.random(), text: `⚡ +${gain.toFixed(1)} 「${phraseRef.current}」実装完了！` },
+            ...l,
+          ].slice(0, 4),
+        );
+      }
       // v0.14：作業量目標に達したら「開発フェーズ完了」＝次フェーズ（テスト）へ進む。
       const s = useGameStore.getState();
       const done = s.current?.doneLoC ?? 0;
@@ -137,10 +186,7 @@ export const DevelopScreen = () => {
 
   const workTarget = current?.workTarget ?? 1;
 
-  const bugPhrase = current?.bugPhrase ?? null;
-  useEffect(() => {
-    if (bugPhrase) pushToast('🐛 バグ発生：下の文を打ち切れ！', 'warn');
-  }, [bugPhrase]);
+  // 旧 bugPhrase 経路は v0.14 でイベント系「バグ発生」に一本化（devEvent 割り込み）
 
   if (!current) return null;
   const scaleDef = SCALE_BY_ID[current.scale];
@@ -246,6 +292,7 @@ export const DevelopScreen = () => {
               failCount={failCount}
               impact={impact}
               devLog={devLog}
+              activeEvent={devEvent}
             />
           ) : (
             <MissionFlow
@@ -318,6 +365,9 @@ export const DevelopScreen = () => {
             <SegGauge pct={budgetPct} color={periodColor} track="#0c1207" height={10} />
             <span style={{ fontSize: 11, fontWeight: 700, color: periodColor }}>{periodNote}</span>
           </div>
+
+          {/* イベント効果の累計（新軸の見える化） */}
+          <AxesSummary axes={current.axes ?? ZERO_AXES} />
         </aside>
       </div>
 
@@ -411,6 +461,7 @@ const DevelopCenter = ({
   failCount,
   impact,
   devLog,
+  activeEvent,
 }: {
   phaseLabel: string;
   missionName?: string;
@@ -423,6 +474,7 @@ const DevelopCenter = ({
   failCount: number;
   impact: ReturnType<typeof computeDevImpact>;
   devLog: { id: number; text: string }[];
+  activeEvent: DevEvent | null;
 }) => (
   <div
     style={{
@@ -465,14 +517,37 @@ const DevelopCenter = ({
         </div>
       )}
 
+      {/* イベント割り込みバナー */}
+      {activeEvent && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 10px',
+            background: '#3a2a05',
+            border: `2px solid ${DEV.orange}`,
+          }}
+        >
+          <span style={{ fontSize: 16 }}>{EVENT_CATEGORY_META[activeEvent.category].icon}</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: DEV.orange }}>
+            {activeEvent.name}
+          </span>
+          <span style={{ fontSize: 12, color: DEV.cream }}>
+            {activeEvent.missionLabel} — 打ち切れば {formatAxisDelta(activeEvent.success)}
+          </span>
+        </div>
+      )}
+
       <div>
         <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
           入力する文章
         </div>
         <div
+          className={activeEvent ? 'dev-event-active' : undefined}
           style={{
             background: '#0c1207',
-            border: `1px solid ${DEV.panelBorder}`,
+            border: `2px solid ${activeEvent ? DEV.orange : DEV.panelBorder}`,
             padding: '14px 14px',
             fontSize: 34,
             color: DEV.cream,
@@ -489,6 +564,8 @@ const DevelopCenter = ({
           ローマ字入力
         </div>
         <div
+          key={`miss-${failCount}`}
+          className={failCount > 0 ? 'dev-miss-shake' : undefined}
           style={{
             background: '#0c1207',
             border: `1px solid ${DEV.panelBorder}`,
@@ -498,7 +575,13 @@ const DevelopCenter = ({
             minHeight: 30,
           }}
         >
-          <span style={{ color: DEV.green }}>{view.completed}</span>
+          {/* 正打ジュース：最後に打った文字が一瞬光る */}
+          <span style={{ color: DEV.green }}>{view.completed.slice(0, -1)}</span>
+          {view.completed.length > 0 && (
+            <span key={`glow-${view.completed.length}`} className="dev-key-glow">
+              {view.completed.slice(-1)}
+            </span>
+          )}
           <span className="dev-cursor" style={{ color: DEV.white }}>
             |
           </span>
@@ -788,6 +871,38 @@ const MissionTyping = ({ phrase, onComplete }: { phrase: string; onComplete: () 
         </span>
         <span style={{ color: '#5a6e3a' }}>{view.remained}</span>
       </div>
+    </div>
+  );
+};
+
+/** 右カラム：イベントで蓄積した新軸の見える化（0 でない軸だけ表示） */
+const AxesSummary = ({ axes }: { axes: DevAxes }) => {
+  const entries = (Object.keys(axes) as (keyof DevAxes)[])
+    .filter((k) => axes[k] !== 0)
+    .map((k) => ({ key: k, v: axes[k], meta: AXIS_META[k] }));
+  return (
+    <div style={{ ...devBox(), gap: 4 }}>
+      <span style={{ fontSize: 11, color: DEV.sub }}>イベント効果（この作品に蓄積）</span>
+      {entries.length === 0 ? (
+        <span style={{ fontSize: 11, color: '#5a6e3a' }}>まだなし（イベントを打ち切ると貯まる）</span>
+      ) : (
+        entries.map(({ key, v, meta }) => (
+          <span
+            key={key}
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: v > 0 !== (key === 'bugRate' || key === 'reputationRisk' || key === 'devWeeksDelta' || key === 'costMod')
+                ? DEV.greenBright
+                : '#ff6b6b',
+            }}
+          >
+            {meta.label} {v > 0 ? '+' : ''}
+            {v}
+            {meta.unit}
+          </span>
+        ))
+      )}
     </div>
   );
 };

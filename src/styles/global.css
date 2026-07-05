@@ -1359,6 +1359,58 @@ body,
   animation: dev-rating-fade 600ms steps(4) both;
 }
 
+/* v0.14 0.1 秒ジュース：正打で最後の文字が光る（key 再生） */
+@keyframes dev-key-glow {
+  0% {
+    color: #fffdf2;
+    text-shadow: 0 0 6px rgba(166, 225, 56, 0.9);
+  }
+  100% {
+    color: #8fd02a;
+    text-shadow: none;
+  }
+}
+.dev-key-glow {
+  display: inline-block;
+  animation: dev-key-glow 180ms steps(2) both;
+}
+
+/* v0.14 0.1 秒ジュース：ミスで入力枠が揺れる（failCount の key 再生） */
+@keyframes dev-miss-shake {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  50% {
+    transform: translateX(4px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+.dev-miss-shake {
+  animation: dev-miss-shake 160ms steps(4) both;
+}
+
+/* v0.14 イベント割り込み：入力枠がオレンジで明滅（イベントミッション中） */
+@keyframes dev-event-pulse {
+  0%,
+  100% {
+    border-color: #e29001;
+  }
+  50% {
+    border-color: #7a5200;
+  }
+}
+.dev-event-active {
+  animation: dev-event-pulse 800ms steps(2) infinite;
+}
+
 /*
  * G3: ジュース — ボタンの押し込み・ホバー（全ボタン共通、離散ステップ）。
  */
