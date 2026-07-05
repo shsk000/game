@@ -5,10 +5,57 @@ import {
   type AxisDelta,
   type DevEvent,
   EVENT_CATEGORY_META,
+  LANE_BONUS,
+  LANE_BUG,
+  LANE_CRITICAL_BUG,
+  type LaneSpawnDef,
   PHASE_EVENTS,
   formatAxisDelta,
 } from '../../data/events';
 import { sfx } from '../../utils/sfx';
+
+/** v0.15：レーンを流れる出現物のインスタンス */
+type LaneItem = {
+  id: number;
+  kind: LaneSpawnDef['kind'];
+  icon: string;
+  label: string;
+  phrase: string;
+  lifeMs: number;
+  success: AxisDelta;
+  expire: AxisDelta;
+  erodePct?: number;
+};
+
+let laneSeq = 0;
+
+const makeLaneItem = (def: LaneSpawnDef): LaneItem => ({
+  id: ++laneSeq,
+  kind: def.kind,
+  icon: def.icon,
+  label: def.label,
+  phrase: def.phrases[Math.floor(Math.random() * def.phrases.length)],
+  lifeMs: def.lifeMs,
+  success: def.success,
+  expire: def.expire,
+  erodePct: def.erodePct,
+});
+
+/** v0.15 フィーバー定数（叩き台 🔧）：正打 60 打で MAX、15 秒間 進捗×2＋ボーナスラッシュ */
+const FEVER_MAX = 60;
+const FEVER_DURATION_MS = 15000;
+
+/** v0.14 ランダムイベントを「特別な出現物」としてレーンに統合（spec §1-2） */
+const makeLaneItemFromEvent = (ev: DevEvent): LaneItem => ({
+  id: ++laneSeq,
+  kind: 'event',
+  icon: EVENT_CATEGORY_META[ev.category].icon,
+  label: ev.name,
+  phrase: ev.mission,
+  lifeMs: 12000,
+  success: ev.success,
+  expire: ev.fail,
+});
 import { GENRE_BY_ID, getPhrases } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
@@ -51,6 +98,7 @@ export const DevelopScreen = () => {
   const currentDate = useGameStore((s) => s.currentDate);
   const employees = useGameStore((s) => s.employees);
   const addDevelopLoC = useGameStore((s) => s.addDevelopLoC);
+  const erodeDevelopLoC = useGameStore((s) => s.erodeDevelopLoC);
   const advancePhase = useGameStore((s) => s.advancePhase);
   const applyAxisDelta = useGameStore((s) => s.applyAxisDelta);
   const reportCombo = useGameStore((s) => s.reportCombo);
@@ -67,18 +115,50 @@ export const DevelopScreen = () => {
   const phraseRef = useRef('');
   // 開発ログ：フレーズ完了ごとの「見える成果」（最新 4 行）
   const [devLog, setDevLog] = useState<{ id: number; text: string }[]>([]);
-  // v0.14 後期：イベントはキュー方式（オーナーFB：打っている文を途中で差し替えない・ずらさない）。
-  // 発生（pending）→ 今の文を打ち切ったら次の文としてイベント文（active）→ 打ち切りで成功。
-  const [pendingEvent, setPendingEvent] = useState<DevEvent | null>(null);
-  const [activeEvent, setActiveEvent] = useState<DevEvent | null>(null);
-  const pendingRef = useRef<DevEvent | null>(null);
-  const activeRef = useRef<DevEvent | null>(null);
-  pendingRef.current = pendingEvent;
-  activeRef.current = activeEvent;
-  // イベント発生の全画面フラッシュ（文字を見ていなくても気づく）
+  // v0.15：出現レーン（spec §1-2）。バグ/ボーナス/イベントがスプライトとして右→左に流れる。
+  // Space でメイン⇄出現物ターゲット切替（メイン文の進行はエンジンごと保持＝ずれない）。
+  const [laneItems, setLaneItems] = useState<LaneItem[]>([]);
+  const [laneTargetId, setLaneTargetId] = useState<number | null>(null);
+  const laneItemsRef = useRef<LaneItem[]>([]);
+  const laneTargetRef = useRef<number | null>(null);
+  laneItemsRef.current = laneItems;
+  laneTargetRef.current = laneTargetId;
+  // スポーンまでの残秒（1 秒ティックで減算）
+  const spawnTimersRef = useRef({ bug: 10, bonus: 14, event: 20 });
+  // イベント/バグ発生の全画面フラッシュ（オレンジ）と侵食被弾フラッシュ（赤）
   const [flash, setFlash] = useState(0);
+  const [damageFlash, setDamageFlash] = useState(0);
   // フレーズ完了の「+N」フロート（視線の先＝入力枠のそばに出す）
   const [gainPop, setGainPop] = useState<{ id: number; text: string } | null>(null);
+
+  // v0.15 フィーバー（spec §1-4）：正打で蓄積・ミスで減少、MAX で自動発動 15 秒（叩き台 🔧）
+  const [feverGauge, setFeverGauge] = useState(0);
+  const [feverActive, setFeverActive] = useState(false);
+  const feverActiveRef = useRef(false);
+  feverActiveRef.current = feverActive;
+  const addFever = (n: number) => {
+    if (feverActiveRef.current) return;
+    setFeverGauge((g) => Math.min(FEVER_MAX, g + n));
+  };
+  const decayFever = () => {
+    if (feverActiveRef.current) return;
+    setFeverGauge((g) => Math.floor(g * 0.8));
+  };
+  // MAX 到達で自動発動
+  useEffect(() => {
+    if (!feverActive && feverGauge >= FEVER_MAX) {
+      setFeverActive(true);
+      setFeverGauge(FEVER_MAX);
+      sfx.success();
+      setFlash((n) => n + 1);
+      const t = window.setTimeout(() => {
+        setFeverActive(false);
+        setFeverGauge(0);
+        sfx.phase();
+      }, FEVER_DURATION_MS);
+      return () => window.clearTimeout(t);
+    }
+  }, [feverGauge, feverActive]);
 
   const [rating, setRating] = useState<KeystrokeRating>(null);
   const lastCorrectAtRef = useRef<number>(0);
@@ -89,72 +169,158 @@ export const DevelopScreen = () => {
     return getPhrases(current.genreId, current.requiredLoC * 3);
   }, [current?.genreId, current?.requiredLoC]);
 
-  // active になったイベントの文だけを出す（今打っている文は絶対に差し替えない）
-  const effectivePhrases = useMemo(() => {
-    if (activeEvent) return [activeEvent.mission];
-    return phrases;
-  }, [phrases, activeEvent]);
-
-  // 開発フェーズ中のイベント抽選：8 秒ごとに 1 回、未発生時のみ判定。
-  // 発生しても pending 止まり＝音＋全画面フラッシュで告知し、今の文の完了を待つ。
+  // レーンのスポーナー（1 秒ティック）：バグ/ボーナス/イベントを時間差で流す。同時最大 3。
   useEffect(() => {
     if (!isDevelopment || !current) return;
     const timer = window.setInterval(() => {
-      if (pendingRef.current || activeRef.current) return;
-      const pool = PHASE_EVENTS.development;
-      for (const ev of pool) {
-        // フェーズ間より頻度を抑える（rate × 0.5 / 8 秒判定）
-        if (Math.random() < ev.rate * 0.5) {
-          setPendingEvent(ev);
-          sfx.alert();
-          setFlash((n) => n + 1);
-          break;
+      const st = spawnTimersRef.current;
+      st.bug -= 1;
+      st.bonus -= 1;
+      st.event -= 1;
+      if (laneItemsRef.current.length >= 3) return;
+      // フィーバー中はボーナスラッシュ（毎秒 35% で追加スポーン）
+      if (feverActiveRef.current && Math.random() < 0.35) {
+        setLaneItems((l) => [...l, makeLaneItem(LANE_BONUS)]);
+        return;
+      }
+      if (st.bug <= 0) {
+        // 20% でクリティカル。進捗 50% 超で湧きが加速（叩き台 🔧）
+        const def = Math.random() < 0.2 ? LANE_CRITICAL_BUG : LANE_BUG;
+        setLaneItems((l) => [...l, makeLaneItem(def)]);
+        const s = useGameStore.getState();
+        const prog = (s.current?.doneLoC ?? 0) / (s.current?.workTarget ?? 1);
+        st.bug = (prog > 0.5 ? 8 : 11) + Math.random() * 4;
+        sfx.alert();
+        setFlash((n) => n + 1);
+      } else if (st.bonus <= 0) {
+        setLaneItems((l) => [...l, makeLaneItem(LANE_BONUS)]);
+        st.bonus = 12 + Math.random() * 6;
+        sfx.complete();
+      } else if (st.event <= 0) {
+        st.event = 8;
+        for (const ev of PHASE_EVENTS.development) {
+          if (Math.random() < ev.rate * 0.5) {
+            setLaneItems((l) => [...l, makeLaneItemFromEvent(ev)]);
+            sfx.alert();
+            setFlash((n) => n + 1);
+            break;
+          }
         }
       }
-    }, 8000);
+    }, 1000);
     return () => window.clearInterval(timer);
   }, [isDevelopment, !current]);
 
-  const { view, failCount, combo, wpm, accuracy } = useTyping({
-    phrases: effectivePhrases,
-    onPhraseComplete: () => {
-      const ev = activeRef.current;
-      if (ev) {
-        // イベントミッション打ち切り＝成功：新軸へ効果を適用し、通常フレーズに復帰
-        applyAxisDelta(ev.success);
-        sfx.success();
-        const gain = progressGain(wpmRef.current, ev.category === 'trouble', comboRef.current);
-        addDevelopLoC(gain);
-        setGainPop({ id: Date.now(), text: `${ev.name} 成功！ ${formatAxisDelta(ev.success)}` });
-        setDevLog((l) =>
-          [
-            {
-              id: Date.now() + Math.random(),
-              text: `${EVENT_CATEGORY_META[ev.category].icon} ${ev.name} 成功！ ${formatAxisDelta(ev.success)}`,
-            },
-            ...l,
-          ].slice(0, 4),
-        );
-        setActiveEvent(null);
+  // Space：メイン⇄出現物のターゲット切替（プレイヤー主導。レーンが空なら何もしない）
+  useEffect(() => {
+    if (!isDevelopment) return;
+    const h = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      e.preventDefault();
+      if (laneTargetRef.current !== null) {
+        setLaneTargetId(null);
       } else {
-        // 通常フレーズ：ノリ倍率（コンボ）を乗せた進捗。打ち続けるほど 1 本の価値が上がる
-        const gain = progressGain(wpmRef.current, false, comboRef.current);
-        addDevelopLoC(gain);
-        sfx.complete();
-        // 成果は視線の先（入力枠のそば）にフロート表示＋ログにも残す
-        setGainPop({ id: Date.now(), text: `+${gain.toFixed(1)}` });
-        setDevLog((l) =>
-          [
-            { id: Date.now() + Math.random(), text: `⚡ +${gain.toFixed(1)} 「${phraseRef.current}」実装完了！` },
-            ...l,
-          ].slice(0, 4),
-        );
-        // 待機中のイベントがあれば、次の文としてイベント文を投入（途中差し替えしない）
-        if (pendingRef.current) {
-          setActiveEvent(pendingRef.current);
-          setPendingEvent(null);
-        }
+        const first = laneItemsRef.current[0];
+        if (first) setLaneTargetId(first.id);
       }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [isDevelopment]);
+
+  // 出現物の解決/期限切れ
+  const targetItem = laneItems.find((i) => i.id === laneTargetId) ?? null;
+
+  const removeLaneItem = (id: number) => {
+    setLaneItems((l) => l.filter((x) => x.id !== id));
+    if (laneTargetRef.current === id) setLaneTargetId(null);
+  };
+
+  const handleItemExpire = (id: number) => {
+    const item = laneItemsRef.current.find((x) => x.id === id);
+    if (!item) return;
+    if (item.erodePct) {
+      // バグ到達＝完成度じわ減り（打てば取り返せる量。0 未満にならない＝詰まない）
+      const s = useGameStore.getState();
+      const erode = (s.current?.workTarget ?? 1) * item.erodePct;
+      erodeDevelopLoC(erode);
+      applyAxisDelta(item.expire);
+      sfx.miss();
+      setDamageFlash((n) => n + 1);
+      setDevLog((l) =>
+        [
+          {
+            id: Date.now() + Math.random(),
+            text: `${item.icon} ${item.label}がコードを蝕んだ！ 完成度 -${Math.round((item.erodePct ?? 0) * 100)}%`,
+          },
+          ...l,
+        ].slice(0, 4),
+      );
+    } else if (Object.keys(item.expire).length > 0) {
+      applyAxisDelta(item.expire);
+      setDevLog((l) =>
+        [
+          { id: Date.now() + Math.random(), text: `${item.icon} ${item.label}を逃した… ${formatAxisDelta(item.expire)}` },
+          ...l,
+        ].slice(0, 4),
+      );
+    } else {
+      setDevLog((l) =>
+        [{ id: Date.now() + Math.random(), text: `${item.icon} ${item.label}が流れていった…` }, ...l].slice(0, 4),
+      );
+    }
+    removeLaneItem(id);
+  };
+
+  // 出現物用タイピング（第 2 エンジン）。ターゲット中のみ作動。メインは paused で進行保持
+  const targetPhrases = useMemo(() => (targetItem ? [targetItem.phrase] : []), [targetItem?.id]);
+  const { view: laneView } = useTyping({
+    phrases: targetPhrases,
+    paused: !current || !isDevelopment || !targetItem,
+    onPhraseComplete: () => {
+      const item = laneItemsRef.current.find((x) => x.id === laneTargetRef.current);
+      if (!item) return;
+      applyAxisDelta(item.success);
+      sfx.success();
+      const verb = item.kind === 'bonus' ? 'ゲット' : '駆除';
+      setGainPop({ id: Date.now(), text: `${item.icon} ${item.label} ${verb}！` });
+      setDevLog((l) =>
+        [
+          {
+            id: Date.now() + Math.random(),
+            text: `${item.icon} ${item.label} ${verb}！ ${formatAxisDelta(item.success)}`,
+          },
+          ...l,
+        ].slice(0, 4),
+      );
+      removeLaneItem(item.id);
+    },
+    onCorrect: () => {
+      sfx.key();
+      addFever(1);
+    },
+    onComboBreak: () => {
+      sfx.miss();
+      decayFever();
+    },
+  });
+
+  const { view, failCount, combo, wpm, accuracy } = useTyping({
+    phrases,
+    onPhraseComplete: () => {
+      // 通常フレーズ：ノリ倍率（コンボ）＋フィーバー×2 を乗せた進捗
+      const gain =
+        progressGain(wpmRef.current, false, comboRef.current) * (feverActiveRef.current ? 2 : 1);
+      addDevelopLoC(gain);
+      sfx.complete();
+      // 成果は視線の先（入力枠のそば）にフロート表示＋ログにも残す
+      setGainPop({ id: Date.now(), text: `+${gain.toFixed(1)}` });
+      setDevLog((l) =>
+        [
+          { id: Date.now() + Math.random(), text: `⚡ +${gain.toFixed(1)} 「${phraseRef.current}」実装完了！` },
+          ...l,
+        ].slice(0, 4),
+      );
       // v0.14：作業量目標に達したら「開発フェーズ完了」＝次フェーズ（テスト）へ進む。
       const s = useGameStore.getState();
       const done = s.current?.doneLoC ?? 0;
@@ -163,11 +329,12 @@ export const DevelopScreen = () => {
         advancePhase();
       }
     },
-    // タイピングは開発フェーズ中のみ作動（他フェーズではキー入力を拾わない）
-    paused: !current || !isDevelopment,
+    // 開発フェーズ中＆メインをターゲットしている間のみ作動（出現物打ち中は進行保持のまま停止）
+    paused: !current || !isDevelopment || laneTargetId !== null,
     onCorrect: (c) => {
       comboRef.current = c;
       sfx.key();
+      addFever(1);
       reportCombo(c);
       const now = performance.now();
       const interval = now - lastCorrectAtRef.current;
@@ -182,6 +349,7 @@ export const DevelopScreen = () => {
     onComboBreak: () => {
       comboRef.current = 0;
       sfx.miss();
+      decayFever();
     },
     onWpm: (w) => {
       wpmRef.current = w;
@@ -228,11 +396,15 @@ export const DevelopScreen = () => {
   const phaseImage = `${import.meta.env.BASE_URL}phase/${phaseMeta.image}.png`;
 
   return (
-    <div className="screen develop-screen" style={{ background: '#05080c', position: 'relative' }}>
+    <div
+      className={`screen develop-screen${feverActive ? ' dev-fever' : ''}`}
+      style={{ background: '#05080c', position: 'relative' }}
+    >
       <PixelStatusBar />
 
-      {/* イベント発生の全画面フラッシュ（key 再生・操作は透過） */}
+      {/* 出現/被弾の全画面フラッシュ（key 再生・操作は透過） */}
       {flash > 0 && <div key={`flash-${flash}`} className="dev-flash-vignette" />}
+      {damageFlash > 0 && <div key={`dmg-${damageFlash}`} className="dev-flash-damage" />}
 
       {/* 3 カラム本体 */}
       <div
@@ -273,9 +445,14 @@ export const DevelopScreen = () => {
               failCount={failCount}
               impact={impact}
               devLog={devLog}
-              activeEvent={activeEvent}
-              pendingEvent={pendingEvent}
+              laneItems={laneItems}
+              laneTargetId={laneTargetId}
+              targetItem={targetItem}
+              laneView={laneView}
+              onItemExpire={handleItemExpire}
               gainPop={gainPop}
+              feverGauge={feverGauge}
+              feverActive={feverActive}
             />
           ) : (
             <MissionFlow
@@ -456,9 +633,14 @@ const DevelopCenter = ({
   failCount,
   impact,
   devLog,
-  activeEvent,
-  pendingEvent,
+  laneItems,
+  laneTargetId,
+  targetItem,
+  laneView,
+  onItemExpire,
   gainPop,
+  feverGauge,
+  feverActive,
 }: {
   phaseLabel: string;
   missionName?: string;
@@ -471,9 +653,14 @@ const DevelopCenter = ({
   failCount: number;
   impact: ReturnType<typeof computeDevImpact>;
   devLog: { id: number; text: string }[];
-  activeEvent: DevEvent | null;
-  pendingEvent: DevEvent | null;
+  laneItems: LaneItem[];
+  laneTargetId: number | null;
+  targetItem: LaneItem | null;
+  laneView: { hiragana: string; completed: string; remained: string };
+  onItemExpire: (id: number) => void;
   gainPop: { id: number; text: string } | null;
+  feverGauge: number;
+  feverActive: boolean;
 }) => (
   <div
     style={{
@@ -516,56 +703,98 @@ const DevelopCenter = ({
         </div>
       )}
 
-      {/* イベント枠：常時同じ高さで確保（レイアウトシフトさせない） */}
+      {/* v0.15 出現レーン：バグ/ボーナス/イベントが右→左へ流れる（常時同じ高さ＝ずれない） */}
       <div
-        className={activeEvent ? 'dev-event-active' : undefined}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '6px 10px',
-          minHeight: 34,
-          background: activeEvent ? '#3a2a05' : pendingEvent ? '#2a2005' : '#0a0f08',
-          border: `2px solid ${activeEvent || pendingEvent ? DEV.orange : DEV.panelBorder}`,
+          position: 'relative',
+          height: 64,
+          overflow: 'hidden',
+          background: 'repeating-linear-gradient(90deg, #0a1006 0 24px, #0c1207 24px 48px)',
+          border: `2px solid ${DEV.panelBorder}`,
         }}
       >
-        {activeEvent ? (
-          <>
-            <span style={{ fontSize: 16 }}>{EVENT_CATEGORY_META[activeEvent.category].icon}</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: DEV.orange }}>
-              {activeEvent.name}
-            </span>
-            <span style={{ fontSize: 12, color: DEV.cream }}>
-              {activeEvent.missionLabel} — 打ち切れば {formatAxisDelta(activeEvent.success)}
-            </span>
-          </>
-        ) : pendingEvent ? (
-          <span style={{ fontSize: 13, fontWeight: 700, color: DEV.orange }}>
-            ⚠ {EVENT_CATEGORY_META[pendingEvent.category].icon} {pendingEvent.name}発生！
-            この文を打ち切ったら対応する
+        {laneItems.length === 0 && (
+          <span
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 11,
+              color: '#3f5226',
+            }}
+          >
+            開発は順調…（バグ・ひらめきが流れてきたら Space で対応）
           </span>
-        ) : (
-          <span style={{ fontSize: 12, color: '#5a6e3a' }}>開発は順調…（イベント警戒中）</span>
         )}
+        {laneItems.map((item) => (
+          <div
+            key={item.id}
+            className={`lane-item ${item.kind === 'bug' || item.kind === 'critical-bug' ? 'lane-item-bug' : ''}`}
+            onAnimationEnd={(e) => {
+              // 横断アニメ終了＝期限切れ（バグの這い揺れ infinite は無視）
+              if (e.animationName === 'lane-cross-kf') onItemExpire(item.id);
+            }}
+            style={{
+              animationDuration:
+                item.kind === 'bug' || item.kind === 'critical-bug'
+                  ? `${item.lifeMs}ms, 400ms`
+                  : `${item.lifeMs}ms`,
+              border: `2px solid ${
+                laneTargetId === item.id
+                  ? '#ffd54a'
+                  : item.kind === 'bonus'
+                    ? DEV.greenBright
+                    : '#c84a3a'
+              }`,
+              background: laneTargetId === item.id ? '#3a2a05' : '#11180b',
+            }}
+          >
+            <span style={{ fontSize: 22, lineHeight: 1 }}>{item.icon}</span>
+            <span style={{ fontSize: 10, color: DEV.cream, whiteSpace: 'nowrap' }}>
+              {item.label}
+            </span>
+          </div>
+        ))}
+        <span
+          style={{
+            position: 'absolute',
+            right: 6,
+            top: 4,
+            fontSize: 10,
+            color: DEV.sub,
+            background: 'rgba(5,8,12,0.7)',
+            padding: '1px 6px',
+          }}
+        >
+          [Space] 対象切替
+        </span>
       </div>
 
       <div style={{ position: 'relative' }}>
         <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
-          入力する文章
+          {targetItem ? (
+            <span style={{ color: DEV.orange }}>
+              {targetItem.icon} {targetItem.label}に対応中！（Space でコードに戻る）
+            </span>
+          ) : (
+            '入力する文章'
+          )}
         </div>
         <div
           style={{
             background: '#0c1207',
-            border: `2px solid ${activeEvent ? DEV.orange : DEV.panelBorder}`,
+            border: `2px solid ${targetItem ? DEV.orange : DEV.panelBorder}`,
             padding: '14px 14px',
             fontSize: 34,
-            // イベント文はテキスト自体をオレンジに（視線の先で伝える）
-            color: activeEvent ? DEV.orange : DEV.cream,
+            // 出現物対応中はテキスト自体をオレンジに（視線の先で伝える）
+            color: targetItem ? DEV.orange : DEV.cream,
             letterSpacing: '0.04em',
             minHeight: 40,
           }}
         >
-          {view.hiragana}
+          {targetItem ? laneView.hiragana : view.hiragana}
         </div>
         {/* フレーズ完了の成果を視線の先にフロート表示（レイアウトに影響しない absolute） */}
         {gainPop && (
@@ -579,30 +808,36 @@ const DevelopCenter = ({
         <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
           ローマ字入力
         </div>
-        <div
-          key={`miss-${failCount}`}
-          className={failCount > 0 ? 'dev-miss-shake' : undefined}
-          style={{
-            background: '#0c1207',
-            border: `1px solid ${DEV.panelBorder}`,
-            padding: '10px 14px',
-            fontSize: 24,
-            letterSpacing: '0.08em',
-            minHeight: 30,
-          }}
-        >
-          {/* 正打ジュース：最後に打った文字が一瞬光る */}
-          <span style={{ color: DEV.green }}>{view.completed.slice(0, -1)}</span>
-          {view.completed.length > 0 && (
-            <span key={`glow-${view.completed.length}`} className="dev-key-glow">
-              {view.completed.slice(-1)}
-            </span>
-          )}
-          <span className="dev-cursor" style={{ color: DEV.white }}>
-            |
-          </span>
-          <span style={{ color: '#5a6e3a' }}>{view.remained}</span>
-        </div>
+        {(() => {
+          // 対応中は出現物の入力状態を、それ以外はメインの入力状態を表示（枠の形は同一＝ずれない）
+          const v = targetItem ? laneView : view;
+          return (
+            <div
+              key={`miss-${failCount}`}
+              className={failCount > 0 ? 'dev-miss-shake' : undefined}
+              style={{
+                background: '#0c1207',
+                border: `1px solid ${targetItem ? DEV.orange : DEV.panelBorder}`,
+                padding: '10px 14px',
+                fontSize: 24,
+                letterSpacing: '0.08em',
+                minHeight: 30,
+              }}
+            >
+              {/* 正打ジュース：最後に打った文字が一瞬光る */}
+              <span style={{ color: DEV.green }}>{v.completed.slice(0, -1)}</span>
+              {v.completed.length > 0 && (
+                <span key={`glow-${v.completed.length}`} className="dev-key-glow">
+                  {v.completed.slice(-1)}
+                </span>
+              )}
+              <span className="dev-cursor" style={{ color: DEV.white }}>
+                |
+              </span>
+              <span style={{ color: '#5a6e3a' }}>{v.remained}</span>
+            </div>
+          );
+        })()}
       </div>
 
       {/* COMBO ＋ ノリゲージ（コンボが進捗倍率に直結。切れると ×1.0 に戻る） */}
@@ -649,6 +884,24 @@ const DevelopCenter = ({
           <SegGauge
             pct={Math.min(100, (combo / NORI_MAX_COMBO) * 100)}
             color={DEV.orange}
+            track="#0c1207"
+            height={10}
+          />
+        </div>
+        {/* フィーバーゲージ：正打で蓄積、MAX で自動発動（15 秒 進捗×2＋ボーナスラッシュ） */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {feverActive ? (
+            <span className="dev-fever-text" style={{ fontSize: 13, fontWeight: 700, color: '#ff5a3c' }}>
+              🔥 FEVER!! 進捗×2＋ひらめきラッシュ！
+            </span>
+          ) : (
+            <span style={{ fontSize: 11, color: DEV.sub }}>
+              フィーバーゲージ（正打で蓄積・MAXで発動）
+            </span>
+          )}
+          <SegGauge
+            pct={feverActive ? 100 : Math.min(100, (feverGauge / FEVER_MAX) * 100)}
+            color={feverActive ? '#ff5a3c' : '#ffd54a'}
             track="#0c1207"
             height={10}
           />

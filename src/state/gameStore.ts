@@ -246,6 +246,8 @@ type Actions = {
    */
   monthlyTick: () => MonthlyFixedCost;
   addDevelopLoC: (n: number) => void;
+  /** v0.15：バグ侵食（完成度じわ減り。0 未満にならない） */
+  erodeDevelopLoC: (n: number) => void;
   reportCombo: (combo: number) => void;
   reportWPM: (wpm: number) => void;
   reportAccuracy: (acc: number) => void;
@@ -523,6 +525,13 @@ export const useGameStore = create<GameState>()(
       const cap = cur.workTarget ?? cur.requiredLoC;
       const newDone = Math.min(cap, cur.doneLoC + n);
       set({ current: { ...cur, doneLoC: newDone } });
+    },
+
+    erodeDevelopLoC: (n) => {
+      // v0.15：バグ侵食。完成度をじわ減りさせる（0 未満にはならない＝詰まない）。
+      const cur = get().current;
+      if (!cur || cur.finishedAt !== null) return;
+      set({ current: { ...cur, doneLoC: Math.max(0, cur.doneLoC - n) } });
     },
 
     reportCombo: (combo) => {

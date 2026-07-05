@@ -340,6 +340,62 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
   complete: [],
 };
 
+/**
+ * v0.15：出現レーンの定義（spec §1-2）。
+ * バグ虫＝放置すると完成度を蝕む／ボーナス＝取れたら得・逃して無罰。
+ * v0.14 のランダムイベントも「特別な出現物」としてレーンに統合する。
+ * 数値は叩き台 🔧（v15 spec §4）。
+ */
+export type LaneKind = 'bug' | 'critical-bug' | 'bonus' | 'event';
+
+export type LaneSpawnDef = {
+  kind: LaneKind;
+  icon: string;
+  label: string;
+  /** 入力ミッション候補（ひらがな）。スポーン時にランダムに 1 つ */
+  phrases: string[];
+  /** レーン横断（＝寿命）ミリ秒 */
+  lifeMs: number;
+  /** 打ち切ったときの新軸効果 */
+  success: AxisDelta;
+  /** 期限切れ（左端到達/消滅）時の効果。bonus は空＝無罰 */
+  expire: AxisDelta;
+  /** バグのみ：左端到達で完成度を workTarget の何％蝕むか */
+  erodePct?: number;
+};
+
+export const LANE_BUG: LaneSpawnDef = {
+  kind: 'bug',
+  icon: '🐛',
+  label: 'バグ',
+  phrases: ['ばぐたいじ', 'えらーしゅうせい', 'れいがいをふうじる', 'ろぐをおいかける'],
+  lifeMs: 9000,
+  success: { bugRate: -3 },
+  expire: { bugRate: 3 },
+  erodePct: 0.02,
+};
+
+export const LANE_CRITICAL_BUG: LaneSpawnDef = {
+  kind: 'critical-bug',
+  icon: '👾',
+  label: 'クリティカル',
+  phrases: ['ちめいてきばぐしゅうせい', 'くらっしゅをとめる'],
+  lifeMs: 11000,
+  success: { bugRate: -8, funFactor: 2 },
+  expire: { bugRate: 8 },
+  erodePct: 0.05,
+};
+
+export const LANE_BONUS: LaneSpawnDef = {
+  kind: 'bonus',
+  icon: '💡',
+  label: 'ひらめき',
+  phrases: ['ひらめいた', 'なるほどわかった', 'いいあいであ'],
+  lifeMs: 6000,
+  success: { funFactor: 4, hype: 2 },
+  expire: {}, // 逃しても無罰（北極星）
+};
+
 /** 軸 → 表示ラベル＆単位（イベント結果テロップ用） */
 export const AXIS_META: Record<DevAxis, { label: string; unit: string }> = {
   funFactor: { label: '面白さ', unit: '' },
