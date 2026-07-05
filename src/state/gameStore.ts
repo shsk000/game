@@ -700,6 +700,10 @@ export const useGameStore = create<GameState>()(
       const trendMul = trendMultiplier(trend, cur.genreId, cur.themeId);
       const workBreakdown: WorkBreakdown = {
         ...qBreakdown,
+        // v0.14 修正：Work.breakdown のフィールド名は performance。
+        // 旧実装は typingScore のままスプレッドしていたため、開封演出の
+        // 「タイピング演技」寄与が常に 0 表示になっていた（v0.10 からの潜在バグ）。
+        performance: qBreakdown.typingScore,
         trendMul,
         pioneer,
       };
