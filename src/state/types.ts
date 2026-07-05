@@ -102,6 +102,8 @@ export type WorkBreakdown = {
   luckMultiplier?: number;
   trendMul?: number;
   pioneer?: boolean;
+  /** v0.14：イベント新軸（面白さ/操作性/バランス−バグ率）による品質への加点 */
+  axisBonus?: number;
   // v0.9 互換
   categories?: number;
   employees?: number;

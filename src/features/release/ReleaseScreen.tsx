@@ -328,45 +328,57 @@ export const ReleaseScreen = () => {
           </div>
 
           <div className="breakdown-list">
+            {/* v0.14：内訳の読み方を明示（「41 → +14」が何なのか分からない問題への対応） */}
+            <p style={{ margin: '0 0 4px', fontSize: 11, opacity: 0.75 }}>
+              各要素の実力（0〜100 点）× 重み ＝ 品質 Q への加点。合計が Q になる
+            </p>
             {stageReached(stage, 'reveal-character') && (
               <div className="breakdown-row">
                 <span className="breakdown-emoji">🧑‍💻</span>
                 <span className="breakdown-label">
-                  キャラ能力 (×{Math.round(WEIGHTS.charPower * 100)}%)
+                  キャラ能力 {work.breakdown.charPower ?? 0}点 ×{' '}
+                  {Math.round(WEIGHTS.charPower * 100)}%
                 </span>
-                <span className="breakdown-value">
-                  {work.breakdown.charPower ?? 0} → +{Math.round(charContrib)}
-                </span>
+                <span className="breakdown-value">品質 +{Math.round(charContrib)}</span>
               </div>
             )}
             {stageReached(stage, 'reveal-affinity') && (
               <div className="breakdown-row">
                 <span className="breakdown-emoji">🧩</span>
                 <span className="breakdown-label">
-                  ジャンル相性 (×{Math.round(WEIGHTS.genreAffinity * 100)}%)
+                  ジャンル相性 {work.breakdown.genreAffinity ?? 0}点 ×{' '}
+                  {Math.round(WEIGHTS.genreAffinity * 100)}%
                 </span>
-                <span className="breakdown-value">
-                  {work.breakdown.genreAffinity ?? 0} → +{Math.round(affContrib)}
-                </span>
+                <span className="breakdown-value">品質 +{Math.round(affContrib)}</span>
               </div>
             )}
             {stageReached(stage, 'reveal-performance') && (
               <div className="breakdown-row">
                 <span className="breakdown-emoji">⚡</span>
                 <span className="breakdown-label">
-                  タイピング演技 (×{Math.round(WEIGHTS.performance * 100)}%)
+                  タイピング演技 {work.breakdown.performance ?? 0}点 ×{' '}
+                  {Math.round(WEIGHTS.performance * 100)}%
                 </span>
-                <span className="breakdown-value">
-                  {work.breakdown.performance ?? 0} → +{Math.round(perfContrib)}
-                </span>
+                <span className="breakdown-value">品質 +{Math.round(perfContrib)}</span>
               </div>
             )}
             {stageReached(stage, 'reveal-luck') && (
               <div className="breakdown-row">
                 <span className="breakdown-emoji">🎲</span>
-                <span className="breakdown-label">運 (×{Math.round(WEIGHTS.luck * 100)}%)</span>
+                <span className="breakdown-label">
+                  運 {work.breakdown.luck ?? 50}点 × {Math.round(WEIGHTS.luck * 100)}%
+                </span>
+                <span className="breakdown-value">品質 +{Math.round(luckContrib)}</span>
+              </div>
+            )}
+            {/* v0.14：開発中イベントの成果（面白さ/操作性/バランス−バグ率）を品質加点として開示 */}
+            {stageReached(stage, 'reveal-luck') && (work.breakdown.axisBonus ?? 0) !== 0 && (
+              <div className="breakdown-row">
+                <span className="breakdown-emoji">🎪</span>
+                <span className="breakdown-label">イベント成果（開発中に稼いだ面白さ等）</span>
                 <span className="breakdown-value">
-                  {work.breakdown.luck ?? 50} → +{Math.round(luckContrib)}
+                  品質 {(work.breakdown.axisBonus ?? 0) > 0 ? '+' : ''}
+                  {work.breakdown.axisBonus}
                 </span>
               </div>
             )}

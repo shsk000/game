@@ -704,6 +704,7 @@ export const useGameStore = create<GameState>()(
         // 旧実装は typingScore のままスプレッドしていたため、開封演出の
         // 「タイピング演技」寄与が常に 0 表示になっていた（v0.10 からの潜在バグ）。
         performance: qBreakdown.typingScore,
+        axisBonus: Math.round(axisQualityBonus),
         trendMul,
         pioneer,
       };
