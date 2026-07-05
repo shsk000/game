@@ -248,6 +248,8 @@ type Actions = {
   addDevelopLoC: (n: number) => void;
   /** v0.15：バグ侵食（完成度じわ減り。0 未満にならない） */
   erodeDevelopLoC: (n: number) => void;
+  /** v0.15：ビルドアップ・タイピングの属性ポイント加算 */
+  addDevStat: (key: 'fun' | 'graphics' | 'sound' | 'plan', n: number) => void;
   reportCombo: (combo: number) => void;
   reportWPM: (wpm: number) => void;
   reportAccuracy: (acc: number) => void;
@@ -368,6 +370,7 @@ export const useGameStore = create<GameState>()(
         scale,
         phase: 'planning',
         axes: { ...ZERO_AXES },
+        devStats: { fun: 0, graphics: 0, sound: 0, plan: 0 },
         requiredLoC: def.requiredLoC,
         doneLoC: 0,
         maxCombo: 0,
@@ -534,6 +537,13 @@ export const useGameStore = create<GameState>()(
       set({ current: { ...cur, doneLoC: Math.max(0, cur.doneLoC - n) } });
     },
 
+    addDevStat: (key, n) => {
+      const cur = get().current;
+      if (!cur || cur.finishedAt !== null) return;
+      const stats = cur.devStats ?? { fun: 0, graphics: 0, sound: 0, plan: 0 };
+      set({ current: { ...cur, devStats: { ...stats, [key]: stats[key] + n } } });
+    },
+
     reportCombo: (combo) => {
       const cur = get().current;
       if (cur && combo > cur.maxCombo) {
@@ -654,8 +664,15 @@ export const useGameStore = create<GameState>()(
 
       // v0.14：イベント新軸の合流（品質系 + バグ罰）。既存 4 要素は不変、加点/減点として上乗せ。
       const axes = cur.axes ?? ZERO_AXES;
+      // v0.15：ビルドアップ・タイピングの開発パラメータ（文を打って積んだ 4 属性）も品質へ合流。
+      // 「打った文がどこに効いたか」の因果をリリース結果まで一本で繋ぐ（重みは叩き台 🔧）
+      const stats = cur.devStats ?? { fun: 0, graphics: 0, sound: 0, plan: 0 };
+      const statQualityBonus =
+        stats.fun * 0.12 + stats.graphics * 0.08 + stats.sound * 0.08 + stats.plan * 0.05;
       const axisQualityBonus =
-        (axes.funFactor + axes.usability + axes.balance) * 0.3 - axes.bugRate * 0.2;
+        (axes.funFactor + axes.usability + axes.balance) * 0.3 -
+        axes.bugRate * 0.2 +
+        statQualityBonus;
       const quality = Math.max(0, Math.min(100, Math.round(quality0 + axisQualityBonus)));
 
       const trend = get().trend;

@@ -222,6 +222,11 @@ export type CurrentProject = {
   phase?: DevPhase;
   /** v0.14：イベントで蓄積する新名称軸。リリース時に既存パイプラインへ合流（spec §5-6） */
   axes?: DevAxes;
+  /**
+   * v0.15 ビルドアップ・タイピング：打った文の属性ごとに伸びる開発パラメータ。
+   * リリース時に品質・売上へ合流（因果を最後まで一本にする）
+   */
+  devStats?: { fun: number; graphics: number; sound: number; plan: number };
   requiredLoC: number;
   doneLoC: number;
   /** ノリ／コンボ最大値（このプロジェクト内） */

@@ -1467,6 +1467,23 @@ body,
   animation-fill-mode: both, none;
 }
 
+/* v0.15 ビルドアップ：属性値が増えた瞬間に数字が弾む（key 再生） */
+@keyframes dev-stat-pop-kf {
+  0% {
+    transform: scale(1.6);
+  }
+  60% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.dev-stat-pop {
+  display: inline-block;
+  animation: dev-stat-pop-kf 220ms steps(3) both;
+}
+
 /* v0.15：フィーバー中の画面変化（背景が熱を帯びて脈動＋テキスト明滅） */
 @keyframes dev-fever-bg {
   0%,
