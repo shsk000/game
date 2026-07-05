@@ -368,6 +368,18 @@ export const DevelopScreen = () => {
 
           {/* イベント効果の累計（新軸の見える化） */}
           <AxesSummary axes={current.axes ?? ZERO_AXES} />
+
+          {/* チームからのコメント（フェーズ連動のフレーバー） */}
+          <TeamComments
+            team={employees.filter((e) => current.assignedEmployeeIds.includes(e.id))}
+            phase={phase}
+          />
+
+          {/* BGM 枠（表示のみ。音源は別版） */}
+          <div style={{ ...devBox(), flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 14 }}>🎵</span>
+            <span style={{ fontSize: 12, color: DEV.sub }}>BGM: 8bit Factory（準備中）</span>
+          </div>
         </aside>
       </div>
 
@@ -871,6 +883,38 @@ const MissionTyping = ({ phrase, onComplete }: { phrase: string; onComplete: () 
         </span>
         <span style={{ color: '#5a6e3a' }}>{view.remained}</span>
       </div>
+    </div>
+  );
+};
+
+/** フェーズ別のチームコメント候補（フレーバー。社員名と組み合わせて表示） */
+const PHASE_COMMENTS: Record<DevPhase, string[]> = {
+  planning: ['この企画いけそう！', '方向性が見えてきたね', 'ターゲットは誰にする？'],
+  development: ['いい感じに進んでるね！', '処理がきれいにまとまった！', 'この調子でいこう！'],
+  testing: ['操作感チェック中…', 'ここのバランス、どう思う？', 'テストケース消化中！'],
+  debugging: ['このバグ、手強い…！', '再現手順わかったかも', 'あと少しで直せそう'],
+  release: ['売上どうなるかな…！', 'SNS の反応が気になる', 'ストア公開ヨシ！'],
+  complete: ['おつかれさま！', '最高のチームだった！', '次も作ろう！'],
+};
+
+/** 右カラム：チームからのコメント（アサイン社員×フェーズのフレーバー） */
+const TeamComments = ({
+  team,
+  phase,
+}: {
+  team: { id: string; name: string; role: string }[];
+  phase: DevPhase;
+}) => {
+  const comments = PHASE_COMMENTS[phase];
+  if (team.length === 0) return null;
+  return (
+    <div style={{ ...devBox(), gap: 4 }}>
+      <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>チームからのコメント</span>
+      {team.slice(0, 3).map((e, i) => (
+        <span key={e.id} style={{ fontSize: 11, color: DEV.cream }}>
+          💬 {e.name}：{comments[i % comments.length]}
+        </span>
+      ))}
     </div>
   );
 };

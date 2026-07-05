@@ -573,7 +573,13 @@ export const useGameStore = create<GameState>()(
       // よってここでは週の一括進行や固定費精算は行わない（二重計上を防ぐ）。
       // 実際にかかった週数（startDate→currentDate）は releaseWork の developWeeks に反映される。
       set({
-        current: { ...cur, finishedAt: nowMs, doneLoC: cur.workTarget ?? cur.requiredLoC },
+        current: {
+          ...cur,
+          finishedAt: nowMs,
+          doneLoC: cur.workTarget ?? cur.requiredLoC,
+          // v0.14：発売フェーズへ（ReleaseScreen の広告選択＝発売作業に対応）
+          phase: 'release',
+        },
         ghosts: { ...get().ghosts, [cur.scale]: newGhost },
         screen: 'release',
       });
@@ -678,16 +684,18 @@ export const useGameStore = create<GameState>()(
       const prevGhost = get().ghosts[cur.scale];
       const ghostBeaten = prevGhost !== null && developSec <= prevGhost;
 
-      // ゲーム内週数：開始日 → 現在日 の差
+      // ゲーム内週数：開始日 → 現在日 の差 ＋ イベントのスケジュール効果（devWeeksDelta）
       const startDate = cur.startDate ?? get().currentDate;
       const developWeeks = Math.max(
         0,
-        // dateToWeekIndex は types.ts から、ここでは差分のみ必要
-        // import 済みなのは addWeeks のみなので、直接計算
         (get().currentDate.year - startDate.year) * 48 +
           (get().currentDate.month - startDate.month) * 4 +
-          (get().currentDate.week - startDate.week),
+          (get().currentDate.week - startDate.week) +
+          Math.round(axes.devWeeksDelta),
       );
+
+      // イベントのコスト効果（costMod%）：開発費に対する追加徴収/返金をリリース時に精算
+      const costAdjust = Math.round(SCALE_BY_ID[cur.scale].baseCost * (axes.costMod / 100));
 
       const trendMul = trendMultiplier(trend, cur.genreId, cur.themeId);
       const workBreakdown: WorkBreakdown = {
@@ -756,7 +764,7 @@ export const useGameStore = create<GameState>()(
 
       set({
         library: newLibrary,
-        funds: get().funds + initialRevenue,
+        funds: get().funds + initialRevenue - costAdjust,
         lifetimeRevenue: get().lifetimeRevenue + initialRevenue,
         fans: newFans,
         records: newRec,
