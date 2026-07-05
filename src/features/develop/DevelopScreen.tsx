@@ -254,7 +254,7 @@ export const DevelopScreen = () => {
             text: `${item.icon} ${item.label}がコードを蝕んだ！ 完成度 -${Math.round((item.erodePct ?? 0) * 100)}%`,
           },
           ...l,
-        ].slice(0, 4),
+        ].slice(0, 2),
       );
     } else if (Object.keys(item.expire).length > 0) {
       applyAxisDelta(item.expire);
@@ -262,11 +262,11 @@ export const DevelopScreen = () => {
         [
           { id: Date.now() + Math.random(), text: `${item.icon} ${item.label}を逃した… ${formatAxisDelta(item.expire)}` },
           ...l,
-        ].slice(0, 4),
+        ].slice(0, 2),
       );
     } else {
       setDevLog((l) =>
-        [{ id: Date.now() + Math.random(), text: `${item.icon} ${item.label}が流れていった…` }, ...l].slice(0, 4),
+        [{ id: Date.now() + Math.random(), text: `${item.icon} ${item.label}が流れていった…` }, ...l].slice(0, 2),
       );
     }
     removeLaneItem(id);
@@ -291,7 +291,7 @@ export const DevelopScreen = () => {
             text: `${item.icon} ${item.label} ${verb}！ ${formatAxisDelta(item.success)}`,
           },
           ...l,
-        ].slice(0, 4),
+        ].slice(0, 2),
       );
       removeLaneItem(item.id);
     },
@@ -319,7 +319,7 @@ export const DevelopScreen = () => {
         [
           { id: Date.now() + Math.random(), text: `⚡ +${gain.toFixed(1)} 「${phraseRef.current}」実装完了！` },
           ...l,
-        ].slice(0, 4),
+        ].slice(0, 2),
       );
       // v0.14：作業量目標に達したら「開発フェーズ完了」＝次フェーズ（テスト）へ進む。
       const s = useGameStore.getState();
@@ -418,7 +418,7 @@ export const DevelopScreen = () => {
         }}
       >
         {/* 左：フェーズ進行 ＋ チーム */}
-        <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
+        <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
           <PhaseProgressList phase={phase} />
           <div style={{ ...devBox(), gap: 4 }}>
             <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>現在の作業</span>
@@ -466,7 +466,7 @@ export const DevelopScreen = () => {
         </main>
 
         {/* 右：現在のプロジェクト（フェーズ画像＋情報） */}
-        <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
+        <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
           <div style={{ ...devBox(), gap: 6 }}>
             <span style={{ fontSize: 11, color: DEV.sub }}>現在のプロジェクト</span>
             <span style={{ fontSize: 18, fontWeight: 700, color: DEV.cream, lineHeight: 1.1 }}>
@@ -480,7 +480,7 @@ export const DevelopScreen = () => {
                 marginTop: 2,
                 border: `1px solid ${DEV.panelBorder}`,
                 background: '#0c1207',
-                aspectRatio: '3 / 2',
+                height: 110,
                 overflow: 'hidden',
               }}
             >
@@ -501,7 +501,7 @@ export const DevelopScreen = () => {
             <span style={{ fontSize: 11, color: DEV.sub }}>現在の完成度</span>
             <span
               style={{
-                fontSize: 32,
+                fontSize: 24,
                 fontWeight: 700,
                 color: DEV.greenBright,
                 fontVariantNumeric: 'tabular-nums',
@@ -517,7 +517,7 @@ export const DevelopScreen = () => {
             <span style={{ fontSize: 11, color: DEV.sub }}>開発期間（予定 {plannedWeeks} 週）</span>
             <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
               <span style={{ fontSize: 11, color: DEV.sub }}>経過</span>
-              <span style={{ fontSize: 28, fontWeight: 700, color: periodColor, lineHeight: 1 }}>
+              <span style={{ fontSize: 22, fontWeight: 700, color: periodColor, lineHeight: 1 }}>
                 {elapsedWeeks}
               </span>
               <span style={{ fontSize: 12, color: periodColor }}>週</span>
@@ -604,7 +604,7 @@ const TeamStatus = ({
     pr: '📣',
   };
   return (
-    <div style={{ ...devBox(), gap: 6, flex: 1, minHeight: 0, overflow: 'auto' }}>
+    <div style={{ ...devBox(), gap: 6, flex: 1, minHeight: 0, overflow: 'hidden' }}>
       <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>チーム状態</span>
       {team.length === 0 && (
         <span style={{ fontSize: 11, color: DEV.sub }}>社員なし（あなた一人で開発中）</span>
@@ -666,7 +666,6 @@ const DevelopCenter = ({
     style={{
       flex: 1,
       minHeight: 0,
-      overflow: 'auto',
       background: DEV.panelBg,
       border: `2px solid ${DEV.panelBorder}`,
       boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
@@ -691,14 +690,14 @@ const DevelopCenter = ({
       </span>
     </div>
 
-    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
       {(missionName || missionDesc) && (
         <div>
           {missionName && (
             <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>{missionName}</div>
           )}
           {missionDesc && (
-            <div style={{ fontSize: 22, color: DEV.cream, fontWeight: 700 }}>{missionDesc}</div>
+            <span style={{ fontSize: 15, color: DEV.cream, fontWeight: 700, marginLeft: 8 }}>{missionDesc}</span>
           )}
         </div>
       )}
@@ -707,7 +706,7 @@ const DevelopCenter = ({
       <div
         style={{
           position: 'relative',
-          height: 64,
+          height: 56,
           overflow: 'hidden',
           background: 'repeating-linear-gradient(90deg, #0a1006 0 24px, #0c1207 24px 48px)',
           border: `2px solid ${DEV.panelBorder}`,
@@ -786,8 +785,8 @@ const DevelopCenter = ({
           style={{
             background: '#0c1207',
             border: `2px solid ${targetItem ? DEV.orange : DEV.panelBorder}`,
-            padding: '14px 14px',
-            fontSize: 34,
+            padding: '10px 12px',
+            fontSize: 28,
             // 出現物対応中はテキスト自体をオレンジに（視線の先で伝える）
             color: targetItem ? DEV.orange : DEV.cream,
             letterSpacing: '0.04em',
@@ -818,8 +817,8 @@ const DevelopCenter = ({
               style={{
                 background: '#0c1207',
                 border: `1px solid ${targetItem ? DEV.orange : DEV.panelBorder}`,
-                padding: '10px 14px',
-                fontSize: 24,
+                padding: '8px 12px',
+                fontSize: 20,
                 letterSpacing: '0.08em',
                 minHeight: 30,
               }}
@@ -855,7 +854,7 @@ const DevelopCenter = ({
             key={combo}
             className="dev-combo"
             style={{
-              fontSize: 40,
+              fontSize: 30,
               fontWeight: 700,
               color: DEV.orange,
               fontVariantNumeric: 'tabular-nums',
@@ -1088,7 +1087,6 @@ const PhaseShell = ({ label, children }: { label: string; children: React.ReactN
     style={{
       flex: 1,
       minHeight: 0,
-      overflow: 'auto',
       background: DEV.panelBg,
       border: `2px solid ${DEV.panelBorder}`,
       display: 'flex',
@@ -1287,7 +1285,7 @@ const PHASE_WORK_NOTE: Record<DevPhase, string> = {
 const devBox = (): React.CSSProperties => ({
   background: '#0a0f08',
   border: `1px solid ${DEV.panelBorder}`,
-  padding: 10,
+  padding: 7,
   display: 'flex',
   flexDirection: 'column',
   gap: 6,
