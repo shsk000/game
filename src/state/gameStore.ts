@@ -231,7 +231,6 @@ type Actions = {
     genreId: GenreId,
     themeId: ThemeId,
     scale: Scale,
-    selectedCategories: CategoryId[],
     assignedEmployeeIds: string[],
   ) => void;
   tickAuto: (deltaSec: number) => void;
@@ -353,7 +352,7 @@ export const useGameStore = create<GameState>()(
 
     goTo: (screen) => set({ screen }),
 
-    startProject: (genreId, themeId, scale, selectedCategories, assignedEmployeeIds) => {
+    startProject: (genreId, themeId, scale, assignedEmployeeIds) => {
       const def = SCALE_BY_ID[scale];
       const title = generateTitle(genreId, themeId);
       // v0.11 後期：締切（残り時間）を廃止し進捗オンリーに。
@@ -376,7 +375,8 @@ export const useGameStore = create<GameState>()(
         finishedAt: null,
         adBoostActive: false,
         surveyedCompat: null,
-        selectedCategories: [...selectedCategories],
+        // v0.14：開発カテゴリ選択は廃止（オーナー決定）。型は後方互換のため残し空配列固定
+        selectedCategories: [],
         assignedEmployeeIds: [...assignedEmployeeIds],
         perf: { wpm: 0, maxCombo: 0, accuracy: 1 },
         startDate: get().currentDate,
@@ -611,18 +611,16 @@ export const useGameStore = create<GameState>()(
       const prBonus = sumPrBonus(employees);
       const assignedEmployees = employees.filter((e) => cur.assignedEmployeeIds.includes(e.id));
 
-      // === v0.10 §2-0 4 要素品質 ===
-      // 1) キャラ能力スコア（0..100）— spec §2-1
+      // === 4 要素品質（v0.14：カテゴリ選択廃止に伴い category 依存を撤去）===
+      // 1) キャラ能力スコア（0..100）
       const charResult = computeCharacterScore({
         assignedEmployees,
         scale: cur.scale,
-        selectedCategories: cur.selectedCategories,
       });
-      // 2) ジャンル相性スコア（0..100）— spec §2-3
+      // 2) ジャンル相性スコア（0..100）＝ compat 連続マッピング
       const affResult = computeGenreAffinityScore({
         genreId: cur.genreId,
         themeId: cur.themeId,
-        selectedCategories: cur.selectedCategories,
       });
       // 3) タイピング演技スコア（0..100）— spec §2-2
       // 広告ボーナス（既存仕様）はパフォーマンス側に +5 ずつ寄せる

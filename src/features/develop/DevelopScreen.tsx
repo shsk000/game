@@ -16,6 +16,8 @@ import {
   computeDevImpact,
   type ImpactRank,
   type KeystrokeRating,
+  NORI_MAX_COMBO,
+  noriMultiplier,
   progressGain,
   rankColor,
   ratingForInterval,
@@ -53,6 +55,12 @@ export const DevelopScreen = () => {
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const wpmRef = useRef(0);
+  // ノリゲージ：最新コンボ（progressGain の倍率に使う）
+  const comboRef = useRef(0);
+  // 直近フレーズ（開発ログ表示用。onPhraseComplete のクロージャ鮮度対策）
+  const phraseRef = useRef('');
+  // 開発ログ：フレーズ完了ごとの「見える成果」（最新 4 行）
+  const [devLog, setDevLog] = useState<{ id: number; text: string }[]>([]);
 
   const [rating, setRating] = useState<KeystrokeRating>(null);
   const lastCorrectAtRef = useRef<number>(0);
@@ -80,7 +88,14 @@ export const DevelopScreen = () => {
     phrases: effectivePhrases,
     onPhraseComplete: () => {
       const isBug = !!current?.bugPhrase;
-      addDevelopLoC(progressGain(wpmRef.current, isBug));
+      // ノリ倍率（コンボ）を乗せた進捗。打ち続けるほど 1 本の価値が上がる
+      const gain = progressGain(wpmRef.current, isBug, comboRef.current);
+      addDevelopLoC(gain);
+      // 3 秒ループの成果可視化：何をいくら進めたかをログに流す
+      const label = isBug ? '🐛 バグ修正' : `「${phraseRef.current}」実装`;
+      setDevLog((l) =>
+        [{ id: Date.now() + Math.random(), text: `⚡ +${gain.toFixed(1)} ${label}完了！` }, ...l].slice(0, 4),
+      );
       if (isBug) clearBug();
       // v0.14：作業量目標に達したら「開発フェーズ完了」＝次フェーズ（テスト）へ進む。
       const s = useGameStore.getState();
@@ -93,6 +108,7 @@ export const DevelopScreen = () => {
     // タイピングは開発フェーズ中のみ作動（他フェーズではキー入力を拾わない）
     paused: !current || !isDevelopment,
     onCorrect: (c) => {
+      comboRef.current = c;
       reportCombo(c);
       const now = performance.now();
       const interval = now - lastCorrectAtRef.current;
@@ -104,12 +120,20 @@ export const DevelopScreen = () => {
         ratingTimerRef.current = window.setTimeout(() => setRating(null), 600);
       }
     },
+    onComboBreak: () => {
+      comboRef.current = 0;
+    },
     onWpm: (w) => {
       wpmRef.current = w;
       reportWPM(w);
     },
     onAccuracy: (a) => reportAccuracy(a),
   });
+
+  // 直近フレーズを保持（完了ログ用）
+  useEffect(() => {
+    if (view.hiragana) phraseRef.current = view.hiragana;
+  }, [view.hiragana]);
 
   const workTarget = current?.workTarget ?? 1;
 
@@ -221,6 +245,7 @@ export const DevelopScreen = () => {
               accuracyPct={accuracyPct}
               failCount={failCount}
               impact={impact}
+              devLog={devLog}
             />
           ) : (
             <MissionFlow
@@ -385,6 +410,7 @@ const DevelopCenter = ({
   accuracyPct,
   failCount,
   impact,
+  devLog,
 }: {
   phaseLabel: string;
   missionName?: string;
@@ -396,6 +422,7 @@ const DevelopCenter = ({
   accuracyPct: number;
   failCount: number;
   impact: ReturnType<typeof computeDevImpact>;
+  devLog: { id: number; text: string }[];
 }) => (
   <div
     style={{
@@ -479,36 +506,73 @@ const DevelopCenter = ({
         </div>
       </div>
 
-      {/* COMBO */}
+      {/* COMBO ＋ ノリゲージ（コンボが進捗倍率に直結。切れると ×1.0 に戻る） */}
       <div
         style={{
           ...devBox(),
           flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: 'center',
-          gap: 12,
+          gap: 16,
         }}
       >
-        <span style={{ fontSize: 13, color: DEV.sub, letterSpacing: '0.1em' }}>COMBO</span>
-        <span
-          key={combo}
-          className="dev-combo"
-          style={{
-            fontSize: 40,
-            fontWeight: 700,
-            color: DEV.orange,
-            fontVariantNumeric: 'tabular-nums',
-            lineHeight: 1,
-          }}
-        >
-          {combo}
-        </span>
-        {rating && (
-          <span className="dev-rating" style={{ fontSize: 16, fontWeight: 700, color: DEV.orange }}>
-            +{rating}!
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 13, color: DEV.sub, letterSpacing: '0.1em' }}>COMBO</span>
+          <span
+            key={combo}
+            className="dev-combo"
+            style={{
+              fontSize: 40,
+              fontWeight: 700,
+              color: DEV.orange,
+              fontVariantNumeric: 'tabular-nums',
+              lineHeight: 1,
+            }}
+          >
+            {combo}
           </span>
-        )}
+          {rating && (
+            <span
+              className="dev-rating"
+              style={{ fontSize: 16, fontWeight: 700, color: DEV.orange }}
+            >
+              +{rating}!
+            </span>
+          )}
+        </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 11, color: DEV.sub }}>
+            ノリゲージ（進捗倍率{' '}
+            <span style={{ color: DEV.orange, fontWeight: 700 }}>
+              ×{noriMultiplier(combo).toFixed(2)}
+            </span>
+            ・ミスで途切れる）
+          </span>
+          <SegGauge
+            pct={Math.min(100, (combo / NORI_MAX_COMBO) * 100)}
+            color={DEV.orange}
+            track="#0c1207"
+            height={10}
+          />
+        </div>
       </div>
+
+      {/* 開発ログ：フレーズ完了＝見える成果 */}
+      {devLog.length > 0 && (
+        <div style={{ ...devBox(), gap: 2 }}>
+          {devLog.map((line, idx) => (
+            <span
+              key={line.id}
+              style={{
+                fontSize: 12,
+                color: idx === 0 ? DEV.greenBright : DEV.sub,
+                fontWeight: idx === 0 ? 700 : 400,
+              }}
+            >
+              {line.text}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* 3 メトリクス */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>

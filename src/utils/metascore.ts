@@ -129,16 +129,17 @@ export const computeQuality = (args: {
 };
 
 /**
- * v0.10 仕上げ §6-5：タイピング演技スコア（0..100、厳しめ）。
+ * タイピング演技スコア（0..100）。
  *
+ * v0.14 辛口化（ウェイト 37% への引き上げとセット。緩いままだと適当プレイが逆に得をする）：
  *   base = SCORE_BASE (30) — 4 要素全体で統一
- *   + WPM 寄与（100 基準で ±20）
- *   + コンボ寄与（30+ で +5、100+ で +10、200+ で +15、500+ で +20）
- *   - 精度ペナルティ（95% 未満で線形に -20 まで）
+ *   + WPM 寄与（120 基準で -25〜+30。旧: 100 基準 ±20）
+ *   + コンボ寄与（50+ で +5、150+ で +10、300+ で +18、600+ で +25。旧: 30/100/200/500）
+ *   - 精度ペナルティ（97% 未満で線形に -25 まで。旧: 95% 未満 -20）
  *   + バグなし完走 +5
  *
- * 結果レンジ：下手 0-30 / 普通 50-60 / 上手 70-90
- * タイピング能力が「勝負を分ける」設計。
+ * 結果レンジ：下手 5-25 / 普通 30-45 / 上手 65-90
+ * タイピング能力が「勝負を分ける」設計（品質の 37% を握る最大レバー）。
  */
 export const computePerformanceScore = (perf: {
   wpm: number;
@@ -149,23 +150,23 @@ export const computePerformanceScore = (perf: {
 }): number => {
   let score = SCORE_BASE;
 
-  // WPM 寄与（100 基準 ±20）
+  // WPM 寄与（120 基準 -25〜+30）
   if (perf.wpm <= 0) score -= 5;
   else {
-    const wpmDelta = clamp((perf.wpm - 100) / 100, -1, 1) * 20;
-    score += wpmDelta;
+    const t = clamp((perf.wpm - 120) / 120, -1, 1);
+    score += t * (t >= 0 ? 30 : 25);
   }
 
   // コンボ寄与
-  if (perf.maxCombo >= 500) score += 20;
-  else if (perf.maxCombo >= 200) score += 15;
-  else if (perf.maxCombo >= 100) score += 10;
-  else if (perf.maxCombo >= 30) score += 5;
+  if (perf.maxCombo >= 600) score += 25;
+  else if (perf.maxCombo >= 300) score += 18;
+  else if (perf.maxCombo >= 150) score += 10;
+  else if (perf.maxCombo >= 50) score += 5;
 
-  // 精度ペナルティ
-  if (perf.accuracy < 0.95) {
-    const def = (0.95 - perf.accuracy) / 0.95; // 0..1
-    score -= clamp(def * 40, 0, 20);
+  // 精度ペナルティ（97% 未満から効く）
+  if (perf.accuracy < 0.97) {
+    const def = (0.97 - perf.accuracy) / 0.97; // 0..1
+    score -= clamp(def * 60, 0, 25);
   }
 
   // バグなし完走
@@ -218,8 +219,8 @@ export const computeQualityV10 = (args: {
     typingScore * QUALITY_WEIGHTS.typingScore +
     luck * QUALITY_WEIGHTS.luck;
 
-  // ±10% の運乱数
-  const luckMultiplier = 0.9 + Math.random() * 0.2;
+  // ±3% の運乱数（v0.14：±10%→±3%。運は味付けに留め、壁は腕で越えさせる）
+  const luckMultiplier = 0.97 + Math.random() * 0.06;
 
   // 神ゲーガチャは v0.10 で廃止：4 要素の合算とタイピング演技で正面突破する設計
   const Q = clamp(Math.round(base * luckMultiplier), 0, 100);

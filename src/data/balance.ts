@@ -237,16 +237,22 @@ export const SCALE_BALANCE: Record<
 // ============================================================
 
 /**
- * 4 要素品質計算のウェイト（balance-design §0 確定）。
+ * 4 要素品質計算のウェイト。
  *
- *   final = (charPower × 0.5 + genreAffinity × 0.25 + typingScore × 0.15 + luck × 0.1)
- *           × luckMultiplier(0.9〜1.1) × gachaMul(1.0 or 1.5)
+ * v0.14 再配分（オーナー指示 2026-06-27）：
+ * - タイピング 15%→37%：最大レバー化＝北極星「タイピングが主役」を数式で担保
+ * - 運 10%→3%：適当プレイが運で 70 の壁（売上×33 倍）を越えないように
+ * - 社員 50%→35%：ミニ規模では 2 人雇うだけで power 上限に飽和し、
+ *   放置プレイでも高得点が出てしまっていた問題の緩和
+ *
+ *   final = (charPower × 0.35 + genreAffinity × 0.25 + typingScore × 0.37 + luck × 0.03)
+ *           × luckMultiplier(0.97〜1.03)
  */
 export const QUALITY_WEIGHTS = {
-  charPower: 0.5,
+  charPower: 0.35,
   genreAffinity: 0.25,
-  typingScore: 0.15,
-  luck: 0.1,
+  typingScore: 0.37,
+  luck: 0.03,
 } as const;
 
 /**
