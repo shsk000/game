@@ -1428,59 +1428,7 @@ body,
   animation: dev-flash-vignette-kf 700ms steps(5) both;
 }
 
-/* v0.15：出現レーン（右→左へ横断。duration は item.lifeMs をインラインで指定） */
-@keyframes lane-cross-kf {
-  0% {
-    left: 100%;
-  }
-  100% {
-    left: -64px;
-  }
-}
-.lane-item {
-  position: absolute;
-  top: 6px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 8px;
-  animation-name: lane-cross-kf;
-  animation-timing-function: linear;
-  animation-fill-mode: both;
-  image-rendering: pixelated;
-}
-/* バグは這うように上下に揺れる（duration はインラインで `${lifeMs}ms, 400ms` を指定） */
-@keyframes lane-bug-bob {
-  0%,
-  100% {
-    padding-top: 4px;
-  }
-  50% {
-    padding-top: 7px;
-  }
-}
-.lane-item-bug {
-  animation-name: lane-cross-kf, lane-bug-bob;
-  animation-timing-function: linear, steps(2);
-  animation-iteration-count: 1, infinite;
-  animation-fill-mode: both, none;
-}
-
-/* v0.15.1：デザイン画面プレビューのモザイクが 1 マス埋まる瞬間にポップ */
-@keyframes dev-mosaic-pop-kf {
-  0% {
-    transform: scale(1.8);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-.dev-mosaic-pop {
-  animation: dev-mosaic-pop-kf 200ms steps(3) both;
-}
-
-/* v0.15.1：プログラム画面プレビューの新規コード行がフラッシュして出現 */
+/* v0.15.2：プログラム画面プレビューの新規コード行がフラッシュして出現 */
 @keyframes dev-code-line-kf {
   0% {
     color: #d7ffb0;
@@ -1508,6 +1456,47 @@ body,
 .dev-stat-pop {
   display: inline-block;
   animation: dev-stat-pop-kf 220ms steps(3) both;
+}
+
+/* v0.15.2：グラフィック作業中パネルのキャラを常時ゆらす（生きている感） */
+@keyframes dev-sprite-idle-kf {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-4px);
+  }
+}
+.dev-sprite-idle {
+  display: inline-block;
+  animation: dev-sprite-idle-kf 700ms steps(4) infinite alternate;
+}
+
+/* v0.15.2：グラフィック作業中パネルのスパークル（ドット絵スター）が回転しながら明滅 */
+@keyframes dev-sparkle-twinkle-kf {
+  0% {
+    transform: scale(0.5) rotate(0deg);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.1) rotate(25deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.5) rotate(0deg);
+    opacity: 0.4;
+  }
+}
+.dev-sparkle-twinkle {
+  animation: dev-sparkle-twinkle-kf 900ms steps(6) infinite;
+}
+
+/* v0.15.2：実装ログは常にカーソル位置へ自動追従するため、手動スクロール用の見た目は隠す */
+.dev-code-scroll {
+  scrollbar-width: none;
+}
+.dev-code-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 /* v0.15：フィーバー中の画面変化（背景が熱を帯びて脈動＋テキスト明滅） */
@@ -1541,45 +1530,32 @@ body,
   animation: dev-fever-text-kf 500ms steps(2) infinite;
 }
 
-/* v0.15：バグ侵食の被弾フラッシュ（赤） */
-@keyframes dev-flash-damage-kf {
+/* v0.15.2：サウンド画面プレビューの波形バー（ランダムに揺れる） */
+@keyframes dev-wave-kf {
   0% {
-    box-shadow: inset 0 0 140px 50px rgba(200, 40, 40, 0.8);
+    transform: scaleY(0.6);
   }
   100% {
-    box-shadow: inset 0 0 0 0 rgba(200, 40, 40, 0);
+    transform: scaleY(1.15);
   }
 }
-.dev-flash-damage {
-  position: absolute;
-  inset: 0;
-  z-index: 40;
-  pointer-events: none;
-  animation: dev-flash-damage-kf 600ms steps(4) both;
+.dev-wave-bar {
+  display: inline-block;
+  transform-origin: bottom;
+  animation: dev-wave-kf 420ms steps(4) infinite alternate;
 }
 
-/* v0.14 後期：フレーズ完了の成果フロート（視線の先＝入力枠の右上に浮かぶ） */
-@keyframes dev-gain-float-kf {
+/* v0.15.2：結果カードが更新された瞬間に軽くポップ（key 再生） */
+@keyframes dev-result-pop-kf {
   0% {
-    transform: translateY(0);
-    opacity: 1;
+    transform: scale(1.05);
   }
   100% {
-    transform: translateY(-22px);
-    opacity: 0;
+    transform: scale(1);
   }
 }
-.dev-gain-float {
-  position: absolute;
-  top: -4px;
-  right: 8px;
-  z-index: 5;
-  pointer-events: none;
-  font-size: 18px;
-  font-weight: 700;
-  color: #a6e138;
-  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
-  animation: dev-gain-float-kf 900ms steps(6) both;
+.dev-result-pop {
+  animation: dev-result-pop-kf 180ms steps(3) both;
 }
 
 /*

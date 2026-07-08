@@ -5,9 +5,9 @@ import type { DevAxis, DevPhase } from '../state/types';
  *
  * 設計（オーナー決定）:
  * - 各フェーズに最低 1 回の「ベース入力ミッション」を置く（案B）。イベント無しでも必ず打つ。
- * - 各イベントも「入力ミッション（ひらがな）」を打って成功/失敗が決まる。
+ * - 各イベントは「入力ミッション（ひらがな）」を打ち切ると成功効果が適用される。
+ * - スキップ（打たない選択）は無し（オーナーFB 2026-07-08）。必ず打って解決する＝詰みなし。
  * - 効果は新名称軸（DevAxis）への ± デルタ。リリース時に既存パイプラインへ合流（spec §5-6）。
- * - ハード失敗（詰み）は無し。失敗の最大は「開発期間 +1 週」等の取り返せる損（北極星 §10-2）。
  *
  * ※ ミッション文はタイピングエンジン（ひらがな）に合わせ、長音符「ー」・カタカナを避ける。
  * ※ 数値・発生率は叩き台（spec R2）。balance 調整は実機で。
@@ -15,7 +15,7 @@ import type { DevAxis, DevPhase } from '../state/types';
 
 export type EventCategory = 'trouble' | 'chance' | 'schedule' | 'market' | 'quality';
 
-/** 新軸への効果デルタ（成功/失敗で適用） */
+/** 新軸への効果デルタ（成功時に適用） */
 export type AxisDelta = Partial<Record<DevAxis, number>>;
 
 export type DevEvent = {
@@ -33,8 +33,6 @@ export type DevEvent = {
   rate: number;
   /** 成功時（打ち切り）の効果 */
   success: AxisDelta;
-  /** 失敗時（スキップ）の効果 */
-  fail: AxisDelta;
 };
 
 /** 系統の表示メタ（下部バー・アイコン） */
@@ -62,7 +60,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: 'アイデアを形にする',
       rate: 0.2,
       success: { funFactor: 15, hype: 10 },
-      fail: {},
     },
     {
       id: 'plan-drift',
@@ -73,7 +70,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '方向性を決め直す',
       rate: 0.12,
       success: { funFactor: 5 },
-      fail: { devWeeksDelta: 1 },
     },
     {
       id: 'plan-trend',
@@ -84,7 +80,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: 'トレンドを分析する',
       rate: 0.15,
       success: { salesForecast: 15 },
-      fail: {},
     },
     {
       id: 'plan-budget',
@@ -95,7 +90,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '予算を調整する',
       rate: 0.1,
       success: { costMod: -10 },
-      fail: { devWeeksDelta: 1 },
     },
     {
       id: 'plan-target',
@@ -106,7 +100,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: 'ターゲットを決める',
       rate: 0.1,
       success: { trust: 10 },
-      fail: { reputationRisk: 5 },
     },
   ],
   development: [
@@ -119,7 +112,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: 'バグを修正する',
       rate: 0.15,
       success: { bugRate: -10 },
-      fail: { bugRate: 15 },
     },
     {
       id: 'dev-deadline',
@@ -130,7 +122,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '急いで実装する',
       rate: 0.15,
       success: { devWeeksDelta: -1 },
-      fail: { funFactor: -5 },
     },
     {
       id: 'dev-idea',
@@ -141,7 +132,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: 'アイデアを実装する',
       rate: 0.2,
       success: { funFactor: 8, buzz: 10 },
-      fail: { devWeeksDelta: 1 },
     },
     {
       id: 'dev-rival',
@@ -152,7 +142,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '差別化を図る',
       rate: 0.1,
       success: { buzz: 15 },
-      fail: { salesForecast: -10 },
     },
     {
       id: 'dev-spec',
@@ -163,7 +152,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '仕様を組み直す',
       rate: 0.1,
       success: { funFactor: 5 },
-      fail: { devWeeksDelta: 1 },
     },
   ],
   testing: [
@@ -176,7 +164,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '操作感を調整する',
       rate: 0.15,
       success: { usability: 10 },
-      fail: { reputationRisk: 5 },
     },
     {
       id: 'test-difficulty',
@@ -187,7 +174,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '難易度を調整する',
       rate: 0.15,
       success: { balance: 10 },
-      fail: { reputationRisk: 10 },
     },
     {
       id: 'test-hiddenbug',
@@ -198,7 +184,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '再現手順を確認する',
       rate: 0.12,
       success: { bugRate: -8 },
-      fail: { bugRate: 8 },
     },
     {
       id: 'test-praise',
@@ -209,7 +194,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '面白さを伸ばす',
       rate: 0.15,
       success: { hype: 15 },
-      fail: {},
     },
     {
       id: 'test-ui',
@@ -220,7 +204,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: 'UIを改善する',
       rate: 0.12,
       success: { usability: 6 },
-      fail: { reputationRisk: 3 },
     },
   ],
   debugging: [
@@ -233,7 +216,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '致命的バグを修正する',
       rate: 0.18,
       success: { bugRate: -20 },
-      fail: { devWeeksDelta: 1 },
     },
     {
       id: 'debug-crash',
@@ -244,7 +226,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: 'クラッシュを直す',
       rate: 0.15,
       success: { funFactor: 8 },
-      fail: { reputationRisk: 5 },
     },
     {
       id: 'debug-save',
@@ -255,7 +236,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: 'セーブ処理を直す',
       rate: 0.12,
       success: { trust: 10 },
-      fail: { reputationRisk: 15 },
     },
     {
       id: 'debug-unknown',
@@ -266,7 +246,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '原因を特定する',
       rate: 0.15,
       success: { bugRate: -12 },
-      fail: { devWeeksDelta: 1 },
     },
     {
       id: 'debug-chain',
@@ -277,7 +256,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '修正内容を確認する',
       rate: 0.12,
       success: { funFactor: 5 },
-      fail: { bugRate: 10 },
     },
   ],
   release: [
@@ -290,7 +268,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '話題を広げる',
       rate: 0.18,
       success: { salesForecast: 20 },
-      fail: {},
     },
     {
       id: 'rel-streamer',
@@ -301,7 +278,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '宣伝を強化する',
       rate: 0.15,
       success: { buzz: 25 },
-      fail: {},
     },
     {
       id: 'rel-flame',
@@ -312,7 +288,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '炎上対策を行う',
       rate: 0.12,
       success: { reputationRisk: -10 },
-      fail: { reputationRisk: 10 },
     },
     {
       id: 'rel-store',
@@ -323,7 +298,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: '申請内容を修正する',
       rate: 0.1,
       success: {},
-      fail: { devWeeksDelta: 1 },
     },
     {
       id: 'rel-server',
@@ -334,66 +308,9 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       missionLabel: 'サーバーを増強する',
       rate: 0.12,
       success: { buzz: 10 },
-      fail: { reputationRisk: 8 },
     },
   ],
   complete: [],
-};
-
-/**
- * v0.15：出現レーンの定義（spec §1-2）。
- * バグ虫＝放置すると完成度を蝕む／ボーナス＝取れたら得・逃して無罰。
- * v0.14 のランダムイベントも「特別な出現物」としてレーンに統合する。
- * 数値は叩き台 🔧（v15 spec §4）。
- */
-export type LaneKind = 'bug' | 'critical-bug' | 'bonus' | 'event';
-
-export type LaneSpawnDef = {
-  kind: LaneKind;
-  icon: string;
-  label: string;
-  /** 入力ミッション候補（ひらがな）。スポーン時にランダムに 1 つ */
-  phrases: string[];
-  /** レーン横断（＝寿命）ミリ秒 */
-  lifeMs: number;
-  /** 打ち切ったときの新軸効果 */
-  success: AxisDelta;
-  /** 期限切れ（左端到達/消滅）時の効果。bonus は空＝無罰 */
-  expire: AxisDelta;
-  /** バグのみ：左端到達で完成度を workTarget の何％蝕むか */
-  erodePct?: number;
-};
-
-export const LANE_BUG: LaneSpawnDef = {
-  kind: 'bug',
-  icon: '🐛',
-  label: 'バグ',
-  phrases: ['ばぐたいじ', 'えらーしゅうせい', 'れいがいをふうじる', 'ろぐをおいかける'],
-  lifeMs: 9000,
-  success: { bugRate: -3 },
-  expire: { bugRate: 3 },
-  erodePct: 0.02,
-};
-
-export const LANE_CRITICAL_BUG: LaneSpawnDef = {
-  kind: 'critical-bug',
-  icon: '👾',
-  label: 'クリティカル',
-  phrases: ['ちめいてきばぐしゅうせい', 'くらっしゅをとめる'],
-  lifeMs: 11000,
-  success: { bugRate: -8, funFactor: 2 },
-  expire: { bugRate: 8 },
-  erodePct: 0.05,
-};
-
-export const LANE_BONUS: LaneSpawnDef = {
-  kind: 'bonus',
-  icon: '💡',
-  label: 'ひらめき',
-  phrases: ['ひらめいた', 'なるほどわかった', 'いいあいであ'],
-  lifeMs: 6000,
-  success: { funFactor: 4, hype: 2 },
-  expire: {}, // 逃しても無罰（北極星）
 };
 
 /** 軸 → 表示ラベル＆単位（イベント結果テロップ用） */

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
 import {
-  AXIS_META,
   type AxisDelta,
   type DevEvent,
   EVENT_CATEGORY_META,
@@ -10,82 +9,57 @@ import {
 } from '../../data/events';
 import {
   ATTR_BASE_GAIN,
-  type AttrPhrase,
-  buildAttrPhrases,
+  CATEGORY_META,
   comboAttrMultiplier,
-  DEV_ATTR_META,
+  getTicketAt,
+  pickPhrase,
+  PHRASES_PER_TICKET,
   speedRank,
+  type SpeedRank,
+  type TicketCategory,
 } from '../../data/devPhrases';
-import { sfx } from '../../utils/sfx';
-
-/** v0.15 フィーバー定数（叩き台 🔧）：正打 60 打で MAX、15 秒間 進捗×2＋ボーナスラッシュ */
-const FEVER_MAX = 60;
-const FEVER_DURATION_MS = 15000;
-/** フィーバーの充填パイル数（小さい充填インジケータ・固定個数＝レイアウトシフトしない） */
-const FEVER_PIPS = 6;
-
-/**
- * v0.15.1：開発フェーズの可視化（オーナーFB「ゲージだけでなく、デザイン/プログラミングを表現して」）。
- * - デザイン画面プレビュー：graphics+sound ポイントに応じてモザイクが1マスずつ色で埋まる
- * - プログラム画面プレビュー：fun/bug ポイントで擬似コード行が1行ずつ増える
- * どちらも「打った文がどこで何を組み上げているか」を数字ではなく絵で見せる。
- */
-const DESIGN_MOSAIC_COLS = 8;
-const DESIGN_MOSAIC_ROWS = 4;
-const DESIGN_MOSAIC_COLORS = ['#4db3ff', '#5fe08a', '#ffb454', '#d8a5ff', '#ff8a8a'];
-
-const CODE_FLAVOR_LINES = [
-  'function attack() {',
-  '  if (hp <= 0) return;',
-  '  player.move(dx, dy);',
-  '  enemy.spawn(x, y);',
-  '  score += combo * 10;',
-  '  if (isBoss) hp *= 3;',
-  '  playSound("hit");',
-  '  state = "playing";',
-  '  update(deltaTime);',
-  '  collision.check(a, b);',
-  '  loadLevel(next);',
-  '  saveData(progress);',
-  '  fixBug(issueId);',
-  '}',
-];
-
-import { GENRE_BY_ID } from '../../data/genres';
+import { buildLine } from '../../data/codeSnippets';
+import { GENRE_BY_ID, genreBackgroundUrl, genreSpriteUrl, type GenreId } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
-import {
-  DEV_PHASE_META,
-  DEV_PHASE_ORDER,
-  type DevAxes,
-  type DevPhase,
-  ZERO_AXES,
-  dateToWeekIndex,
-} from '../../state/types';
-import {
-  computeDevImpact,
-  type KeystrokeRating,
-  NORI_MAX_COMBO,
-  noriMultiplier,
-  progressGain,
-  rankColor,
-  ratingForInterval,
-  toCharsPerMin,
-} from './devImpact';
+import { DEV_PHASE_META, DEV_PHASE_ORDER, type DevPhase, dateToWeekIndex } from '../../state/types';
+import { computeDevImpact, progressGain, toCharsPerMin } from './devImpact';
 import { useTyping } from './useTyping';
+import { sfx } from '../../utils/sfx';
 
+/** v0.15.2 フィーバー定数（叩き台 🔧）：正打 60 打で MAX、15 秒間 進捗×2 */
+const FEVER_MAX = 60;
+const FEVER_DURATION_MS = 15000;
+
+/** 開発全体の PHASE ドット総数（演出。overall progressPct に連動） */
+const TOTAL_PHASE_DOTS = 6;
+
+type LastResult =
+  | {
+      kind: 'ticket';
+      rank: SpeedRank;
+      speedPct: number;
+      qualityDelta: number;
+      bugPct: number;
+      exp: number;
+      ts: number;
+    }
+  | { kind: 'event'; event: DevEvent; ts: number };
 
 /**
- * v0.14 開発フェーズ画面（3 カラム・テイクオーバー）。
+ * v0.15.2「作業チケット」UI（オーナー改修指示 2026-07-08）：
+ * ゲージを並べる画面ではなく「作業チケットをタイピングで進める画面」。
+ * プレイヤーが一目で理解すべきことを 3 つに絞る：
+ *   1. 今なにを作っているか（作業チケット）
+ *   2. なにを入力すればいいか（入力する文章）
+ *   3. 入力した結果どう変わったか（今回の結果カード）
  *
- * モック `ui/phase/development_ui.png` 準拠：
- * - 左：フェーズ進行リスト（1〜6・🔒/▶/✓）＋ 現在の作業 ＋ チーム状態
- * - 中央：現在の `current.phase` に応じたメインパネル（開発＝タイピング、他＝舞台＋次へ）
- * - 右：現在のプロジェクト（タイトル/ジャンル/フェーズ画像/完成度/開発期間）
- *
- * フェーズは `current.phase` の内部状態で進める（planning→development→testing→debugging）。
- * debugging から先（発売・開発完了）は既存リリースフローへ委譲（advancePhase → finishDevelopment）。
+ * モック `ui/phase/development_ui.png` 準拠の 3 カラム大枠は維持：
+ * - 左：フェーズ進行・チーム状態・開発全体の進捗
+ * - 中央：作業チケット・タイピング入力・実装中の様子・結果カード（開発フェーズのみ本改修）
+ * - 右：現在のプロジェクト説明（ゲームプレビューは廃止）
+ * - 下：イベント情報 ＋ BGM
  */
 export const DevelopScreen = () => {
   const current = useGameStore((s) => s.current);
@@ -101,29 +75,54 @@ export const DevelopScreen = () => {
 
   const phase: DevPhase = current?.phase ?? 'development';
   const isDevelopment = phase === 'development';
+  const genreId = current?.genreId ?? 'action';
 
   const wpmRef = useRef(0);
-  // ノリゲージ：最新コンボ（progressGain の倍率に使う）
+  const accuracyRef = useRef(1);
   const comboRef = useRef(0);
-  // 直近フレーズ（開発ログ表示用。onPhraseComplete のクロージャ鮮度対策）
-  const phraseRef = useRef('');
-  // 開発ログ：フレーズ完了ごとの「見える成果」（最新 4 行）
-  const [devLog, setDevLog] = useState<{ id: number; text: string }[]>([]);
-  // v0.15 ビルドアップ・タイピング（レーン案はプレイテストで不採用→撤去）：
-  // 文＝属性つき開発作業。打ち切るとその属性の開発パラメータが伸びる（因果の可視化）。
   const phraseStartRef = useRef(performance.now());
-  const curPairRef = useRef<AttrPhrase | null>(null);
-  // フィーバー発動の全画面フラッシュ
-  const [flash, setFlash] = useState(0);
-  // 文完了の爆発ポップ（視線の先＝入力枠のそばに出す。属性色つき）
-  const [gainPop, setGainPop] = useState<{ id: number; text: string; color: string } | null>(
-    null,
-  );
-  // v0.15.1：プログラム画面プレビュー用の擬似コード行（fun/bug 完了で 1 行ずつ増える）
-  const [codeLines, setCodeLines] = useState<string[]>([]);
-  const codeLineIdxRef = useRef(0);
 
-  // v0.15 フィーバー（spec §1-4）：正打で蓄積・ミスで減少、MAX で自動発動 15 秒（叩き台 🔧）
+  // ★作業チケット状態：ticketIndex が進むほど CATEGORY_ORDER を周回しながら次のチケットへ。
+  const [ticketIndex, setTicketIndex] = useState(0);
+  const ticketIndexRef = useRef(0);
+  const [ticketPhraseCount, setTicketPhraseCount] = useState(0);
+  const ticketPhraseCountRef = useRef(0);
+  const [completedTickets, setCompletedTickets] = useState<{ title: string; category: TicketCategory }[]>(
+    [],
+  );
+  const currentTicket = useMemo(() => getTicketAt(genreId, ticketIndex), [genreId, ticketIndex]);
+  const nextTicket = useMemo(() => getTicketAt(genreId, ticketIndex + 1), [genreId, ticketIndex]);
+
+  const [ticketPhrase, setTicketPhrase] = useState(() => pickPhrase(currentTicket.category));
+
+  // ★プログラム作業中の「今まさに書かれているコード行」（打鍵に合わせて1文字ずつ伸びる）
+  const themeId = current?.themeId ?? 'sushi';
+  const codeLineIdx = ticketIndex * PHRASES_PER_TICKET + ticketPhraseCount;
+  const fullCodeLine = useMemo(
+    () => buildLine({ genreId, themeId, idx: codeLineIdx }),
+    [genreId, themeId, codeLineIdx],
+  );
+
+  // ★実装中の様子（カテゴリ別）
+  const [programLog, setProgramLog] = useState<string[]>([]);
+  const [designNotes, setDesignNotes] = useState<string[]>([]);
+  const [graphicsFrame, setGraphicsFrame] = useState(0);
+  const [soundBeatKey, setSoundBeatKey] = useState(0);
+
+  // ★今回の結果カード（ゲージの代わりにこれが主役）
+  const [lastResult, setLastResult] = useState<LastResult | null>(null);
+
+  // イベント割り込み：pending（発生を告知）→ 現在の文を打ち切ったら active（実際に入力対象になる）
+  const [pendingEvent, setPendingEvent] = useState<DevEvent | null>(null);
+  const [activeEvent, setActiveEvent] = useState<DevEvent | null>(null);
+  const pendingRef = useRef<DevEvent | null>(null);
+  const activeRef = useRef<DevEvent | null>(null);
+  pendingRef.current = pendingEvent;
+  activeRef.current = activeEvent;
+
+  const [flash, setFlash] = useState(0);
+
+  // フィーバー：正打で蓄積・ミスで減少、MAX で自動発動
   const [feverGauge, setFeverGauge] = useState(0);
   const [feverActive, setFeverActive] = useState(false);
   const feverActiveRef = useRef(false);
@@ -136,7 +135,6 @@ export const DevelopScreen = () => {
     if (feverActiveRef.current) return;
     setFeverGauge((g) => Math.floor(g * 0.8));
   };
-  // MAX 到達で自動発動
   useEffect(() => {
     if (!feverActive && feverGauge >= FEVER_MAX) {
       setFeverActive(true);
@@ -152,64 +150,100 @@ export const DevelopScreen = () => {
     }
   }, [feverGauge, feverActive]);
 
-  const [rating, setRating] = useState<KeystrokeRating>(null);
-  const lastCorrectAtRef = useRef<number>(0);
-  const ratingTimerRef = useRef<number | null>(null);
+  // イベント抽選：8 秒ごとに 1 回、開発フェーズ中のみ
+  useEffect(() => {
+    if (!isDevelopment || !current) return;
+    const timer = window.setInterval(() => {
+      if (pendingRef.current || activeRef.current) return;
+      for (const ev of PHASE_EVENTS.development) {
+        if (Math.random() < ev.rate * 0.5) {
+          setPendingEvent(ev);
+          sfx.alert();
+          setFlash((n) => n + 1);
+          break;
+        }
+      }
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [isDevelopment, !current]);
 
-  // 属性つき開発作業フレーズ列（🎮/🎨/🎵/📋 ＋ 約12% で 🐛バグ文）
-  const attrPairs = useMemo(() => {
-    if (!current) return [] as AttrPhrase[];
-    return buildAttrPhrases(Math.max(30, current.requiredLoC * 6));
-  }, [current?.genreId, current?.requiredLoC]);
-  const phrases = useMemo(() => attrPairs.map((p) => p.phrase), [attrPairs]);
+  const currentInputPhrase = activeEvent ? activeEvent.mission : ticketPhrase;
+  const phrases = useMemo(() => [currentInputPhrase], [currentInputPhrase]);
 
-  const { view, idx, failCount, combo, wpm, accuracy } = useTyping({
+  const { view, failCount, wpm, accuracy } = useTyping({
     phrases,
+    paused: !current || !isDevelopment,
     onPhraseComplete: () => {
-      const pair = curPairRef.current;
-      // 進捗（完成度）は従来通り：速度＋ノリ倍率＋フィーバー×2
-      const progress =
-        progressGain(wpmRef.current, false, comboRef.current) * (feverActiveRef.current ? 2 : 1);
-      addDevelopLoC(progress);
-      if (pair) {
-        // ★ビルドアップ：文の属性 × コンボ段階 × 速度判定 × フィーバーで獲得が膨らむ
+      if (activeRef.current) {
+        // イベント文を打ち切り＝成功（スキップ無し。詰みが無い代わりに必ず打つ）
+        const ev = activeRef.current;
+        applyAxisDelta(ev.success);
+        sfx.success();
+        setLastResult({ kind: 'event', event: ev, ts: Date.now() });
+        setActiveEvent(null);
+      } else {
+        const category = currentTicket.category;
         const elapsed = performance.now() - phraseStartRef.current;
-        const { rank, mult: speedMult } = speedRank(pair.phrase.length, elapsed);
+        const { rank, mult: speedMult } = speedRank(ticketPhrase.length, elapsed);
         const comboMult = comboAttrMultiplier(comboRef.current);
         const feverMult = feverActiveRef.current ? 1.5 : 1;
-        const attrGain = Math.max(1, Math.round(ATTR_BASE_GAIN * comboMult * speedMult * feverMult));
-        const meta = DEV_ATTR_META[pair.attr];
-        if (pair.attr === 'bug') {
-          applyAxisDelta({ bugRate: -attrGain });
-        } else {
-          addDevStat(pair.attr, attrGain);
-        }
-        // プログラム画面プレビュー：fun/bug（ロジック系）の完了で擬似コードが 1 行増える
-        if (pair.attr === 'fun' || pair.attr === 'bug') {
-          const line = CODE_FLAVOR_LINES[codeLineIdxRef.current % CODE_FLAVOR_LINES.length];
-          codeLineIdxRef.current += 1;
-          setCodeLines((l) => [...l, line].slice(-6));
-        }
-        if (rank === 'PERFECT') sfx.success();
-        else sfx.complete();
-        const rankTxt = rank !== 'GOOD' ? ` ${rank}!` : '';
-        const multTxt = comboMult > 1 ? ` ×${comboMult}` : '';
-        setGainPop({
-          id: Date.now(),
-          text: `+${attrGain} ${meta.icon}${rankTxt}${multTxt}`,
-          color: meta.color,
+        const gain = Math.max(1, Math.round(ATTR_BASE_GAIN * comboMult * speedMult * feverMult));
+        addDevStat(category, gain);
+
+        const impactNow = computeDevImpact({ wpm: wpmRef.current, accuracy: accuracyRef.current });
+        sfx[rank === 'PERFECT' ? 'success' : 'complete']();
+        setLastResult({
+          kind: 'ticket',
+          rank,
+          speedPct: impactNow.speedPct,
+          qualityDelta: impactNow.qualityDelta,
+          bugPct: impactNow.bugPct,
+          exp: gain * 30,
+          ts: Date.now(),
         });
-        setDevLog((l) =>
-          [
-            {
-              id: Date.now() + Math.random(),
-              text: `${meta.icon} ${meta.label} +${attrGain}${rankTxt}${multTxt} 「${pair.phrase}」`,
-            },
-            ...l,
-          ].slice(0, 2),
-        );
+
+        // 実装中の様子：カテゴリごとに違う見え方で反映
+        const nextCount = ticketPhraseCountRef.current + 1;
+        const finishing = nextCount >= PHRASES_PER_TICKET;
+        if (category === 'program') {
+          setProgramLog((l) => {
+            const next = [...l, fullCodeLine];
+            if (finishing) next.push(`// ✅ ${currentTicket.flavor.title} 完了`);
+            return next.slice(-4);
+          });
+        } else if (category === 'design') {
+          setDesignNotes((l) => [...l, currentTicket.flavor.title].slice(-4));
+        } else if (category === 'graphics') {
+          setGraphicsFrame((f) => f + 1);
+        } else if (category === 'sound') {
+          setSoundBeatKey((k) => k + 1);
+        }
+
+        if (finishing) {
+          setCompletedTickets((l) => [...l, { title: currentTicket.flavor.title, category }].slice(-6));
+          ticketIndexRef.current += 1;
+          setTicketIndex(ticketIndexRef.current);
+          ticketPhraseCountRef.current = 0;
+          setTicketPhraseCount(0);
+        } else {
+          ticketPhraseCountRef.current = nextCount;
+          setTicketPhraseCount(nextCount);
+        }
+        const newCategory = getTicketAt(genreId, ticketIndexRef.current).category;
+        setTicketPhrase(pickPhrase(newCategory));
+
+        // 進捗（完成度）は従来通り：速度＋コンボ倍率＋フィーバー×2
+        const progress =
+          progressGain(wpmRef.current, false, comboRef.current) * (feverActiveRef.current ? 2 : 1);
+        addDevelopLoC(progress);
+
+        // 待機中のイベントがあれば、次の文としてイベント文を投入（途中差し替えしない）
+        if (pendingRef.current) {
+          setActiveEvent(pendingRef.current);
+          setPendingEvent(null);
+        }
       }
-      // v0.14：作業量目標に達したら「開発フェーズ完了」＝次フェーズ（テスト）へ進む。
+
       const s = useGameStore.getState();
       const done = s.current?.doneLoC ?? 0;
       const target = s.current?.workTarget ?? 1;
@@ -217,21 +251,11 @@ export const DevelopScreen = () => {
         advancePhase();
       }
     },
-    paused: !current || !isDevelopment,
     onCorrect: (c) => {
       comboRef.current = c;
       sfx.key();
       addFever(1);
       reportCombo(c);
-      const now = performance.now();
-      const interval = now - lastCorrectAtRef.current;
-      lastCorrectAtRef.current = now;
-      const r = ratingForInterval(interval);
-      if (r) {
-        setRating(r);
-        if (ratingTimerRef.current) window.clearTimeout(ratingTimerRef.current);
-        ratingTimerRef.current = window.setTimeout(() => setRating(null), 600);
-      }
     },
     onComboBreak: () => {
       comboRef.current = 0;
@@ -242,32 +266,35 @@ export const DevelopScreen = () => {
       wpmRef.current = w;
       reportWPM(w);
     },
-    onAccuracy: (a) => reportAccuracy(a),
+    onAccuracy: (a) => {
+      accuracyRef.current = a;
+      reportAccuracy(a);
+    },
   });
 
-  // 文の切り替わりで開始時刻と現在ペア（属性）を更新
   useEffect(() => {
     phraseStartRef.current = performance.now();
-    curPairRef.current = attrPairs.length ? attrPairs[idx % attrPairs.length] : null;
-  }, [idx, attrPairs]);
-  useEffect(() => {
-    if (view.hiragana) phraseRef.current = view.hiragana;
-  }, [view.hiragana]);
+  }, [currentInputPhrase]);
+
+  // 打鍵の進み具合に合わせてコード行を1文字ずつ伸ばす（実装ログが「流れて見える」ように）
+  const typedLen = view.completed.length;
+  const totalLen = Math.max(1, typedLen + view.remained.length);
+  const liveCodeLine = fullCodeLine.slice(
+    0,
+    Math.max(1, Math.ceil((typedLen / totalLen) * fullCodeLine.length)),
+  );
 
   const workTarget = current?.workTarget ?? 1;
-
-  // 旧 bugPhrase 経路は v0.14 でイベント系「バグ発生」に一本化（devEvent 割り込み）
 
   if (!current) return null;
   const scaleDef = SCALE_BY_ID[current.scale];
   if (!scaleDef) return null;
 
-  const impact = computeDevImpact({ wpm, accuracy });
   const charsPerMin = toCharsPerMin(wpm);
   const accuracyPct = Math.round(accuracy * 1000) / 10;
   const progressPct = Math.max(0, Math.min(100, (current.doneLoC / workTarget) * 100));
+  const litPhaseDots = Math.max(1, Math.min(TOTAL_PHASE_DOTS, Math.ceil((progressPct / 100) * TOTAL_PHASE_DOTS)));
 
-  // 開発期間（裏で進む時間。早く打つほど短く済む）
   const plannedWeeks = Math.max(1, scaleDef.neededWeeks);
   const elapsedWeeks = current.startDate
     ? Math.max(0, dateToWeekIndex(currentDate) - dateToWeekIndex(current.startDate))
@@ -284,7 +311,6 @@ export const DevelopScreen = () => {
   const genre = GENRE_BY_ID[current.genreId];
   const theme = THEME_BY_ID[current.themeId];
   const phaseMeta = DEV_PHASE_META[phase];
-  const phaseImage = `${import.meta.env.BASE_URL}phase/${phaseMeta.image}.png`;
 
   return (
     <div
@@ -293,35 +319,48 @@ export const DevelopScreen = () => {
     >
       <PixelStatusBar />
 
-      {/* フィーバー発動フラッシュ（key 再生・操作は透過） */}
       {flash > 0 && <div key={`flash-${flash}`} className="dev-flash-vignette" />}
 
-      {/* 3 カラム本体 */}
       <div
         style={{
           flex: 1,
           minHeight: 0,
           minWidth: 0,
           display: 'grid',
-          // v0.15.1 修正：`1fr` 単体はグリッド最小幅が「中身の最大幅（max-content）」になるため、
-          // 折り返さない長い文字列（ローマ字入力・擬似コード行）があると列ごと画面が横に伸びる。
-          // minmax(0, 1fr) にして中身の幅を無視し、列幅をレイアウトどおりに固定する。
           gridTemplateColumns: '240px minmax(0, 1fr) 300px',
           gap: 12,
           padding: 12,
         }}
       >
-        {/* 左：フェーズ進行 ＋ チーム */}
+        {/* 左：フェーズ進行 ＋ チーム ＋ 開発全体の進捗 */}
         <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, minWidth: 0 }}>
           <PhaseProgressList phase={phase} />
-          <div style={{ ...devBox(), gap: 4 }}>
-            <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>現在の作業</span>
-            <span style={{ fontSize: 13, color: DEV.cream, fontWeight: 700 }}>
-              {phaseMeta.label}フェーズ
+          <TeamStatus
+            employeeIds={current.assignedEmployeeIds}
+            allEmployees={employees}
+            currentCategory={isDevelopment ? currentTicket.category : null}
+          />
+          <div style={{ ...devBox(), gap: 6 }}>
+            <span style={{ fontSize: 11, color: DEV.sub }}>開発全体の進捗</span>
+            <span style={{ fontSize: 10, color: DEV.sub }}>全体完成度</span>
+            <span
+              style={{
+                fontSize: 22,
+                fontWeight: 700,
+                color: DEV.greenBright,
+                fontVariantNumeric: 'tabular-nums',
+                lineHeight: 1,
+              }}
+            >
+              {Math.floor(progressPct)}%
             </span>
-            <span style={{ fontSize: 11, color: DEV.sub }}>{PHASE_WORK_NOTE[phase]}</span>
+            <SegGauge pct={progressPct} color={DEV.greenBright} track="#0c1207" height={10} />
+            <span style={{ fontSize: 10, color: DEV.sub, marginTop: 4 }}>
+              開発期間：経過 {elapsedWeeks} / 予定 {plannedWeeks} 週
+            </span>
+            <SegGauge pct={budgetPct} color={periodColor} track="#0c1207" height={8} />
+            <span style={{ fontSize: 10, fontWeight: 700, color: periodColor }}>{periodNote}</span>
           </div>
-          <TeamStatus employeeIds={current.assignedEmployeeIds} allEmployees={employees} />
         </aside>
 
         {/* 中央：フェーズ別メインパネル */}
@@ -329,20 +368,29 @@ export const DevelopScreen = () => {
           {isDevelopment ? (
             <DevelopCenter
               phaseLabel={phaseMeta.label}
+              litPhaseDots={litPhaseDots}
+              ticket={currentTicket}
+              ticketProgressPct={Math.min(
+                100,
+                ((ticketPhraseCount +
+                  (view.completed.length /
+                    Math.max(1, view.completed.length + view.remained.length))) /
+                  PHRASES_PER_TICKET) *
+                  100,
+              )}
+              activeEvent={activeEvent}
               view={view}
-              combo={combo}
-              rating={rating}
+              failCount={failCount}
               charsPerMin={charsPerMin}
               accuracyPct={accuracyPct}
-              failCount={failCount}
-              impact={impact}
-              devLog={devLog}
-              curPair={attrPairs.length ? attrPairs[idx % attrPairs.length] : null}
-              nextPairs={[1, 2, 3].map((d) => attrPairs[(idx + d) % Math.max(1, attrPairs.length)])}
-              devStats={current.devStats ?? { fun: 0, graphics: 0, sound: 0, plan: 0 }}
-              codeLines={codeLines}
-              gainPop={gainPop}
-              feverGauge={feverGauge}
+              programLog={programLog}
+              liveCodeLine={liveCodeLine}
+              designNotes={designNotes}
+              graphicsFrame={graphicsFrame}
+              ticketPhraseCount={ticketPhraseCount}
+              soundBeatKey={soundBeatKey}
+              genre={genre}
+              lastResult={lastResult}
               feverActive={feverActive}
             />
           ) : (
@@ -356,86 +404,50 @@ export const DevelopScreen = () => {
           )}
         </main>
 
-        {/* 右：現在のプロジェクト（フェーズ画像＋情報） */}
+        {/* 右：現在のプロジェクト説明（ゲームプレビューは廃止） */}
         <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, minWidth: 0 }}>
-          <div style={{ ...devBox(), gap: 6 }}>
+          <div style={{ ...devBox(), gap: 4 }}>
             <span style={{ fontSize: 11, color: DEV.sub }}>現在のプロジェクト</span>
-            <span style={{ fontSize: 18, fontWeight: 700, color: DEV.cream, lineHeight: 1.1 }}>
+            <span style={{ fontSize: 17, fontWeight: 700, color: DEV.cream, lineHeight: 1.2 }}>
               {genre?.emoji} {current.title}
             </span>
             <span style={{ fontSize: 11, color: DEV.sub }}>
-              {genre?.name} / {theme?.name} / {scaleDef.name}
+              ジャンル：{genre?.name} ／ テーマ：{theme?.name} ／ 規模：{scaleDef.name}
             </span>
-            <div
-              style={{
-                marginTop: 2,
-                border: `1px solid ${DEV.panelBorder}`,
-                background: '#0c1207',
-                height: 110,
-                overflow: 'hidden',
-              }}
-            >
-              <img
-                src={phaseImage}
-                alt={`${phaseMeta.label}フェーズ`}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  imageRendering: 'pixelated',
-                }}
-              />
-            </div>
           </div>
 
-          <div style={{ ...devBox(), gap: 6 }}>
-            <span style={{ fontSize: 11, color: DEV.sub }}>現在の完成度</span>
-            <span
-              style={{
-                fontSize: 24,
-                fontWeight: 700,
-                color: DEV.greenBright,
-                fontVariantNumeric: 'tabular-nums',
-                lineHeight: 1,
-              }}
-            >
-              {Math.floor(progressPct)} <span style={{ fontSize: 13 }}>%</span>
-            </span>
-            <SegGauge pct={progressPct} color={DEV.greenBright} track="#0c1207" height={12} />
-          </div>
-
-          <div style={{ ...devBox(), gap: 6 }}>
-            <span style={{ fontSize: 11, color: DEV.sub }}>開発期間（予定 {plannedWeeks} 週）</span>
-            <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-              <span style={{ fontSize: 11, color: DEV.sub }}>経過</span>
-              <span style={{ fontSize: 22, fontWeight: 700, color: periodColor, lineHeight: 1 }}>
-                {elapsedWeeks}
+          <div style={{ ...devBox(), gap: 4, flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>現在の開発内容</span>
+            {completedTickets.length === 0 ? (
+              <span style={{ fontSize: 11, color: '#5a6e3a' }}>まだ着手した作業がない…</span>
+            ) : (
+              completedTickets.map((t, i) => (
+                <span key={i} style={{ fontSize: 11, color: CATEGORY_META[t.category].color }}>
+                  ✓ {t.title}
+                </span>
+              ))
+            )}
+            {isDevelopment && (
+              <span style={{ fontSize: 11, color: DEV.white, fontWeight: 700 }}>
+                ▶ {currentTicket.flavor.title}
               </span>
-              <span style={{ fontSize: 12, color: periodColor }}>週</span>
+            )}
+            <span style={{ fontSize: 10, color: DEV.sub, marginTop: 6 }}>次の目標</span>
+            <span style={{ fontSize: 12, color: DEV.cream, fontWeight: 700 }}>
+              {nextTicket.flavor.title}
             </span>
-            <SegGauge pct={budgetPct} color={periodColor} track="#0c1207" height={10} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: periodColor }}>{periodNote}</span>
           </div>
 
-          {/* イベント効果の累計（新軸の見える化） */}
-          <AxesSummary axes={current.axes ?? ZERO_AXES} />
-
-          {/* チームからのコメント（フェーズ連動のフレーバー） */}
           <TeamComments
             team={employees.filter((e) => current.assignedEmployeeIds.includes(e.id))}
             phase={phase}
+            eventActive={!!activeEvent}
           />
-
-          {/* BGM 枠（表示のみ。音源は別版） */}
-          <div style={{ ...devBox(), flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 14 }}>🎵</span>
-            <span style={{ fontSize: 12, color: DEV.sub }}>BGM: 8bit Factory（準備中）</span>
-          </div>
         </aside>
       </div>
 
-      {/* 下部：このフェーズで起こりうるイベント */}
-      <EventBar phase={phase} />
+      {/* 下部：イベント情報 ＋ BGM */}
+      <BottomBar phase={phase} />
     </div>
   );
 };
@@ -480,19 +492,29 @@ const PhaseProgressList = ({ phase }: { phase: DevPhase }) => {
   );
 };
 
-/** 左カラム：チーム状態（割り当て社員） */
+/** 役職が今のチケットカテゴリに乗っているかで気分を変える（相性演出） */
+const ROLE_EXCITED_BY: Record<string, TicketCategory[]> = {
+  programmer: ['program'],
+  designer: ['graphics', 'sound'],
+  pr: ['design'],
+};
+
+/** 左カラム：チーム状態（割り当て社員＋スキルバー＋気分） */
 const TeamStatus = ({
   employeeIds,
   allEmployees,
+  currentCategory,
 }: {
   employeeIds: string[];
-  allEmployees: { id: string; name: string; role: string }[];
+  allEmployees: { id: string; name: string; role: string; power: number }[];
+  currentCategory: TicketCategory | null;
 }) => {
   const team = allEmployees.filter((e) => employeeIds.includes(e.id));
-  const roleEmoji: Record<string, string> = {
-    programmer: '🧑‍💻',
-    designer: '🎨',
-    pr: '📣',
+  const roleEmoji: Record<string, string> = { programmer: '🧑‍💻', designer: '🎨', pr: '📣' };
+  const roleColor: Record<string, string> = {
+    programmer: CATEGORY_META.program.color,
+    designer: CATEGORY_META.graphics.color,
+    pr: CATEGORY_META.design.color,
   };
   return (
     <div style={{ ...devBox(), gap: 6, flex: 1, minHeight: 0, overflow: 'hidden' }}>
@@ -500,438 +522,666 @@ const TeamStatus = ({
       {team.length === 0 && (
         <span style={{ fontSize: 11, color: DEV.sub }}>社員なし（あなた一人で開発中）</span>
       )}
-      {team.map((e) => (
-        <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 16 }}>{roleEmoji[e.role] ?? '🧑‍💻'}</span>
-          <span style={{ fontSize: 12, color: DEV.cream }}>{e.name}</span>
-          <span style={{ marginLeft: 'auto', fontSize: 12 }}>🙂</span>
-        </div>
-      ))}
+      {team.map((e) => {
+        const excited = currentCategory && ROLE_EXCITED_BY[e.role]?.includes(currentCategory);
+        return (
+          <div key={e.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 16 }}>{roleEmoji[e.role] ?? '🧑‍💻'}</span>
+              <span style={{ fontSize: 12, color: DEV.cream }}>{e.name}</span>
+              <span style={{ marginLeft: 'auto', fontSize: 12 }}>{excited ? '😄' : '🙂'}</span>
+            </div>
+            <SegGauge
+              pct={Math.min(100, (e.power / 8) * 100)}
+              color={roleColor[e.role] ?? DEV.green}
+              track="#0c1207"
+              height={5}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 };
 
-/** 中央：開発フェーズ（タイピング） */
+/** 中央：開発フェーズ本体 */
 const DevelopCenter = ({
   phaseLabel,
+  litPhaseDots,
+  ticket,
+  ticketProgressPct,
+  activeEvent,
   view,
-  combo,
-  rating,
+  failCount,
   charsPerMin,
   accuracyPct,
-  failCount,
-  impact,
-  devLog,
-  curPair,
-  nextPairs,
-  devStats,
-  codeLines,
-  gainPop,
-  feverGauge,
+  programLog,
+  liveCodeLine,
+  designNotes,
+  graphicsFrame,
+  ticketPhraseCount,
+  soundBeatKey,
+  genre,
+  lastResult,
   feverActive,
 }: {
   phaseLabel: string;
+  litPhaseDots: number;
+  ticket: ReturnType<typeof getTicketAt>;
+  ticketProgressPct: number;
+  activeEvent: DevEvent | null;
   view: { hiragana: string; completed: string; remained: string };
-  combo: number;
-  rating: KeystrokeRating;
+  failCount: number;
   charsPerMin: number;
   accuracyPct: number;
-  failCount: number;
-  impact: ReturnType<typeof computeDevImpact>;
-  devLog: { id: number; text: string }[];
-  curPair: AttrPhrase | null;
-  nextPairs: (AttrPhrase | undefined)[];
-  devStats: { fun: number; graphics: number; sound: number; plan: number };
-  codeLines: string[];
-  gainPop: { id: number; text: string; color: string } | null;
-  feverGauge: number;
+  programLog: string[];
+  liveCodeLine: string;
+  designNotes: string[];
+  graphicsFrame: number;
+  ticketPhraseCount: number;
+  soundBeatKey: number;
+  genre: { id: GenreId; emoji: string; bgColor: string } | undefined;
+  lastResult: LastResult | null;
   feverActive: boolean;
-}) => (
-  <div
-    style={{
-      flex: 1,
-      minHeight: 0,
-      background: DEV.panelBg,
-      border: `2px solid ${DEV.panelBorder}`,
-      boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
-      imageRendering: 'pixelated',
-      display: 'flex',
-      flexDirection: 'column',
-    }}
-  >
+}) => {
+  const catMeta = CATEGORY_META[ticket.category];
+  const inputColor = activeEvent ? '#ff8a3c' : catMeta.color;
+  return (
     <div
       style={{
+        flex: 1,
+        minHeight: 0,
+        background: DEV.panelBg,
+        border: `2px solid ${DEV.panelBorder}`,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+        imageRendering: 'pixelated',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        padding: '8px 12px',
-        borderBottom: `2px solid ${DEV.panelBorder}`,
+        flexDirection: 'column',
       }}
     >
-      <span style={{ color: DEV.green, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}>
-        {'</> '}
-        {phaseLabel}フェーズ
-      </span>
-    </div>
-
-    <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {/* 次の作業プレビュー：次に何の能力が伸びるかが読める（固定高＝ずれない） */}
+      {/* ヘッダー：フェーズ名 ＋ PHASE ドット（＋発動中はフィーバーバッジ） */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          minHeight: 30,
-          padding: '4px 8px',
-          background: '#0a0f08',
-          border: `1px solid ${DEV.panelBorder}`,
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '8px 12px',
+          borderBottom: `2px solid ${DEV.panelBorder}`,
         }}
       >
-        <span style={{ fontSize: 11, color: DEV.sub, whiteSpace: 'nowrap' }}>次の作業：</span>
-        {nextPairs.map((pn, i) =>
-          pn ? (
-            <span
-              key={i}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '2px 8px',
-                fontSize: 11,
-                fontWeight: 700,
-                color: DEV_ATTR_META[pn.attr].color,
-                border: `1px solid ${DEV_ATTR_META[pn.attr].color}`,
-                background: DEV_ATTR_META[pn.attr].dim,
-                opacity: 1 - i * 0.25,
-              }}
-            >
-              {DEV_ATTR_META[pn.attr].icon} {DEV_ATTR_META[pn.attr].label}
-            </span>
-          ) : null,
-        )}
-      </div>
-
-      <div style={{ position: 'relative' }}>
-        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
-          {curPair ? (
-            <span style={{ color: DEV_ATTR_META[curPair.attr].color }}>
-              {DEV_ATTR_META[curPair.attr].icon} {DEV_ATTR_META[curPair.attr].label}
-              {curPair.attr === 'bug' ? '（打つとバグ率が下がる）' : 'の作業'}
-            </span>
-          ) : (
-            <span style={{ color: DEV.green }}>入力する文章</span>
-          )}
-        </div>
-        <div
-          style={{
-            background: '#0c1207',
-            border: `2px solid ${curPair ? DEV_ATTR_META[curPair.attr].color : DEV.panelBorder}`,
-            padding: '10px 12px',
-            fontSize: 28,
-            // 文の属性＝枠と文字の色（視線の先で「どこに効くか」を伝える）
-            color: curPair ? DEV_ATTR_META[curPair.attr].color : DEV.cream,
-            letterSpacing: '0.04em',
-            minHeight: 40,
-            // v0.15.1 修正：折り返し禁止のまま長い文が来ると箱ごと画面を横に押し広げる
-            overflowWrap: 'anywhere',
-            wordBreak: 'break-word',
-          }}
-        >
-          {view.hiragana}
-        </div>
-        {/* フレーズ完了の成果を視線の先にフロート表示（レイアウトに影響しない absolute） */}
-        {gainPop && (
-          <span key={gainPop.id} className="dev-gain-float" style={{ color: gainPop.color }}>
-            {gainPop.text}
-          </span>
-        )}
-      </div>
-
-      <div>
-        <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
-          ローマ字入力
-        </div>
-        <div
-          key={`miss-${failCount}`}
-          className={failCount > 0 ? 'dev-miss-shake' : undefined}
-          style={{
-            background: '#0c1207',
-            border: `1px solid ${DEV.panelBorder}`,
-            padding: '8px 12px',
-            fontSize: 20,
-            letterSpacing: '0.08em',
-            minHeight: 30,
-            // v0.15.1 修正：ローマ字は英数字の連続で折り返しが起きにくく、画面が横に伸びる主因だった
-            overflowWrap: 'anywhere',
-            wordBreak: 'break-word',
-          }}
-        >
-          {/* 正打ジュース：最後に打った文字が一瞬光る */}
-          <span style={{ color: DEV.green }}>{view.completed.slice(0, -1)}</span>
-          {view.completed.length > 0 && (
-            <span key={`glow-${view.completed.length}`} className="dev-key-glow">
-              {view.completed.slice(-1)}
-            </span>
-          )}
-          <span className="dev-cursor" style={{ color: DEV.white }}>
-            |
-          </span>
-          <span style={{ color: '#5a6e3a' }}>{view.remained}</span>
-        </div>
-      </div>
-
-      {/* ★できてきたもの：デザイン画面／プログラム画面のプレビュー（数字でなく絵で見せる） */}
-      <BuildPreview devStats={devStats} codeLines={codeLines} />
-
-      {/* COMBO（固定幅ラベルでテキスト長変化によるガタつきを防ぐ）＋ フィーバー充填パイル（固定個数） */}
-      <div
-        style={{
-          ...devBox(),
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 16,
-        }}
-      >
+        <span style={{ color: DEV.green, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}>
+          {'</> '}
+          {phaseLabel}フェーズ
+        </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 13, color: DEV.sub, letterSpacing: '0.1em' }}>COMBO</span>
-          <span
-            key={combo}
-            className="dev-combo"
-            style={{
-              fontSize: 30,
-              fontWeight: 700,
-              color: DEV.orange,
-              fontVariantNumeric: 'tabular-nums',
-              lineHeight: 1,
-              width: 48,
-            }}
-          >
-            {combo}
-          </span>
-          {rating && (
-            <span
-              className="dev-rating"
-              style={{ fontSize: 16, fontWeight: 700, color: DEV.orange }}
-            >
-              +{rating}!
+          {feverActive && (
+            <span className="dev-fever-text" style={{ fontSize: 12, fontWeight: 700, color: '#ff5a3c' }}>
+              🔥FEVER 進捗×2
             </span>
           )}
-        </div>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 11, color: DEV.sub, display: 'inline-block', width: 220 }}>
-            ノリ（コンボで進捗倍率アップ）
-            <span style={{ color: DEV.orange, fontWeight: 700 }}>
-              {' '}
-              ×{noriMultiplier(combo).toFixed(2)}
+          <span style={{ fontSize: 11, color: DEV.sub }}>
+            PHASE {litPhaseDots} / 6
+            <span style={{ display: 'inline-flex', gap: 3, marginLeft: 6, verticalAlign: 'middle' }}>
+              {Array.from({ length: 6 }, (_, i) => (
+                <span
+                  key={i}
+                  style={{
+                    width: 7,
+                    height: 7,
+                    display: 'inline-block',
+                    borderRadius: 0,
+                    background: i < litPhaseDots ? DEV.green : '#1e2a14',
+                    border: '1px solid #05080c',
+                  }}
+                />
+              ))}
             </span>
-          </span>
-          <SegGauge
-            pct={Math.min(100, (combo / NORI_MAX_COMBO) * 100)}
-            color={DEV.orange}
-            track="#0c1207"
-            height={10}
-          />
-        </div>
-        {/* フィーバー：小さい充填パイル固定 6 個（テキスト長で揺れない） */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-          <span style={{ fontSize: 10, color: DEV.sub }}>⚡</span>
-          {Array.from({ length: FEVER_PIPS }, (_, i) => {
-            const threshold = ((i + 1) / FEVER_PIPS) * FEVER_MAX;
-            const lit = feverActive || feverGauge >= threshold;
-            return (
-              <span
-                key={i}
-                style={{
-                  width: 8,
-                  height: 8,
-                  display: 'inline-block',
-                  background: lit ? (feverActive ? '#ff5a3c' : '#ffd54a') : '#1c2410',
-                  border: `1px solid ${DEV.panelBorder}`,
-                }}
-              />
-            );
-          })}
-          <span
-            className={feverActive ? 'dev-fever-text' : undefined}
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: feverActive ? '#ff5a3c' : DEV.sub,
-              width: 76,
-            }}
-          >
-            {feverActive ? '🔥FEVER!' : 'フィーバー'}
           </span>
         </div>
       </div>
 
-      {/* 開発ログ：フレーズ完了＝見える成果（常に 1 行ぶんの高さを確保＝ガタつき無し） */}
-      <div style={{ ...devBox(), gap: 2, minHeight: 30, justifyContent: 'center' }}>
-        {devLog.length === 0 ? (
-          <span style={{ fontSize: 12, color: '#3f5226' }}>まだ何も完了していない…</span>
-        ) : (
-          devLog.slice(0, 1).map((line) => (
-            <span
-              key={line.id}
+      <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+        {/* ①作業チケット／イベント（今なにを作っているか） */}
+        <div
+          className={activeEvent ? 'dev-event-active' : undefined}
+          style={{
+            ...devBox(),
+            gap: 4,
+            borderColor: activeEvent ? '#ff8a3c' : DEV.panelBorder,
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 10, color: DEV.sub }}>
+              {activeEvent ? '⚠ イベント発生' : '作業チケット'}
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 18, fontWeight: 700, color: DEV.cream }}>
+                {activeEvent ? activeEvent.name : ticket.flavor.title}
+              </span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  color: inputColor,
+                  border: `1px solid ${inputColor}`,
+                  background: activeEvent ? '#3a2205' : catMeta.dim,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {activeEvent ? '⚡ イベント作業' : `${catMeta.icon} ${catMeta.label}作業`}
+              </span>
+            </div>
+            <span style={{ fontSize: 11, color: DEV.sub }}>
+              {activeEvent ? activeEvent.flavor : ticket.flavor.desc}
+            </span>
+          </div>
+          {!activeEvent && (
+            <div style={{ width: 84, display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+              <span style={{ fontSize: 10, color: DEV.sub, whiteSpace: 'nowrap' }}>チケット進捗</span>
+              <span
+                style={{
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: catMeta.color,
+                  fontVariantNumeric: 'tabular-nums',
+                  lineHeight: 1,
+                }}
+              >
+                {Math.floor(ticketProgressPct)}%
+              </span>
+            </div>
+          )}
+        </div>
+        {!activeEvent && (
+          <SegGauge pct={ticketProgressPct} color={catMeta.color} track="#0c1207" height={6} />
+        )}
+
+        {/* ②入力する文章（なにを入力すればいいか）＋ 入力進度/正確さ */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
+              入力する文章
+            </div>
+            <div
               style={{
-                fontSize: 12,
-                color: DEV.greenBright,
-                fontWeight: 700,
+                background: '#0c1207',
+                border: `2px solid ${inputColor}`,
+                padding: '10px 12px',
+                fontSize: 26,
+                color: inputColor,
+                letterSpacing: '0.04em',
+                minHeight: 38,
+                overflowWrap: 'anywhere',
+                wordBreak: 'break-word',
               }}
             >
-              {line.text}
-            </span>
-          ))
-        )}
-      </div>
-
-      {/* ★開発パラメータ：打った文の属性がここに積み上がる（因果の見える化の本体） */}
-      <div>
-        <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 6 }}>
-          開発パラメータ（打った文で伸びる → リリース評価に直結）
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-          {(['fun', 'graphics', 'sound', 'plan'] as const).map((k) => {
-            const meta = DEV_ATTR_META[k];
-            const v = devStats[k];
-            return (
-              <div key={k} style={{ ...devBox(), gap: 3, borderColor: meta.dim }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                  <span style={{ fontSize: 12, color: meta.color, fontWeight: 700 }}>
-                    {meta.icon} {meta.label}
-                  </span>
-                  <span
-                    key={`v-${k}-${v}`}
-                    className="dev-stat-pop"
-                    style={{
-                      marginLeft: 'auto',
-                      fontSize: 20,
-                      fontWeight: 700,
-                      color: meta.color,
-                      fontVariantNumeric: 'tabular-nums',
-                    }}
-                  >
-                    {v}
-                  </span>
-                </div>
-                <SegGauge pct={Math.min(100, v)} color={meta.color} track="#0c1207" height={8} />
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* メトリクス（薄く 1 行） */}
-      <div style={{ display: 'flex', gap: 14, fontSize: 11, color: DEV.sub }}>
-        <span>⏩ {charsPerMin} 文字/分</span>
-        <span>🎯 {accuracyPct}%</span>
-        <span>❌ {failCount} 回</span>
-        <span style={{ marginLeft: 'auto', color: rankColor(impact.speedRank) }}>
-          総合 {impact.speedRank}
-        </span>
-      </div>
-    </div>
-  </div>
-);
-
-/**
- * ★できてきたもの：デザイン画面／プログラム画面のプレビュー。
- * 打った文の属性を「数字」ではなく「絵」で見せる（オーナーFB 2026-07-08）。
- * - デザイン画面：graphics+sound ポイントに応じてモザイクが 1 マスずつ色で埋まる
- * - プログラム画面：fun/bug（ロジック系）の完了で擬似コード行が 1 行ずつ増える
- * どちらも高さ固定（アスペクト比 / 固定 px）＝ CLS なし。
- */
-const BuildPreview = ({
-  devStats,
-  codeLines,
-}: {
-  devStats: { fun: number; graphics: number; sound: number; plan: number };
-  codeLines: string[];
-}) => {
-  const totalCells = DESIGN_MOSAIC_COLS * DESIGN_MOSAIC_ROWS;
-  const designFillCount = Math.min(
-    totalCells,
-    Math.floor((devStats.graphics + devStats.sound) / 3),
-  );
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8 }}>
-      {/* デザイン画面プレビュー */}
-      <div style={{ ...devBox(), gap: 4 }}>
-        <span style={{ fontSize: 11, color: DEV_ATTR_META.graphics.color, fontWeight: 700 }}>
-          🎨 デザイン画面（できてきた見た目）
-        </span>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${DESIGN_MOSAIC_COLS}, 1fr)`,
-            gridTemplateRows: `repeat(${DESIGN_MOSAIC_ROWS}, 1fr)`,
-            gap: 2,
-            background: '#04060a',
-            border: `1px solid ${DEV.panelBorder}`,
-            padding: 3,
-            height: 72,
-          }}
-        >
-          {Array.from({ length: totalCells }, (_, i) => {
-            const filled = i < designFillCount;
-            const color = DESIGN_MOSAIC_COLORS[i % DESIGN_MOSAIC_COLORS.length];
-            return (
-              <div
-                key={i}
-                className={i === designFillCount - 1 ? 'dev-mosaic-pop' : undefined}
-                style={{ background: filled ? color : '#12180a' }}
-              />
-            );
-          })}
-        </div>
-      </div>
-
-      {/* プログラム画面プレビュー */}
-      <div style={{ ...devBox(), gap: 4 }}>
-        <span style={{ fontSize: 11, color: DEV_ATTR_META.fun.color, fontWeight: 700 }}>
-          💻 プログラム画面（書いているコード）
-        </span>
-        <div
-          style={{
-            background: '#04060a',
-            border: `1px solid ${DEV.panelBorder}`,
-            padding: '4px 6px',
-            height: 72,
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'flex-end',
-            fontSize: 11,
-            lineHeight: '13px',
-            color: '#6fe07a',
-            // v0.15.1 修正：pre は折り返し禁止＝長い行で箱が横に伸びる原因だった。
-            // pre-wrap でインデント（先頭スペース）は保持しつつ折り返す。
-            whiteSpace: 'pre-wrap',
-            overflowWrap: 'anywhere',
-          }}
-        >
-          {codeLines.length === 0 ? (
-            <span style={{ color: '#3f5226' }}>{'// まだ何も書かれていない…'}</span>
-          ) : (
-            codeLines.map((line, i) => (
-              <span key={i} className={i === codeLines.length - 1 ? 'dev-code-line' : undefined}>
-                {line}
+              {view.hiragana}
+            </div>
+          </div>
+          <div style={{ width: 96, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ ...devBox(), gap: 1, padding: 5 }}>
+              <span style={{ fontSize: 9, color: DEV.sub }}>⏩入力速度</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: DEV.cream, fontVariantNumeric: 'tabular-nums' }}>
+                {charsPerMin}
               </span>
-            ))
-          )}
-          <span className="dev-cursor" style={{ color: '#6fe07a' }}>
-            ▌
-          </span>
+              <span style={{ fontSize: 8, color: DEV.sub }}>文字/分</span>
+            </div>
+            <div style={{ ...devBox(), gap: 1, padding: 5 }}>
+              <span style={{ fontSize: 9, color: DEV.sub }}>🎯正確さ</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: DEV.cream, fontVariantNumeric: 'tabular-nums' }}>
+                {accuracyPct}%
+              </span>
+            </div>
+          </div>
         </div>
+
+        <div>
+          <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
+            ローマ字入力
+          </div>
+          <div
+            key={`miss-${failCount}`}
+            className={failCount > 0 ? 'dev-miss-shake' : undefined}
+            style={{
+              background: '#0c1207',
+              border: `1px solid ${DEV.panelBorder}`,
+              padding: '7px 12px',
+              fontSize: 18,
+              letterSpacing: '0.08em',
+              minHeight: 26,
+              overflowWrap: 'anywhere',
+              wordBreak: 'break-word',
+            }}
+          >
+            <span style={{ color: DEV.green }}>{view.completed.slice(0, -1)}</span>
+            {view.completed.length > 0 && (
+              <span key={`glow-${view.completed.length}`} className="dev-key-glow">
+                {view.completed.slice(-1)}
+              </span>
+            )}
+            <span className="dev-cursor" style={{ color: DEV.white }}>
+              |
+            </span>
+            <span style={{ color: '#5a6e3a' }}>{view.remained}</span>
+          </div>
+        </div>
+
+        {/* 実装中の様子（カテゴリで見た目が変わる） */}
+        <WorkInProgressPanel
+          category={ticket.category}
+          programLog={programLog}
+          liveCodeLine={liveCodeLine}
+          designNotes={designNotes}
+          graphicsFrame={graphicsFrame}
+          ticketPhraseCount={ticketPhraseCount}
+          soundBeatKey={soundBeatKey}
+          genre={genre}
+          ticketTitle={ticket.flavor.title}
+        />
+
+        {/* ③今回の結果（入力した結果どう変わったか） */}
+        <ResultCard result={lastResult} />
       </div>
     </div>
   );
 };
 
+/** 実装中の様子：カテゴリごとに完全に違う見た目に切り替える */
+const WorkInProgressPanel = (props: {
+  category: TicketCategory;
+  programLog: string[];
+  liveCodeLine: string;
+  designNotes: string[];
+  graphicsFrame: number;
+  ticketPhraseCount: number;
+  soundBeatKey: number;
+  genre: { id: GenreId; emoji: string; bgColor: string } | undefined;
+  ticketTitle: string;
+}) => {
+  const { category } = props;
+  if (category === 'program')
+    return <ProgramLogPanel lines={props.programLog} liveLine={props.liveCodeLine} />;
+  if (category === 'graphics')
+    return (
+      <GraphicsCanvasPanel
+        frame={props.graphicsFrame}
+        stage={props.ticketPhraseCount}
+        genre={props.genre}
+      />
+    );
+  if (category === 'sound') return <SoundMeterPanel beatKey={props.soundBeatKey} title={props.ticketTitle} />;
+  return <DesignMemoPanel notes={props.designNotes} />;
+};
+
+const WIP_HEIGHT = 74;
+
+/** 疑似シンタックスハイライト：IDE風に予約語/関数名/クラス名/文字列/数値/記号を色分け */
+const CODE_KEYWORDS = new Set([
+  'function', 'const', 'let', 'var', 'return', 'async', 'await', 'class',
+  'extends', 'interface', 'private', 'public', 'for', 'of', 'new', 'export', 'if', 'else', 'void',
+]);
+
+const CODE_COLORS: Record<string, string> = {
+  keyword: '#4db3ff',
+  func: '#ffd166',
+  class: '#d8a5ff',
+  string: '#ffa657',
+  number: '#b5cea8',
+  punct: '#5a7a45',
+  default: '#6fe07a',
+};
+
+const tokenizeCode = (code: string): { text: string; kind: string }[] => {
+  const raw = code.match(/[A-Za-z_$][\w$]*|'[^']*'|"[^"]*"|\d+|[{}()[\];,.:<>=]|\s+|./g) ?? [];
+  return raw.map((t, i) => {
+    if (/^\s+$/.test(t)) return { text: t, kind: 'default' };
+    if (/^['"]/.test(t)) return { text: t, kind: 'string' };
+    if (/^\d+$/.test(t)) return { text: t, kind: 'number' };
+    if (/^[{}()[\];,.:<>=]$/.test(t)) return { text: t, kind: 'punct' };
+    if (/^[A-Za-z_$][\w$]*$/.test(t)) {
+      if (CODE_KEYWORDS.has(t)) return { text: t, kind: 'keyword' };
+      let j = i + 1;
+      while (j < raw.length && /^\s+$/.test(raw[j])) j++;
+      if (raw[j] === '(') return { text: t, kind: 'func' };
+      if (/^[A-Z]/.test(t)) return { text: t, kind: 'class' };
+      return { text: t, kind: 'default' };
+    }
+    return { text: t, kind: 'default' };
+  });
+};
+
+const CodeText = ({ code }: { code: string }) => (
+  <>
+    {tokenizeCode(code).map((tok, i) => (
+      <span key={i} style={{ color: CODE_COLORS[tok.kind] }}>
+        {tok.text}
+      </span>
+    ))}
+  </>
+);
+
 /**
- * フェーズ入場時に発生率で当たったイベントだけを積む。
- * v0.14 後期：ベース固定文（「企画書を書く」等）は廃止（効果ゼロの打鍵は意味が無い＝オーナーFB）。
+ * 実装ログの中身。短いうちは左上から詰まり、伸びて枠に収まらなくなったら
+ * 常にカーソル（打っている位置）が見えるよう自動で下へ追従する（プレイヤー操作のスクロールは無し）。
+ */
+const ProgramLogPanel = ({ lines, liveLine }: { lines: string[]; liveLine: string }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [liveLine, lines]);
+
+  return (
+    <div style={{ ...devBox(), gap: 4 }}>
+      <span style={{ fontSize: 11, color: CATEGORY_META.program.color, fontWeight: 700 }}>
+        {'</> '}プログラム
+      </span>
+      <div
+        ref={scrollRef}
+        className="dev-code-scroll"
+        style={{
+          background: '#04060a',
+          border: `1px solid ${DEV.panelBorder}`,
+          padding: '5px 8px',
+          height: WIP_HEIGHT,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          fontSize: 11,
+          lineHeight: '14px',
+          whiteSpace: 'pre-wrap',
+          overflowWrap: 'anywhere',
+          tabSize: 2,
+        }}
+      >
+        {lines.length === 0 && !liveLine ? (
+          <span style={{ color: '#3f5226' }}>実装はまだ始まっていない…</span>
+        ) : (
+          lines.slice(-1).map((l, i) => (
+            <span key={i}>
+              <CodeText code={l} />
+              {'\n'}
+            </span>
+          ))
+        )}
+        {liveLine && (
+          <span className="dev-code-line">
+            <CodeText code={liveLine} />
+            <span className="dev-cursor" style={{ color: '#6fe07a' }}>
+              ▌
+            </span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const GRAPHICS_FRAME_TOTAL = 4;
+
+const GraphicsCanvasPanel = ({
+  frame,
+  stage,
+  genre,
+}: {
+  frame: number;
+  /** このチケット内の進み具合（0=アイコンのみ／1=背景も／2=キラキラも） */
+  stage: number;
+  genre: { id: GenreId; emoji: string; bgColor: string } | undefined;
+}) => {
+  const litFrames = frame === 0 ? 0 : ((frame - 1) % GRAPHICS_FRAME_TOTAL) + 1;
+  const showBackground = stage >= 1;
+  const showSparkles = stage >= 2;
+  const sparkleSpots = [
+    { top: '12%', left: '14%', delay: '0ms' },
+    { top: '20%', left: '80%', delay: '300ms' },
+    { top: '66%', left: '10%', delay: '600ms' },
+    { top: '70%', left: '82%', delay: '150ms' },
+  ];
+  return (
+    <div style={{ ...devBox(), gap: 4 }}>
+      <span style={{ fontSize: 11, color: CATEGORY_META.graphics.color, fontWeight: 700 }}>
+        🎨 デザイン画面
+      </span>
+      <div
+        style={{
+          position: 'relative',
+          background: genre?.bgColor ?? '#12180a',
+          border: `1px solid ${DEV.panelBorder}`,
+          height: WIP_HEIGHT - 18,
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {/* ①背景（チケット内1問目を打ち終えると登場） */}
+        {genre && showBackground && (
+          <img
+            key="bg"
+            className="dev-stat-pop"
+            src={genreBackgroundUrl(genre.id)}
+            alt=""
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'center',
+              imageRendering: 'pixelated',
+            }}
+          />
+        )}
+        {/* 背景素材の左右端が塗り切れていない場合に備え、パネル色へなめらかに馴染ませる */}
+        {genre && showBackground && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: `linear-gradient(to right, ${genre.bgColor} 0%, transparent 18%, transparent 82%, ${genre.bgColor} 100%)`,
+            }}
+          />
+        )}
+        {/* ②装飾のキラキラ（チケット内2問目を打ち終えると登場） */}
+        {showSparkles && sparkleSpots.slice(0, litFrames).map((pos, i) => (
+          <img
+            key={`${frame}-${i}`}
+            src="/sprites/effects/sparkle.png"
+            alt=""
+            className="dev-sparkle-twinkle"
+            style={{
+              position: 'absolute',
+              width: 12,
+              height: 12,
+              imageRendering: 'pixelated',
+              top: pos.top,
+              left: pos.left,
+              animationDelay: pos.delay,
+            }}
+          />
+        ))}
+        {genre ? (
+          <span className="dev-sprite-idle" style={{ position: 'relative' }}>
+            <img
+              key={frame}
+              className="dev-stat-pop"
+              src={genreSpriteUrl(genre.id)}
+              alt={genre.emoji}
+              style={{
+                width: 40,
+                height: 40,
+                imageRendering: 'pixelated',
+                filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.5))',
+              }}
+            />
+          </span>
+        ) : (
+          <span key={frame} className="dev-stat-pop" style={{ fontSize: 30, position: 'relative' }}>
+            🎮
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        <span style={{ fontSize: 9, color: DEV.sub }}>フレーム</span>
+        {Array.from({ length: GRAPHICS_FRAME_TOTAL }, (_, i) => (
+          <span
+            key={i}
+            style={{
+              width: 7,
+              height: 7,
+              display: 'inline-block',
+              background: i < litFrames ? CATEGORY_META.graphics.color : '#1c2410',
+              border: `1px solid ${DEV.panelBorder}`,
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const SoundMeterPanel = ({ beatKey, title }: { beatKey: number; title: string }) => (
+  <div style={{ ...devBox(), gap: 4 }}>
+    <span style={{ fontSize: 11, color: CATEGORY_META.sound.color, fontWeight: 700 }}>
+      🎵 サウンド画面
+    </span>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: 2,
+        height: WIP_HEIGHT - 24,
+        background: '#04060a',
+        border: `1px solid ${DEV.panelBorder}`,
+        padding: '4px 6px',
+      }}
+    >
+      {Array.from({ length: 48 }, (_, i) => (
+        <span
+          key={`${beatKey}-${i}`}
+          className="dev-wave-bar"
+          style={{
+            flex: 1,
+            background: CATEGORY_META.sound.color,
+            animationDelay: `${i * 30}ms`,
+            height: 6 + ((i * 37 + beatKey * 13) % 26),
+          }}
+        />
+      ))}
+    </div>
+    <span style={{ fontSize: 10, color: DEV.sub, overflowWrap: 'anywhere' }}>♪ {title}</span>
+  </div>
+);
+
+const DesignMemoPanel = ({ notes }: { notes: string[] }) => (
+  <div style={{ ...devBox(), gap: 4 }}>
+    <span style={{ fontSize: 11, color: CATEGORY_META.design.color, fontWeight: 700 }}>
+      📋 企画メモ
+    </span>
+    <div
+      style={{
+        background: '#04060a',
+        border: `1px solid ${DEV.panelBorder}`,
+        padding: '5px 8px',
+        height: WIP_HEIGHT,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'flex-end',
+        gap: 2,
+      }}
+    >
+      {notes.length === 0 ? (
+        <span style={{ fontSize: 11, color: '#3f5226' }}>まだメモはない…</span>
+      ) : (
+        notes.map((n, i) => (
+          <span key={i} style={{ fontSize: 11, color: DEV.cream, overflowWrap: 'anywhere' }}>
+            ・{n}
+          </span>
+        ))
+      )}
+    </div>
+  </div>
+);
+
+const RANK_COLOR: Record<SpeedRank, string> = {
+  PERFECT: '#ffd54a',
+  GREAT: '#5fe08a',
+  GOOD: '#7adfff',
+};
+
+/** ③今回の結果カード（ゲージの代わりの主役。入力するたびに更新される） */
+const ResultCard = ({ result }: { result: LastResult | null }) => {
+  if (!result) {
+    return (
+      <div style={{ ...devBox(), gap: 4, minHeight: 58, alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontSize: 11, color: '#3f5226' }}>まだ入力していない…</span>
+      </div>
+    );
+  }
+  if (result.kind === 'event') {
+    const color = '#5fe08a';
+    return (
+      <div key={result.ts} className="dev-result-pop" style={{ ...devBox(), gap: 4, borderColor: color }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color }}>
+          {EVENT_CATEGORY_META[result.event.category].icon} {result.event.name} 解決！
+        </span>
+        <span style={{ fontSize: 11, color: DEV.cream }}>{formatAxisDelta(result.event.success)}</span>
+      </div>
+    );
+  }
+  return (
+    <div key={result.ts} className="dev-result-pop" style={{ ...devBox(), gap: 6 }}>
+      <span style={{ fontSize: 14, fontWeight: 700, color: RANK_COLOR[result.rank] }}>
+        {result.rank}!
+      </span>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+        <ResultChip
+          icon="⚡"
+          label="開発速度"
+          value={`${result.speedPct >= 0 ? '+' : ''}${result.speedPct}%`}
+          color="#4db3ff"
+        />
+        <ResultChip icon="💎" label="品質" value={`+${result.qualityDelta}`} color="#ffd54a" />
+        <ResultChip
+          icon="🐛"
+          label="バグリスク"
+          value={`${result.bugPct}%`}
+          color={result.bugPct <= 0 ? '#5fe08a' : '#ff6b6b'}
+        />
+        <ResultChip icon="✨" label="獲得EXP" value={`+${result.exp}`} color="#d8a5ff" />
+      </div>
+    </div>
+  );
+};
+
+const ResultChip = ({
+  icon,
+  label,
+  value,
+  color,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  color: string;
+}) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+    <span style={{ fontSize: 9, color: DEV.sub, whiteSpace: 'nowrap' }}>
+      {icon} {label}
+    </span>
+    <span style={{ fontSize: 15, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
+      {value}
+    </span>
+  </div>
+);
+
+/**
+ * フェーズ入場時に発生率で当たったイベントだけを積む（development 以外のフェーズ用）。
  */
 const buildMissionQueue = (phase: DevPhase): DevEvent[] =>
   PHASE_EVENTS[phase].filter((ev) => Math.random() < ev.rate);
@@ -956,7 +1206,6 @@ const MissionFlow = ({
   const [log, setLog] = useState<string[]>([]);
   const cur = queue[i];
 
-  // イベント無し（or 全消化）→ 完了チャイム＋✓ を見せて自動で次フェーズへ
   useEffect(() => {
     if (cur) return;
     sfx.phase();
@@ -964,10 +1213,10 @@ const MissionFlow = ({
     return () => window.clearTimeout(t);
   }, [cur]);
 
-  const resolve = (delta: AxisDelta, label2: string, ok: boolean) => {
+  const resolve = (delta: AxisDelta, label2: string) => {
     applyDelta(delta);
-    if (ok) sfx.success();
-    setLog((l) => [`${ok ? '✓' : '✕'} ${label2}：${formatAxisDelta(delta)}`, ...l].slice(0, 5));
+    sfx.success();
+    setLog((l) => [`✓ ${label2}：${formatAxisDelta(delta)}`, ...l].slice(0, 5));
     setI((n) => n + 1);
   };
 
@@ -1012,24 +1261,8 @@ const MissionFlow = ({
         <MissionTyping
           key={i}
           phrase={cur.mission}
-          onComplete={() => resolve(cur.success, cur.missionLabel, true)}
+          onComplete={() => resolve(cur.success, cur.missionLabel)}
         />
-
-        <button
-          type="button"
-          onClick={() => resolve(cur.fail, cur.missionLabel, false)}
-          style={{
-            alignSelf: 'flex-start',
-            padding: '6px 14px',
-            background: 'transparent',
-            border: `1px solid ${DEV.panelBorder}`,
-            color: DEV.sub,
-            fontSize: 12,
-            cursor: 'pointer',
-          }}
-        >
-          スキップ（打たない）
-        </button>
 
         {log.length > 0 && (
           <div style={{ ...devBox(), gap: 2 }}>
@@ -1045,7 +1278,7 @@ const MissionFlow = ({
   );
 };
 
-/** フェーズ中央の外枠 */
+/** フェーズ中央の外枠（development 以外用） */
 const PhaseShell = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div
     style={{
@@ -1120,21 +1353,26 @@ const PHASE_COMMENTS: Record<DevPhase, string[]> = {
   complete: ['おつかれさま！', '最高のチームだった！', '次も作ろう！'],
 };
 
-/** 右カラム：チームからのコメント（アサイン社員×フェーズのフレーバー） */
+/** イベント発生中のチームコメント（焦り） */
+const EVENT_PANIC_COMMENTS = ['えっ、ちょっと待って！', '急いで対応しよう！', 'これはまずいかも…'];
+
+/** 右カラム：チームからのコメント（アサイン社員×フェーズ/イベントのフレーバー） */
 const TeamComments = ({
   team,
   phase,
+  eventActive,
 }: {
   team: { id: string; name: string; role: string }[];
   phase: DevPhase;
+  eventActive: boolean;
 }) => {
-  const comments = PHASE_COMMENTS[phase];
+  const comments = eventActive ? EVENT_PANIC_COMMENTS : PHASE_COMMENTS[phase];
   if (team.length === 0) return null;
   return (
     <div style={{ ...devBox(), gap: 4 }}>
       <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>チームからのコメント</span>
       {team.slice(0, 3).map((e, i) => (
-        <span key={e.id} style={{ fontSize: 11, color: DEV.cream }}>
+        <span key={e.id} style={{ fontSize: 11, color: eventActive ? '#ff8a3c' : DEV.cream }}>
           💬 {e.name}：{comments[i % comments.length]}
         </span>
       ))}
@@ -1142,40 +1380,8 @@ const TeamComments = ({
   );
 };
 
-/** 右カラム：イベントで蓄積した新軸の見える化（0 でない軸だけ表示） */
-const AxesSummary = ({ axes }: { axes: DevAxes }) => {
-  const entries = (Object.keys(axes) as (keyof DevAxes)[])
-    .filter((k) => axes[k] !== 0)
-    .map((k) => ({ key: k, v: axes[k], meta: AXIS_META[k] }));
-  return (
-    <div style={{ ...devBox(), gap: 4 }}>
-      <span style={{ fontSize: 11, color: DEV.sub }}>イベント効果（この作品に蓄積）</span>
-      {entries.length === 0 ? (
-        <span style={{ fontSize: 11, color: '#5a6e3a' }}>まだなし（イベントを打ち切ると貯まる）</span>
-      ) : (
-        entries.map(({ key, v, meta }) => (
-          <span
-            key={key}
-            style={{
-              fontSize: 12,
-              fontWeight: 700,
-              color: v > 0 !== (key === 'bugRate' || key === 'reputationRisk' || key === 'devWeeksDelta' || key === 'costMod')
-                ? DEV.greenBright
-                : '#ff6b6b',
-            }}
-          >
-            {meta.label} {v > 0 ? '+' : ''}
-            {v}
-            {meta.unit}
-          </span>
-        ))
-      )}
-    </div>
-  );
-};
-
-/** 下部バー：そのフェーズで起こりうるイベントだけを表示（spec §5-4） */
-const EventBar = ({ phase }: { phase: DevPhase }) => {
+/** 下部バー：そのフェーズで起こりうるイベント ＋ BGM */
+const BottomBar = ({ phase }: { phase: DevPhase }) => {
   const events = PHASE_EVENTS[phase];
   return (
     <div
@@ -1188,40 +1394,55 @@ const EventBar = ({ phase }: { phase: DevPhase }) => {
         background: '#0a0f08',
         border: `1px solid ${DEV.panelBorder}`,
         minHeight: 44,
-        overflowX: 'auto',
       }}
     >
       <span style={{ fontSize: 11, color: DEV.sub, whiteSpace: 'nowrap' }}>
-        このフェーズで起こりうるイベント
+        次に発生しそうなイベント
       </span>
-      {events.length === 0 && (
-        <span style={{ fontSize: 12, color: '#5a6e3a' }}>（このフェーズはイベントなし）</span>
-      )}
-      {events.map((ev) => (
-        <div
-          key={ev.id}
-          title={ev.flavor}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '4px 10px',
-            background: '#11180b',
-            border: `1px solid ${DEV.panelBorder}`,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          <span style={{ fontSize: 14 }}>{EVENT_CATEGORY_META[ev.category].icon}</span>
-          <span style={{ fontSize: 12, color: DEV.cream }}>{ev.name}</span>
-          <span style={{ fontSize: 11, color: DEV.orange, fontWeight: 700 }}>
-            {Math.round(ev.rate * 100)}%
+      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', flex: 1 }}>
+        {events.length === 0 && (
+          <span style={{ fontSize: 12, color: '#5a6e3a', whiteSpace: 'nowrap' }}>
+            （このフェーズはイベントなし）
           </span>
-        </div>
-      ))}
+        )}
+        {events.map((ev) => (
+          <div
+            key={ev.id}
+            title={ev.flavor}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 10px',
+              background: '#11180b',
+              border: `1px solid ${DEV.panelBorder}`,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{ fontSize: 14 }}>{EVENT_CATEGORY_META[ev.category].icon}</span>
+            <span style={{ fontSize: 12, color: DEV.cream }}>{ev.name}</span>
+            <span style={{ fontSize: 11, color: DEV.orange, fontWeight: 700 }}>
+              {Math.round(ev.rate * 100)}%
+            </span>
+          </div>
+        ))}
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          paddingLeft: 10,
+          borderLeft: `1px solid ${DEV.panelBorder}`,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <span style={{ fontSize: 14 }}>🎵</span>
+        <span style={{ fontSize: 11, color: DEV.sub }}>BGM: 8bit Factory（準備中）</span>
+      </div>
     </div>
   );
 };
-
 
 /** v0.14 開発フェーズのダークパレット（ターミナル風）。 */
 const DEV = {
@@ -1237,15 +1458,6 @@ const DEV = {
   sub: '#7f9a52',
 } as const;
 
-const PHASE_WORK_NOTE: Record<DevPhase, string> = {
-  planning: '企画を固める：ジャンル・テーマ・コンセプトの確認',
-  development: 'ゲームシステムを実装する（コードを打つ）',
-  testing: 'プレイテストでテストケースを消化する',
-  debugging: 'バグを駆除して品質を仕上げる',
-  release: '発売して売上を監視する',
-  complete: '開発完了・打ち上げ',
-};
-
 const devBox = (): React.CSSProperties => ({
   background: '#0a0f08',
   border: `1px solid ${DEV.panelBorder}`,
@@ -1254,4 +1466,3 @@ const devBox = (): React.CSSProperties => ({
   flexDirection: 'column',
   gap: 6,
 });
-

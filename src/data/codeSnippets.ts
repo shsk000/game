@@ -1,17 +1,18 @@
 import type { GenreId } from './genres';
 import type { ThemeId } from './themes';
 
+/** タブ・改行込みの複数行テンプレ（実装ログでインデント付きコードとして流れる） */
 export const TEMPLATES: string[] = [
-  'function {verb}({arg}) { return {arg}.{prop}; }',
-  'async function {verb}({arg}) { await {arg}.{prop}(); }',
-  'class {Cls} extends {Base} { {prop} = {val}; }',
-  'const {arg} = new {Cls}({prop}: {val});',
-  'export function {verb}({arg}) { {arg}.{prop} = {val}; }',
-  'interface I{Cls} { {prop}: {val}; {verb}(): void; }',
-  'private {verb}({arg}: {Cls}) { if ({arg}.{prop}) return; }',
-  'public {verb}({arg}) { for (const i of {arg}.{prop}) i.{verb}(); }',
-  'const {Cls} = ({ {arg} }) => <div>{ {arg}.{prop} }</div>;',
-  'function {verb}() { return {arg}.{prop} * 2; }',
+  'function {verb}({arg}) {\n\treturn {arg}.{prop};\n}',
+  'async function {verb}({arg}) {\n\tawait {arg}.{prop}();\n}',
+  'class {Cls} extends {Base} {\n\t{prop} = {val};\n}',
+  'const {arg} = new {Cls}(\n\t{prop}: {val},\n);',
+  'export function {verb}({arg}) {\n\t{arg}.{prop} = {val};\n}',
+  'interface I{Cls} {\n\t{prop}: {val};\n\t{verb}(): void;\n}',
+  'private {verb}({arg}: {Cls}) {\n\tif ({arg}.{prop}) return;\n}',
+  'public {verb}({arg}) {\n\tfor (const i of {arg}.{prop})\n\t\ti.{verb}();\n}',
+  'const {Cls} = ({ {arg} }) => (\n\t<div>{ {arg}.{prop} }</div>\n);',
+  'function {verb}() {\n\treturn {arg}.{prop} * 2;\n}',
 ];
 
 export const GENRE_VERBS: Record<GenreId, string[]> = {
@@ -92,7 +93,7 @@ const formatValue = (raw: string, idx: number): string => {
   return `[${(idx % 5) + 1}]`;
 };
 
-export const buildLine = ({
+const buildStatement = ({
   genreId,
   themeId,
   idx,
@@ -122,3 +123,19 @@ export const buildLine = ({
     .replaceAll('{prop}', prop)
     .replaceAll('{val}', val);
 };
+
+/** 1回のフレーズで複数の文を繋げて長めのコードブロックにする（打つほど色んな文が流れて見える） */
+const STATEMENTS_PER_LINE = 3;
+
+export const buildLine = ({
+  genreId,
+  themeId,
+  idx,
+}: {
+  genreId: GenreId;
+  themeId: ThemeId;
+  idx: number;
+}): string =>
+  Array.from({ length: STATEMENTS_PER_LINE }, (_, i) =>
+    buildStatement({ genreId, themeId, idx: idx * STATEMENTS_PER_LINE + i * 7 }),
+  ).join('\n\n');

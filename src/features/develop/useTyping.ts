@@ -58,6 +58,8 @@ export const useTyping = ({
   // 正確度カウント
   const correctCountRef = useRef(0);
   const failCountRef = useRef(0);
+  // combo の実値（setState の updater 内で副作用コールバックを呼ばないための真値）
+  const comboValueRef = useRef(0);
 
   useEffect(() => {
     const engine = engineRef.current!;
@@ -93,11 +95,10 @@ export const useTyping = ({
           completed: r.inputAlphabet.completedInputAlphabet,
           remained: r.inputAlphabet.remainedAlphabet,
         }));
-        setCombo((c) => {
-          const nc = c + 1;
-          onCorrectRef.current?.(nc);
-          return nc;
-        });
+        const nc = comboValueRef.current + 1;
+        comboValueRef.current = nc;
+        setCombo(nc);
+        onCorrectRef.current?.(nc);
         const now = performance.now();
         const arr = correctTimesRef.current;
         arr.push(now);
@@ -114,19 +115,17 @@ export const useTyping = ({
       } else if (r.result === 'fail') {
         failCountRef.current += 1;
         setFailCount((c) => c + 1);
-        setCombo((c) => {
-          if (c > 0) onComboBreakRef.current?.(c);
-          return 0;
-        });
+        if (comboValueRef.current > 0) onComboBreakRef.current?.(comboValueRef.current);
+        comboValueRef.current = 0;
+        setCombo(0);
         reportAccuracy();
       } else if (r.result === 'complete') {
         correctCountRef.current += 1;
         onPhraseCompleteRef.current();
-        setCombo((c) => {
-          const nc = c + 1;
-          onCorrectRef.current?.(nc);
-          return nc;
-        });
+        const nc = comboValueRef.current + 1;
+        comboValueRef.current = nc;
+        setCombo(nc);
+        onCorrectRef.current?.(nc);
         setIdx((i) => i + 1);
         reportAccuracy();
       }

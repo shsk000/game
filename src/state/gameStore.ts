@@ -249,7 +249,7 @@ type Actions = {
   /** v0.15：バグ侵食（完成度じわ減り。0 未満にならない） */
   erodeDevelopLoC: (n: number) => void;
   /** v0.15：ビルドアップ・タイピングの属性ポイント加算 */
-  addDevStat: (key: 'fun' | 'graphics' | 'sound' | 'plan', n: number) => void;
+  addDevStat: (key: 'program' | 'graphics' | 'sound' | 'design', n: number) => void;
   reportCombo: (combo: number) => void;
   reportWPM: (wpm: number) => void;
   reportAccuracy: (acc: number) => void;
@@ -370,7 +370,7 @@ export const useGameStore = create<GameState>()(
         scale,
         phase: 'planning',
         axes: { ...ZERO_AXES },
-        devStats: { fun: 0, graphics: 0, sound: 0, plan: 0 },
+        devStats: { program: 0, graphics: 0, sound: 0, design: 0 },
         requiredLoC: def.requiredLoC,
         doneLoC: 0,
         maxCombo: 0,
@@ -540,7 +540,7 @@ export const useGameStore = create<GameState>()(
     addDevStat: (key, n) => {
       const cur = get().current;
       if (!cur || cur.finishedAt !== null) return;
-      const stats = cur.devStats ?? { fun: 0, graphics: 0, sound: 0, plan: 0 };
+      const stats = cur.devStats ?? { program: 0, graphics: 0, sound: 0, design: 0 };
       set({ current: { ...cur, devStats: { ...stats, [key]: stats[key] + n } } });
     },
 
@@ -666,9 +666,9 @@ export const useGameStore = create<GameState>()(
       const axes = cur.axes ?? ZERO_AXES;
       // v0.15：ビルドアップ・タイピングの開発パラメータ（文を打って積んだ 4 属性）も品質へ合流。
       // 「打った文がどこに効いたか」の因果をリリース結果まで一本で繋ぐ（重みは叩き台 🔧）
-      const stats = cur.devStats ?? { fun: 0, graphics: 0, sound: 0, plan: 0 };
+      const stats = cur.devStats ?? { program: 0, graphics: 0, sound: 0, design: 0 };
       const statQualityBonus =
-        stats.fun * 0.12 + stats.graphics * 0.08 + stats.sound * 0.08 + stats.plan * 0.05;
+        stats.program * 0.12 + stats.graphics * 0.08 + stats.sound * 0.08 + stats.design * 0.05;
       const axisQualityBonus =
         (axes.funFactor + axes.usability + axes.balance) * 0.3 -
         axes.bugRate * 0.2 +
