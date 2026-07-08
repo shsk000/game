@@ -21,6 +21,35 @@ import { sfx } from '../../utils/sfx';
 /** v0.15 フィーバー定数（叩き台 🔧）：正打 60 打で MAX、15 秒間 進捗×2＋ボーナスラッシュ */
 const FEVER_MAX = 60;
 const FEVER_DURATION_MS = 15000;
+/** フィーバーの充填パイル数（小さい充填インジケータ・固定個数＝レイアウトシフトしない） */
+const FEVER_PIPS = 6;
+
+/**
+ * v0.15.1：開発フェーズの可視化（オーナーFB「ゲージだけでなく、デザイン/プログラミングを表現して」）。
+ * - デザイン画面プレビュー：graphics+sound ポイントに応じてモザイクが1マスずつ色で埋まる
+ * - プログラム画面プレビュー：fun/bug ポイントで擬似コード行が1行ずつ増える
+ * どちらも「打った文がどこで何を組み上げているか」を数字ではなく絵で見せる。
+ */
+const DESIGN_MOSAIC_COLS = 8;
+const DESIGN_MOSAIC_ROWS = 4;
+const DESIGN_MOSAIC_COLORS = ['#4db3ff', '#5fe08a', '#ffb454', '#d8a5ff', '#ff8a8a'];
+
+const CODE_FLAVOR_LINES = [
+  'function attack() {',
+  '  if (hp <= 0) return;',
+  '  player.move(dx, dy);',
+  '  enemy.spawn(x, y);',
+  '  score += combo * 10;',
+  '  if (isBoss) hp *= 3;',
+  '  playSound("hit");',
+  '  state = "playing";',
+  '  update(deltaTime);',
+  '  collision.check(a, b);',
+  '  loadLevel(next);',
+  '  saveData(progress);',
+  '  fixBug(issueId);',
+  '}',
+];
 
 import { GENRE_BY_ID } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
@@ -90,6 +119,9 @@ export const DevelopScreen = () => {
   const [gainPop, setGainPop] = useState<{ id: number; text: string; color: string } | null>(
     null,
   );
+  // v0.15.1：プログラム画面プレビュー用の擬似コード行（fun/bug 完了で 1 行ずつ増える）
+  const [codeLines, setCodeLines] = useState<string[]>([]);
+  const codeLineIdxRef = useRef(0);
 
   // v0.15 フィーバー（spec §1-4）：正打で蓄積・ミスで減少、MAX で自動発動 15 秒（叩き台 🔧）
   const [feverGauge, setFeverGauge] = useState(0);
@@ -151,6 +183,12 @@ export const DevelopScreen = () => {
           applyAxisDelta({ bugRate: -attrGain });
         } else {
           addDevStat(pair.attr, attrGain);
+        }
+        // プログラム画面プレビュー：fun/bug（ロジック系）の完了で擬似コードが 1 行増える
+        if (pair.attr === 'fun' || pair.attr === 'bug') {
+          const line = CODE_FLAVOR_LINES[codeLineIdxRef.current % CODE_FLAVOR_LINES.length];
+          codeLineIdxRef.current += 1;
+          setCodeLines((l) => [...l, line].slice(-6));
         }
         if (rank === 'PERFECT') sfx.success();
         else sfx.complete();
@@ -263,14 +301,18 @@ export const DevelopScreen = () => {
         style={{
           flex: 1,
           minHeight: 0,
+          minWidth: 0,
           display: 'grid',
-          gridTemplateColumns: '240px 1fr 300px',
+          // v0.15.1 修正：`1fr` 単体はグリッド最小幅が「中身の最大幅（max-content）」になるため、
+          // 折り返さない長い文字列（ローマ字入力・擬似コード行）があると列ごと画面が横に伸びる。
+          // minmax(0, 1fr) にして中身の幅を無視し、列幅をレイアウトどおりに固定する。
+          gridTemplateColumns: '240px minmax(0, 1fr) 300px',
           gap: 12,
           padding: 12,
         }}
       >
         {/* 左：フェーズ進行 ＋ チーム */}
-        <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+        <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, minWidth: 0 }}>
           <PhaseProgressList phase={phase} />
           <div style={{ ...devBox(), gap: 4 }}>
             <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>現在の作業</span>
@@ -283,12 +325,10 @@ export const DevelopScreen = () => {
         </aside>
 
         {/* 中央：フェーズ別メインパネル */}
-        <main style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <main style={{ minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           {isDevelopment ? (
             <DevelopCenter
               phaseLabel={phaseMeta.label}
-              missionName={current.missionName}
-              missionDesc={current.missionDesc}
               view={view}
               combo={combo}
               rating={rating}
@@ -300,6 +340,7 @@ export const DevelopScreen = () => {
               curPair={attrPairs.length ? attrPairs[idx % attrPairs.length] : null}
               nextPairs={[1, 2, 3].map((d) => attrPairs[(idx + d) % Math.max(1, attrPairs.length)])}
               devStats={current.devStats ?? { fun: 0, graphics: 0, sound: 0, plan: 0 }}
+              codeLines={codeLines}
               gainPop={gainPop}
               feverGauge={feverGauge}
               feverActive={feverActive}
@@ -316,7 +357,7 @@ export const DevelopScreen = () => {
         </main>
 
         {/* 右：現在のプロジェクト（フェーズ画像＋情報） */}
-        <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+        <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, minWidth: 0 }}>
           <div style={{ ...devBox(), gap: 6 }}>
             <span style={{ fontSize: 11, color: DEV.sub }}>現在のプロジェクト</span>
             <span style={{ fontSize: 18, fontWeight: 700, color: DEV.cream, lineHeight: 1.1 }}>
@@ -473,8 +514,6 @@ const TeamStatus = ({
 /** 中央：開発フェーズ（タイピング） */
 const DevelopCenter = ({
   phaseLabel,
-  missionName,
-  missionDesc,
   view,
   combo,
   rating,
@@ -486,13 +525,12 @@ const DevelopCenter = ({
   curPair,
   nextPairs,
   devStats,
+  codeLines,
   gainPop,
   feverGauge,
   feverActive,
 }: {
   phaseLabel: string;
-  missionName?: string;
-  missionDesc?: string;
   view: { hiragana: string; completed: string; remained: string };
   combo: number;
   rating: KeystrokeRating;
@@ -504,6 +542,7 @@ const DevelopCenter = ({
   curPair: AttrPhrase | null;
   nextPairs: (AttrPhrase | undefined)[];
   devStats: { fun: number; graphics: number; sound: number; plan: number };
+  codeLines: string[];
   gainPop: { id: number; text: string; color: string } | null;
   feverGauge: number;
   feverActive: boolean;
@@ -537,17 +576,6 @@ const DevelopCenter = ({
     </div>
 
     <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {(missionName || missionDesc) && (
-        <div>
-          {missionName && (
-            <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>{missionName}</div>
-          )}
-          {missionDesc && (
-            <span style={{ fontSize: 15, color: DEV.cream, fontWeight: 700, marginLeft: 8 }}>{missionDesc}</span>
-          )}
-        </div>
-      )}
-
       {/* 次の作業プレビュー：次に何の能力が伸びるかが読める（固定高＝ずれない） */}
       <div
         style={{
@@ -605,6 +633,9 @@ const DevelopCenter = ({
             color: curPair ? DEV_ATTR_META[curPair.attr].color : DEV.cream,
             letterSpacing: '0.04em',
             minHeight: 40,
+            // v0.15.1 修正：折り返し禁止のまま長い文が来ると箱ごと画面を横に押し広げる
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
           }}
         >
           {view.hiragana}
@@ -631,6 +662,9 @@ const DevelopCenter = ({
             fontSize: 20,
             letterSpacing: '0.08em',
             minHeight: 30,
+            // v0.15.1 修正：ローマ字は英数字の連続で折り返しが起きにくく、画面が横に伸びる主因だった
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
           }}
         >
           {/* 正打ジュース：最後に打った文字が一瞬光る */}
@@ -647,7 +681,10 @@ const DevelopCenter = ({
         </div>
       </div>
 
-      {/* COMBO ＋ ノリゲージ（コンボが進捗倍率に直結。切れると ×1.0 に戻る） */}
+      {/* ★できてきたもの：デザイン画面／プログラム画面のプレビュー（数字でなく絵で見せる） */}
+      <BuildPreview devStats={devStats} codeLines={codeLines} />
+
+      {/* COMBO（固定幅ラベルでテキスト長変化によるガタつきを防ぐ）＋ フィーバー充填パイル（固定個数） */}
       <div
         style={{
           ...devBox(),
@@ -667,6 +704,7 @@ const DevelopCenter = ({
               color: DEV.orange,
               fontVariantNumeric: 'tabular-nums',
               lineHeight: 1,
+              width: 48,
             }}
           >
             {combo}
@@ -681,12 +719,12 @@ const DevelopCenter = ({
           )}
         </div>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 11, color: DEV.sub }}>
-            ノリゲージ（進捗倍率{' '}
+          <span style={{ fontSize: 11, color: DEV.sub, display: 'inline-block', width: 220 }}>
+            ノリ（コンボで進捗倍率アップ）
             <span style={{ color: DEV.orange, fontWeight: 700 }}>
+              {' '}
               ×{noriMultiplier(combo).toFixed(2)}
             </span>
-            ・ミスで途切れる）
           </span>
           <SegGauge
             pct={Math.min(100, (combo / NORI_MAX_COMBO) * 100)}
@@ -695,43 +733,58 @@ const DevelopCenter = ({
             height={10}
           />
         </div>
-        {/* フィーバーゲージ：正打で蓄積、MAX で自動発動（15 秒 進捗×2＋ボーナスラッシュ） */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {feverActive ? (
-            <span className="dev-fever-text" style={{ fontSize: 13, fontWeight: 700, color: '#ff5a3c' }}>
-              🔥 FEVER!! 進捗×2＋ひらめきラッシュ！
-            </span>
-          ) : (
-            <span style={{ fontSize: 11, color: DEV.sub }}>
-              フィーバーゲージ（正打で蓄積・MAXで発動）
-            </span>
-          )}
-          <SegGauge
-            pct={feverActive ? 100 : Math.min(100, (feverGauge / FEVER_MAX) * 100)}
-            color={feverActive ? '#ff5a3c' : '#ffd54a'}
-            track="#0c1207"
-            height={10}
-          />
+        {/* フィーバー：小さい充填パイル固定 6 個（テキスト長で揺れない） */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+          <span style={{ fontSize: 10, color: DEV.sub }}>⚡</span>
+          {Array.from({ length: FEVER_PIPS }, (_, i) => {
+            const threshold = ((i + 1) / FEVER_PIPS) * FEVER_MAX;
+            const lit = feverActive || feverGauge >= threshold;
+            return (
+              <span
+                key={i}
+                style={{
+                  width: 8,
+                  height: 8,
+                  display: 'inline-block',
+                  background: lit ? (feverActive ? '#ff5a3c' : '#ffd54a') : '#1c2410',
+                  border: `1px solid ${DEV.panelBorder}`,
+                }}
+              />
+            );
+          })}
+          <span
+            className={feverActive ? 'dev-fever-text' : undefined}
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: feverActive ? '#ff5a3c' : DEV.sub,
+              width: 76,
+            }}
+          >
+            {feverActive ? '🔥FEVER!' : 'フィーバー'}
+          </span>
         </div>
       </div>
 
-      {/* 開発ログ：フレーズ完了＝見える成果 */}
-      {devLog.length > 0 && (
-        <div style={{ ...devBox(), gap: 2 }}>
-          {devLog.map((line, idx) => (
+      {/* 開発ログ：フレーズ完了＝見える成果（常に 1 行ぶんの高さを確保＝ガタつき無し） */}
+      <div style={{ ...devBox(), gap: 2, minHeight: 30, justifyContent: 'center' }}>
+        {devLog.length === 0 ? (
+          <span style={{ fontSize: 12, color: '#3f5226' }}>まだ何も完了していない…</span>
+        ) : (
+          devLog.slice(0, 1).map((line) => (
             <span
               key={line.id}
               style={{
                 fontSize: 12,
-                color: idx === 0 ? DEV.greenBright : DEV.sub,
-                fontWeight: idx === 0 ? 700 : 400,
+                color: DEV.greenBright,
+                fontWeight: 700,
               }}
             >
               {line.text}
             </span>
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
 
       {/* ★開発パラメータ：打った文の属性がここに積み上がる（因果の見える化の本体） */}
       <div>
@@ -781,6 +834,100 @@ const DevelopCenter = ({
     </div>
   </div>
 );
+
+/**
+ * ★できてきたもの：デザイン画面／プログラム画面のプレビュー。
+ * 打った文の属性を「数字」ではなく「絵」で見せる（オーナーFB 2026-07-08）。
+ * - デザイン画面：graphics+sound ポイントに応じてモザイクが 1 マスずつ色で埋まる
+ * - プログラム画面：fun/bug（ロジック系）の完了で擬似コード行が 1 行ずつ増える
+ * どちらも高さ固定（アスペクト比 / 固定 px）＝ CLS なし。
+ */
+const BuildPreview = ({
+  devStats,
+  codeLines,
+}: {
+  devStats: { fun: number; graphics: number; sound: number; plan: number };
+  codeLines: string[];
+}) => {
+  const totalCells = DESIGN_MOSAIC_COLS * DESIGN_MOSAIC_ROWS;
+  const designFillCount = Math.min(
+    totalCells,
+    Math.floor((devStats.graphics + devStats.sound) / 3),
+  );
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8 }}>
+      {/* デザイン画面プレビュー */}
+      <div style={{ ...devBox(), gap: 4 }}>
+        <span style={{ fontSize: 11, color: DEV_ATTR_META.graphics.color, fontWeight: 700 }}>
+          🎨 デザイン画面（できてきた見た目）
+        </span>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${DESIGN_MOSAIC_COLS}, 1fr)`,
+            gridTemplateRows: `repeat(${DESIGN_MOSAIC_ROWS}, 1fr)`,
+            gap: 2,
+            background: '#04060a',
+            border: `1px solid ${DEV.panelBorder}`,
+            padding: 3,
+            height: 72,
+          }}
+        >
+          {Array.from({ length: totalCells }, (_, i) => {
+            const filled = i < designFillCount;
+            const color = DESIGN_MOSAIC_COLORS[i % DESIGN_MOSAIC_COLORS.length];
+            return (
+              <div
+                key={i}
+                className={i === designFillCount - 1 ? 'dev-mosaic-pop' : undefined}
+                style={{ background: filled ? color : '#12180a' }}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      {/* プログラム画面プレビュー */}
+      <div style={{ ...devBox(), gap: 4 }}>
+        <span style={{ fontSize: 11, color: DEV_ATTR_META.fun.color, fontWeight: 700 }}>
+          💻 プログラム画面（書いているコード）
+        </span>
+        <div
+          style={{
+            background: '#04060a',
+            border: `1px solid ${DEV.panelBorder}`,
+            padding: '4px 6px',
+            height: 72,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-end',
+            fontSize: 11,
+            lineHeight: '13px',
+            color: '#6fe07a',
+            // v0.15.1 修正：pre は折り返し禁止＝長い行で箱が横に伸びる原因だった。
+            // pre-wrap でインデント（先頭スペース）は保持しつつ折り返す。
+            whiteSpace: 'pre-wrap',
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {codeLines.length === 0 ? (
+            <span style={{ color: '#3f5226' }}>{'// まだ何も書かれていない…'}</span>
+          ) : (
+            codeLines.map((line, i) => (
+              <span key={i} className={i === codeLines.length - 1 ? 'dev-code-line' : undefined}>
+                {line}
+              </span>
+            ))
+          )}
+          <span className="dev-cursor" style={{ color: '#6fe07a' }}>
+            ▌
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 /**
  * フェーズ入場時に発生率で当たったイベントだけを積む。

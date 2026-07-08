@@ -1467,6 +1467,32 @@ body,
   animation-fill-mode: both, none;
 }
 
+/* v0.15.1：デザイン画面プレビューのモザイクが 1 マス埋まる瞬間にポップ */
+@keyframes dev-mosaic-pop-kf {
+  0% {
+    transform: scale(1.8);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.dev-mosaic-pop {
+  animation: dev-mosaic-pop-kf 200ms steps(3) both;
+}
+
+/* v0.15.1：プログラム画面プレビューの新規コード行がフラッシュして出現 */
+@keyframes dev-code-line-kf {
+  0% {
+    color: #d7ffb0;
+  }
+  100% {
+    color: #6fe07a;
+  }
+}
+.dev-code-line {
+  animation: dev-code-line-kf 300ms steps(3) both;
+}
+
 /* v0.15 ビルドアップ：属性値が増えた瞬間に数字が弾む（key 再生） */
 @keyframes dev-stat-pop-kf {
   0% {
