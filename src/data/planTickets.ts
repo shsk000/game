@@ -1,3 +1,4 @@
+import type { Rng } from '../core/ports';
 import type { GenreId } from './genres';
 
 /**
@@ -13,14 +14,7 @@ import type { GenreId } from './genres';
  * - 実効果は applyAxisDelta（面白さ funFactor / 期待度 hype）でリリースへ合流（因果を一本に）
  */
 
-export type PlanCategory =
-  | 'concept'
-  | 'genre'
-  | 'target'
-  | 'world'
-  | 'core'
-  | 'title'
-  | 'sales';
+export type PlanCategory = 'concept' | 'genre' | 'target' | 'world' | 'core' | 'title' | 'sales';
 
 /** スペック指定の進行順 */
 export const PLAN_CATEGORY_ORDER: PlanCategory[] = [
@@ -477,9 +471,9 @@ export const getPlanTicketAt = (
   }
 };
 
-export const pickPlanPhrase = (category: PlanCategory): string => {
+export const pickPlanPhrase = (category: PlanCategory, rng: Rng = Math.random): string => {
   const pool = PLAN_PHRASE_POOLS[category];
-  return pool[Math.floor(Math.random() * pool.length)];
+  return pool[Math.floor(rng() * pool.length)];
 };
 
 export const pickPlanMemo = (category: PlanCategory, index: number): string => {

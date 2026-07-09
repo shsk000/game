@@ -1,3 +1,5 @@
+import type { Rng } from '../core/ports';
+
 export type GenreId =
   | 'action'
   | 'puzzle'
@@ -695,10 +697,10 @@ export const genreSpriteUrl = (genreId: GenreId): string => `/sprites/genre/${ge
 /** ジャンル代表背景シーン（PixelLab生成・横長パノラマ・透過）。グラフィック作業中パネルの背景に使用 */
 export const genreBackgroundUrl = (genreId: GenreId): string => `/sprites/genre_bg/${genreId}.png`;
 
-export const getPhrases = (genreId: GenreId, count: number): string[] => {
+export const getPhrases = (genreId: GenreId, count: number, rng: Rng = Math.random): string[] => {
   const pool = GENRE_BY_ID[genreId].snippets;
   const result: string[] = [];
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  const shuffled = [...pool].sort(() => rng() - 0.5);
   for (let i = 0; i < count; i++) {
     result.push(shuffled[i % shuffled.length]);
   }

@@ -1,3 +1,4 @@
+import type { Rng } from '../core/ports';
 import type { GenreId } from './genres';
 import { GENRE_BY_ID, GENRES } from './genres';
 import type { ThemeId } from './themes';
@@ -13,17 +14,23 @@ export type Trend = {
 /** 1トレンドの寿命（ms）。MVPでは6分＝中盤のテンポ */
 const TREND_DURATION_MS = 6 * 60 * 1000;
 
-const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+const pick = <T>(arr: T[], rng: Rng): T => arr[Math.floor(rng() * arr.length)];
 
-export const newTrend = (now: number): Trend => ({
-  genreId: pick(GENRES.map((g) => g.id)),
-  themeId: pick(THEMES.map((t) => t.id)),
+export const newTrend = (now: number, rng: Rng = Math.random): Trend => ({
+  genreId: pick(
+    GENRES.map((g) => g.id),
+    rng,
+  ),
+  themeId: pick(
+    THEMES.map((t) => t.id),
+    rng,
+  ),
   expiresAt: now + TREND_DURATION_MS,
 });
 
-export const ensureTrend = (current: Trend | null, now: number): Trend => {
+export const ensureTrend = (current: Trend | null, now: number, rng: Rng = Math.random): Trend => {
   if (current && current.expiresAt > now) return current;
-  return newTrend(now);
+  return newTrend(now, rng);
 };
 
 /**

@@ -1,3 +1,4 @@
+import type { Rng } from '../core/ports';
 import type { GenreId } from './genres';
 import type { ThemeId } from './themes';
 
@@ -34,10 +35,10 @@ const NOUN_BY_THEME: Record<ThemeId, string[]> = {
   animal: ['けものたちの', 'もふもふ広場', '動物紀行'],
 };
 
-const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+const pick = <T>(arr: T[], rng: Rng): T => arr[Math.floor(rng() * arr.length)];
 
-export const generateTitle = (genre: GenreId, theme: ThemeId): string => {
-  const prefix = pick(PREFIX_BY_GENRE[genre]);
-  const noun = pick(NOUN_BY_THEME[theme]);
+export const generateTitle = (genre: GenreId, theme: ThemeId, rng: Rng = Math.random): string => {
+  const prefix = pick(PREFIX_BY_GENRE[genre], rng);
+  const noun = pick(NOUN_BY_THEME[theme], rng);
   return `${prefix}${noun}`;
 };

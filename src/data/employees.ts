@@ -1,3 +1,5 @@
+import type { Deps, Rng } from '../core/ports';
+import { defaultDeps } from '../core/ports';
 import type { Candidate, Employee, EmployeeRole, EmployeeSpecialty } from '../state/types';
 import { computeMonthlyWage } from './balance';
 import type { CategoryId } from './categories';
@@ -55,9 +57,9 @@ const ROLE_LABELS: Record<EmployeeRole, string> = {
 
 export const roleLabel = (r: EmployeeRole) => ROLE_LABELS[r];
 
-const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+const pick = <T>(arr: T[], rng: Rng): T => arr[Math.floor(rng() * arr.length)];
 
-const randomName = () => `${pick(SURNAMES)} ${pick(GIVEN)}`;
+const randomName = (rng: Rng) => `${pick(SURNAMES, rng)} ${pick(GIVEN, rng)}`;
 
 const ROLE_DICE: EmployeeRole[] = ['programmer', 'programmer', 'designer', 'designer', 'pr'];
 
@@ -67,10 +69,10 @@ const ROLE_DICE: EmployeeRole[] = ['programmer', 'programmer', 'designer', 'desi
  *  - designer:   品質基礎+ 2〜10
  *  - pr:         売上%加算 5〜20
  */
-const rollPower = (role: EmployeeRole): number => {
-  if (role === 'programmer') return Math.round((0.3 + Math.random() * 0.9) * 10) / 10;
-  if (role === 'designer') return Math.round(2 + Math.random() * 8);
-  return Math.round(5 + Math.random() * 15);
+const rollPower = (role: EmployeeRole, rng: Rng): number => {
+  if (role === 'programmer') return Math.round((0.3 + rng() * 0.9) * 10) / 10;
+  if (role === 'designer') return Math.round(2 + rng() * 8);
+  return Math.round(5 + rng() * 15);
 };
 
 /**
@@ -110,16 +112,16 @@ const PRIMARY_CATEGORIES_BY_ROLE: Record<EmployeeRole, CategoryId[]> = {
   pr: ['story', 'presentation'],
 };
 
-const rollSpecialties = (role: EmployeeRole): EmployeeSpecialty[] => {
+const rollSpecialties = (role: EmployeeRole, rng: Rng): EmployeeSpecialty[] => {
   const result: EmployeeSpecialty[] = [];
   const primaryPool = PRIMARY_CATEGORIES_BY_ROLE[role];
-  const primary = pick(primaryPool);
-  const primaryBonus = Math.round(3 + Math.random() * 7); // 3-10
+  const primary = pick(primaryPool, rng);
+  const primaryBonus = Math.round(3 + rng() * 7); // 3-10
   result.push({ categoryId: primary, bonus: primaryBonus });
-  if (Math.random() < 0.4) {
+  if (rng() < 0.4) {
     const otherPool = ALL_CATEGORY_IDS.filter((c) => c !== primary);
-    const second = pick(otherPool);
-    const secondBonus = Math.round(1 + Math.random() * 3); // 1-4
+    const second = pick(otherPool, rng);
+    const secondBonus = Math.round(1 + rng() * 3); // 1-4
     result.push({ categoryId: second, bonus: secondBonus });
   }
   return result;
@@ -127,17 +129,18 @@ const rollSpecialties = (role: EmployeeRole): EmployeeSpecialty[] => {
 
 let counter = 0;
 
-export const newCandidate = (): Candidate => {
-  const role = pick(ROLE_DICE);
-  const power = rollPower(role);
+export const newCandidate = (deps: Deps = defaultDeps): Candidate => {
+  const { rng, now } = deps;
+  const role = pick(ROLE_DICE, rng);
+  const power = rollPower(role, rng);
   counter += 1;
   return {
-    id: `c-${Date.now()}-${counter}`,
-    name: randomName(),
+    id: `c-${now()}-${counter}`,
+    name: randomName(rng),
     role,
     power,
     wage: wageFor(role, power),
-    specialties: rollSpecialties(role),
+    specialties: rollSpecialties(role, rng),
   };
 };
 
