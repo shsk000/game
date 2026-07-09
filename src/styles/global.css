@@ -1360,21 +1360,6 @@ body,
 }
 
 /* v0.14 0.1 秒ジュース：正打で最後の文字が光る（key 再生） */
-@keyframes dev-key-glow {
-  0% {
-    color: #fffdf2;
-    text-shadow: 0 0 6px rgba(166, 225, 56, 0.9);
-  }
-  100% {
-    color: #8fd02a;
-    text-shadow: none;
-  }
-}
-.dev-key-glow {
-  display: inline-block;
-  animation: dev-key-glow 180ms steps(2) both;
-}
-
 /* v0.14 0.1 秒ジュース：ミスで入力枠が揺れる（failCount の key 再生） */
 @keyframes dev-miss-shake {
   0% {
@@ -1497,6 +1482,24 @@ body,
 }
 .dev-code-scroll::-webkit-scrollbar {
   display: none;
+}
+
+/* v0.15.3：ローマ字入力の「次に打つ文字」ハイライト（打った文字より次の文字を目立たせる） */
+@keyframes dev-next-key-kf {
+  0%,
+  100% {
+    background: #2e4a14;
+  }
+  50% {
+    background: #416a1c;
+  }
+}
+.dev-next-key {
+  display: inline-block;
+  color: #fffdf2;
+  background: #2e4a14;
+  border-bottom: 2px solid #a6e138;
+  animation: dev-next-key-kf 600ms steps(2) infinite;
 }
 
 /* v0.15：フィーバー中の画面変化（背景が熱を帯びて脈動＋テキスト明滅） */

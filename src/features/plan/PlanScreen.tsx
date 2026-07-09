@@ -4,6 +4,7 @@ import { JacketView } from '../../components/JacketView';
 import { Tutorial } from '../../components/Tutorial';
 import { PixelButton, PixelWindow } from '../../components/ui';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
+import { planWeeksAllowance } from '../../data/balance';
 import { compatLabel, getCompat } from '../../data/compatibility';
 import type { GenreId } from '../../data/genres';
 import { GENRE_BY_ID, GENRES } from '../../data/genres';
@@ -288,7 +289,9 @@ export const PlanScreen = () => {
             {(() => {
               const def = SCALE_BY_ID[scale];
               const range = estimateRevenueRange(def.baseUnit);
-              const monthCount = Math.round(def.neededWeeks / 4);
+              // v0.15.3：予定週は企画・仕上げの猶予込みで案内する
+              const totalWeeks = def.neededWeeks + planWeeksAllowance(def.neededWeeks);
+              const monthCount = Math.round(totalWeeks / 4);
               // E-4: 中央値売上で見込み利益。赤字なら赤色で警告
               const profitMid = computeProfitForScale({
                 totalRevenue: range.mid,
@@ -320,7 +323,7 @@ export const PlanScreen = () => {
                   />
                   <EstimateBox
                     label="予想開発期間"
-                    value={`${formatWeeks(def.neededWeeks)}（${monthCount} ヶ月）`}
+                    value={`${formatWeeks(totalWeeks)}（${monthCount} ヶ月）`}
                     accent={COLORS.accentOrange}
                   />
                   <EstimateBox

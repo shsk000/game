@@ -19,11 +19,24 @@ import {
   type TicketCategory,
 } from '../../data/devPhrases';
 import { buildLine } from '../../data/codeSnippets';
+import {
+  GENRE_PLAN_CONTENT,
+  getPlanTicketAt,
+  IDEA_CARD_COLORS,
+  PHRASES_PER_PLAN_TICKET,
+  pickPlanMemo,
+  pickPlanPhrase,
+  PLAN_BASE_GAIN,
+  PLAN_CATEGORY_META,
+  PLAN_CATEGORY_ORDER,
+  type PlanCategory,
+} from '../../data/planTickets';
 import { GENRE_BY_ID, genreBackgroundUrl, genreSpriteUrl, type GenreId } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
 import { DEV_PHASE_META, DEV_PHASE_ORDER, type DevPhase, dateToWeekIndex } from '../../state/types';
+import { planWeeksAllowance } from '../../data/balance';
 import { computeDevImpact, progressGain, toCharsPerMin } from './devImpact';
 import { useTyping } from './useTyping';
 import { sfx } from '../../utils/sfx';
@@ -35,6 +48,9 @@ const FEVER_DURATION_MS = 15000;
 /** 開発全体の PHASE ドット総数（演出。overall progressPct に連動） */
 const TOTAL_PHASE_DOTS = 6;
 
+/** チケットカードの固定高さ（内容の長短で入力欄が上下しないように） */
+const TICKET_CARD_HEIGHT = 76;
+
 type LastResult =
   | {
       kind: 'ticket';
@@ -42,6 +58,15 @@ type LastResult =
       speedPct: number;
       qualityDelta: number;
       bugPct: number;
+      exp: number;
+      ts: number;
+    }
+  | {
+      kind: 'plan';
+      rank: SpeedRank;
+      funGain: number;
+      hypeGain: number;
+      driftPct: number;
       exp: number;
       ts: number;
     }
@@ -75,6 +100,7 @@ export const DevelopScreen = () => {
 
   const phase: DevPhase = current?.phase ?? 'development';
   const isDevelopment = phase === 'development';
+  const isPlanning = phase === 'planning';
   const genreId = current?.genreId ?? 'action';
 
   const wpmRef = useRef(0);
@@ -94,6 +120,24 @@ export const DevelopScreen = () => {
   const nextTicket = useMemo(() => getTicketAt(genreId, ticketIndex + 1), [genreId, ticketIndex]);
 
   const [ticketPhrase, setTicketPhrase] = useState(() => pickPhrase(currentTicket.category));
+
+  // ★企画チケット状態（v0.15.3）：固定 7 カテゴリを順に打ち切ると企画書が埋まり、開発フェーズへ。
+  const [planIndex, setPlanIndex] = useState(0);
+  const planIndexRef = useRef(0);
+  const [planPhraseCount, setPlanPhraseCount] = useState(0);
+  const planPhraseCountRef = useRef(0);
+  const [planDecided, setPlanDecided] = useState<{ category: PlanCategory; decided: string }[]>([]);
+  const [planMemos, setPlanMemos] = useState<string[]>([]);
+  const [planCards, setPlanCards] = useState<string[]>([]);
+  const planCtx = useMemo(
+    () => ({ genreName: GENRE_BY_ID[genreId]?.name ?? '', projectTitle: current?.title ?? '' }),
+    [genreId, current?.title],
+  );
+  const currentPlanTicket = useMemo(
+    () => getPlanTicketAt(genreId, Math.min(planIndex, PLAN_CATEGORY_ORDER.length - 1), planCtx),
+    [genreId, planIndex, planCtx],
+  );
+  const [planPhrase, setPlanPhrase] = useState(() => pickPlanPhrase(PLAN_CATEGORY_ORDER[0]));
 
   // ★プログラム作業中の「今まさに書かれているコード行」（打鍵に合わせて1文字ずつ伸びる）
   const themeId = current?.themeId ?? 'sushi';
@@ -150,12 +194,13 @@ export const DevelopScreen = () => {
     }
   }, [feverGauge, feverActive]);
 
-  // イベント抽選：8 秒ごとに 1 回、開発フェーズ中のみ
+  // イベント抽選：8 秒ごとに 1 回、企画/開発フェーズ中のみ（フェーズごとのイベント表から）
   useEffect(() => {
-    if (!isDevelopment || !current) return;
+    if ((!isDevelopment && !isPlanning) || !current) return;
+    const pool = PHASE_EVENTS[isDevelopment ? 'development' : 'planning'];
     const timer = window.setInterval(() => {
       if (pendingRef.current || activeRef.current) return;
-      for (const ev of PHASE_EVENTS.development) {
+      for (const ev of pool) {
         if (Math.random() < ev.rate * 0.5) {
           setPendingEvent(ev);
           sfx.alert();
@@ -165,14 +210,18 @@ export const DevelopScreen = () => {
       }
     }, 8000);
     return () => window.clearInterval(timer);
-  }, [isDevelopment, !current]);
+  }, [isDevelopment, isPlanning, !current]);
 
-  const currentInputPhrase = activeEvent ? activeEvent.mission : ticketPhrase;
+  const currentInputPhrase = activeEvent
+    ? activeEvent.mission
+    : isPlanning
+      ? planPhrase
+      : ticketPhrase;
   const phrases = useMemo(() => [currentInputPhrase], [currentInputPhrase]);
 
   const { view, failCount, wpm, accuracy } = useTyping({
     phrases,
-    paused: !current || !isDevelopment,
+    paused: !current || !(isDevelopment || isPlanning),
     onPhraseComplete: () => {
       if (activeRef.current) {
         // イベント文を打ち切り＝成功（スキップ無し。詰みが無い代わりに必ず打つ）
@@ -181,6 +230,60 @@ export const DevelopScreen = () => {
         sfx.success();
         setLastResult({ kind: 'event', event: ev, ts: Date.now() });
         setActiveEvent(null);
+      } else if (isPlanning) {
+        // 企画チケット：打ち切るたびに面白さ/期待度が実際に積み上がり、企画書が埋まっていく
+        const t = currentPlanTicket;
+        const elapsed = performance.now() - phraseStartRef.current;
+        const { rank, mult: speedMult } = speedRank(planPhrase.length, elapsed);
+        const comboMult = comboAttrMultiplier(comboRef.current);
+        const gain = Math.max(1, Math.round(PLAN_BASE_GAIN * comboMult * speedMult));
+        const weights = PLAN_CATEGORY_META[t.category].effects;
+        const funGain = weights.funFactor * gain;
+        const hypeGain = weights.hype * gain;
+        applyAxisDelta({ funFactor: funGain, hype: hypeGain });
+
+        const impactNow = computeDevImpact({ wpm: wpmRef.current, accuracy: accuracyRef.current });
+        sfx[rank === 'PERFECT' ? 'success' : 'complete']();
+        setLastResult({
+          kind: 'plan',
+          rank,
+          funGain,
+          hypeGain,
+          driftPct: impactNow.bugPct,
+          exp: gain * 40,
+          ts: Date.now(),
+        });
+
+        // 企画中の様子：メモが増え、アイデアカード（付箋）が貼られていく
+        // （枠は 96px 固定・スクロール禁止のため直近 4 行に丸める）
+        setPlanMemos((l) => [...l, pickPlanMemo(t.category, planPhraseCountRef.current)].slice(-4));
+        const keywords = (GENRE_PLAN_CONTENT[genreId] ?? GENRE_PLAN_CONTENT.action).ideaKeywords;
+        setPlanCards((l) => (l.length < keywords.length ? [...l, keywords[l.length]] : l));
+
+        const nextCount = planPhraseCountRef.current + 1;
+        const finishing = nextCount >= PHRASES_PER_PLAN_TICKET;
+        if (finishing) {
+          setPlanDecided((l) => [...l, { category: t.category, decided: t.flavor.decided }]);
+          planIndexRef.current += 1;
+          setPlanIndex(planIndexRef.current);
+          planPhraseCountRef.current = 0;
+          setPlanPhraseCount(0);
+          if (planIndexRef.current >= PLAN_CATEGORY_ORDER.length) {
+            // 企画書が完成 → 開発フェーズへ
+            sfx.phase();
+            advancePhase();
+          }
+        } else {
+          planPhraseCountRef.current = nextCount;
+          setPlanPhraseCount(nextCount);
+        }
+        const nextPlanIdx = Math.min(planIndexRef.current, PLAN_CATEGORY_ORDER.length - 1);
+        setPlanPhrase(pickPlanPhrase(PLAN_CATEGORY_ORDER[nextPlanIdx]));
+
+        if (pendingRef.current) {
+          setActiveEvent(pendingRef.current);
+          setPendingEvent(null);
+        }
       } else {
         const category = currentTicket.category;
         const elapsed = performance.now() - phraseStartRef.current;
@@ -254,7 +357,7 @@ export const DevelopScreen = () => {
     onCorrect: (c) => {
       comboRef.current = c;
       sfx.key();
-      addFever(1);
+      if (isDevelopment) addFever(1); // フィーバー（ノリ）は開発フェーズ専用
       reportCombo(c);
     },
     onComboBreak: () => {
@@ -295,7 +398,21 @@ export const DevelopScreen = () => {
   const progressPct = Math.max(0, Math.min(100, (current.doneLoC / workTarget) * 100));
   const litPhaseDots = Math.max(1, Math.min(TOTAL_PHASE_DOTS, Math.ceil((progressPct / 100) * TOTAL_PHASE_DOTS)));
 
-  const plannedWeeks = Math.max(1, scaleDef.neededWeeks);
+  // 企画の進捗（企画書完成度）：完了チケット＋現在チケット内のフレーズ消化
+  const planProgressPct = Math.min(
+    100,
+    ((planIndex + planPhraseCount / PHRASES_PER_PLAN_TICKET) / PLAN_CATEGORY_ORDER.length) * 100,
+  );
+  const planLitDots = Math.max(
+    1,
+    Math.min(TOTAL_PHASE_DOTS, Math.ceil((planProgressPct / 100) * TOTAL_PHASE_DOTS)),
+  );
+
+  // 予定週 = 開発ぶん（neededWeeks）＋企画・仕上げの猶予（v0.15.3）
+  const plannedWeeks = Math.max(
+    1,
+    scaleDef.neededWeeks + planWeeksAllowance(scaleDef.neededWeeks),
+  );
   const elapsedWeeks = current.startDate
     ? Math.max(0, dateToWeekIndex(currentDate) - dateToWeekIndex(current.startDate))
     : 0;
@@ -341,20 +458,29 @@ export const DevelopScreen = () => {
             currentCategory={isDevelopment ? currentTicket.category : null}
           />
           <div style={{ ...devBox(), gap: 6 }}>
-            <span style={{ fontSize: 11, color: DEV.sub }}>開発全体の進捗</span>
-            <span style={{ fontSize: 10, color: DEV.sub }}>全体完成度</span>
+            <span style={{ fontSize: 11, color: DEV.sub }}>
+              {isPlanning ? '企画全体の進捗' : '開発全体の進捗'}
+            </span>
+            <span style={{ fontSize: 10, color: DEV.sub }}>
+              {isPlanning ? '企画書完成度' : '全体完成度'}
+            </span>
             <span
               style={{
                 fontSize: 22,
                 fontWeight: 700,
-                color: DEV.greenBright,
+                color: isPlanning ? PLAN.accent : DEV.greenBright,
                 fontVariantNumeric: 'tabular-nums',
                 lineHeight: 1,
               }}
             >
-              {Math.floor(progressPct)}%
+              {Math.floor(isPlanning ? planProgressPct : progressPct)}%
             </span>
-            <SegGauge pct={progressPct} color={DEV.greenBright} track="#0c1207" height={10} />
+            <SegGauge
+              pct={isPlanning ? planProgressPct : progressPct}
+              color={isPlanning ? PLAN.accent : DEV.greenBright}
+              track="#0c1207"
+              height={10}
+            />
             <span style={{ fontSize: 10, color: DEV.sub, marginTop: 4 }}>
               開発期間：経過 {elapsedWeeks} / 予定 {plannedWeeks} 週
             </span>
@@ -393,6 +519,27 @@ export const DevelopScreen = () => {
               lastResult={lastResult}
               feverActive={feverActive}
             />
+          ) : isPlanning ? (
+            <PlanningCenter
+              litPhaseDots={planLitDots}
+              ticket={currentPlanTicket}
+              ticketProgressPct={Math.min(
+                100,
+                ((planPhraseCount +
+                  (view.completed.length /
+                    Math.max(1, view.completed.length + view.remained.length))) /
+                  PHRASES_PER_PLAN_TICKET) *
+                  100,
+              )}
+              activeEvent={activeEvent}
+              view={view}
+              failCount={failCount}
+              charsPerMin={charsPerMin}
+              accuracyPct={accuracyPct}
+              memos={planMemos}
+              cards={planCards}
+              lastResult={lastResult}
+            />
           ) : (
             <MissionFlow
               key={phase}
@@ -404,39 +551,54 @@ export const DevelopScreen = () => {
           )}
         </main>
 
-        {/* 右：現在のプロジェクト説明（ゲームプレビューは廃止） */}
+        {/* 右：企画中は「現在の企画書」、開発中は「現在のプロジェクト＋開発内容」 */}
         <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, minWidth: 0 }}>
-          <div style={{ ...devBox(), gap: 4 }}>
-            <span style={{ fontSize: 11, color: DEV.sub }}>現在のプロジェクト</span>
-            <span style={{ fontSize: 17, fontWeight: 700, color: DEV.cream, lineHeight: 1.2 }}>
-              {genre?.emoji} {current.title}
-            </span>
-            <span style={{ fontSize: 11, color: DEV.sub }}>
-              ジャンル：{genre?.name} ／ テーマ：{theme?.name} ／ 規模：{scaleDef.name}
-            </span>
-          </div>
-
-          <div style={{ ...devBox(), gap: 4, flex: 1, minHeight: 0, overflow: 'hidden' }}>
-            <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>現在の開発内容</span>
-            {completedTickets.length === 0 ? (
-              <span style={{ fontSize: 11, color: '#5a6e3a' }}>まだ着手した作業がない…</span>
-            ) : (
-              completedTickets.map((t, i) => (
-                <span key={i} style={{ fontSize: 11, color: CATEGORY_META[t.category].color }}>
-                  ✓ {t.title}
+          {isPlanning ? (
+            <PlanDocPanel
+              title={current.title}
+              genreEmoji={genre?.emoji ?? '🎮'}
+              genreName={genre?.name ?? ''}
+              themeName={theme?.name ?? ''}
+              scaleName={scaleDef.name}
+              decided={planDecided}
+              currentTicket={currentPlanTicket}
+              planDone={planIndex >= PLAN_CATEGORY_ORDER.length}
+            />
+          ) : (
+            <>
+              <div style={{ ...devBox(), gap: 4 }}>
+                <span style={{ fontSize: 11, color: DEV.sub }}>現在のプロジェクト</span>
+                <span style={{ fontSize: 17, fontWeight: 700, color: DEV.cream, lineHeight: 1.2 }}>
+                  {genre?.emoji} {current.title}
                 </span>
-              ))
-            )}
-            {isDevelopment && (
-              <span style={{ fontSize: 11, color: DEV.white, fontWeight: 700 }}>
-                ▶ {currentTicket.flavor.title}
-              </span>
-            )}
-            <span style={{ fontSize: 10, color: DEV.sub, marginTop: 6 }}>次の目標</span>
-            <span style={{ fontSize: 12, color: DEV.cream, fontWeight: 700 }}>
-              {nextTicket.flavor.title}
-            </span>
-          </div>
+                <span style={{ fontSize: 11, color: DEV.sub }}>
+                  ジャンル：{genre?.name} ／ テーマ：{theme?.name} ／ 規模：{scaleDef.name}
+                </span>
+              </div>
+
+              <div style={{ ...devBox(), gap: 4, flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>現在の開発内容</span>
+                {completedTickets.length === 0 ? (
+                  <span style={{ fontSize: 11, color: '#5a6e3a' }}>まだ着手した作業がない…</span>
+                ) : (
+                  completedTickets.map((t, i) => (
+                    <span key={i} style={{ fontSize: 11, color: CATEGORY_META[t.category].color }}>
+                      ✓ {t.title}
+                    </span>
+                  ))
+                )}
+                {isDevelopment && (
+                  <span style={{ fontSize: 11, color: DEV.white, fontWeight: 700 }}>
+                    ▶ {currentTicket.flavor.title}
+                  </span>
+                )}
+                <span style={{ fontSize: 10, color: DEV.sub, marginTop: 6 }}>次の目標</span>
+                <span style={{ fontSize: 12, color: DEV.cream, fontWeight: 700 }}>
+                  {nextTicket.flavor.title}
+                </span>
+              </div>
+            </>
+          )}
 
           <TeamComments
             team={employees.filter((e) => current.assignedEmployeeIds.includes(e.id))}
@@ -642,7 +804,7 @@ const DevelopCenter = ({
       </div>
 
       <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
-        {/* ①作業チケット／イベント（今なにを作っているか） */}
+        {/* ①作業チケット／イベント（今なにを作っているか）。内容の長短で下の入力欄が動かないよう高さ固定 */}
         <div
           className={activeEvent ? 'dev-event-active' : undefined}
           style={{
@@ -651,14 +813,25 @@ const DevelopCenter = ({
             borderColor: activeEvent ? '#ff8a3c' : DEV.panelBorder,
             flexDirection: 'row',
             alignItems: 'flex-start',
+            height: TICKET_CARD_HEIGHT,
+            overflow: 'hidden',
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
             <span style={{ fontSize: 10, color: DEV.sub }}>
               {activeEvent ? '⚠ イベント発生' : '作業チケット'}
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 18, fontWeight: 700, color: DEV.cream }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <span
+                style={{
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: DEV.cream,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
                 {activeEvent ? activeEvent.name : ticket.flavor.title}
               </span>
               <span
@@ -670,12 +843,21 @@ const DevelopCenter = ({
                   border: `1px solid ${inputColor}`,
                   background: activeEvent ? '#3a2205' : catMeta.dim,
                   whiteSpace: 'nowrap',
+                  flexShrink: 0,
                 }}
               >
                 {activeEvent ? '⚡ イベント作業' : `${catMeta.icon} ${catMeta.label}作業`}
               </span>
             </div>
-            <span style={{ fontSize: 11, color: DEV.sub }}>
+            <span
+              style={{
+                fontSize: 11,
+                color: DEV.sub,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
               {activeEvent ? activeEvent.flavor : ticket.flavor.desc}
             </span>
           </div>
@@ -696,13 +878,16 @@ const DevelopCenter = ({
             </div>
           )}
         </div>
-        {!activeEvent && (
-          <SegGauge pct={ticketProgressPct} color={catMeta.color} track="#0c1207" height={6} />
-        )}
+        {/* ゲージ枠も常設（イベント中に消えると下が動くため） */}
+        <div style={{ height: 6 }}>
+          {!activeEvent && (
+            <SegGauge pct={ticketProgressPct} color={catMeta.color} track="#0c1207" height={6} />
+          )}
+        </div>
 
         {/* ②入力する文章（なにを入力すればいいか）＋ 入力進度/正確さ */}
         <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
             <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
               入力する文章
             </div>
@@ -757,16 +942,14 @@ const DevelopCenter = ({
               wordBreak: 'break-word',
             }}
           >
-            <span style={{ color: DEV.green }}>{view.completed.slice(0, -1)}</span>
-            {view.completed.length > 0 && (
-              <span key={`glow-${view.completed.length}`} className="dev-key-glow">
-                {view.completed.slice(-1)}
-              </span>
-            )}
+            <span style={{ color: DEV.green }}>{view.completed}</span>
             <span className="dev-cursor" style={{ color: DEV.white }}>
               |
             </span>
-            <span style={{ color: '#5a6e3a' }}>{view.remained}</span>
+            {view.remained.length > 0 && (
+              <span className="dev-next-key">{view.remained.slice(0, 1)}</span>
+            )}
+            <span style={{ color: '#5a6e3a' }}>{view.remained.slice(1)}</span>
           </div>
         </div>
 
@@ -1134,6 +1317,26 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
       </div>
     );
   }
+  if (result.kind === 'plan') {
+    return (
+      <div key={result.ts} className="dev-result-pop" style={{ ...devBox(), gap: 6 }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: RANK_COLOR[result.rank] }}>
+          {result.rank}!
+        </span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+          <ResultChip icon="💡" label="面白さ" value={`+${result.funGain}`} color="#ffd166" />
+          <ResultChip icon="⭐" label="期待度" value={`+${result.hypeGain}`} color="#7adfff" />
+          <ResultChip
+            icon="🌀"
+            label="迷走リスク"
+            value={`${result.driftPct}%`}
+            color={result.driftPct <= 0 ? '#5fe08a' : '#ff6b6b'}
+          />
+          <ResultChip icon="✨" label="獲得EXP" value={`+${result.exp}`} color="#d8a5ff" />
+        </div>
+      </div>
+    );
+  }
   return (
     <div key={result.ts} className="dev-result-pop" style={{ ...devBox(), gap: 6 }}>
       <span style={{ fontSize: 14, fontWeight: 700, color: RANK_COLOR[result.rank] }}>
@@ -1179,6 +1382,436 @@ const ResultChip = ({
     </span>
   </div>
 );
+
+/** 企画フェーズの明るめアクセント（会議・紙・付箋の世界観） */
+const PLAN = {
+  accent: '#ffd166',
+  paper: '#f4ecd9',
+  paperLine: '#d8c8a0',
+  ink: '#202840',
+  inkSub: '#706048',
+  cork: '#4a3520',
+} as const;
+
+/** 中央：企画フェーズ本体（v0.15.3 企画チケット UI） */
+const PlanningCenter = ({
+  litPhaseDots,
+  ticket,
+  ticketProgressPct,
+  activeEvent,
+  view,
+  failCount,
+  charsPerMin,
+  accuracyPct,
+  memos,
+  cards,
+  lastResult,
+}: {
+  litPhaseDots: number;
+  ticket: ReturnType<typeof getPlanTicketAt>;
+  ticketProgressPct: number;
+  activeEvent: DevEvent | null;
+  view: { hiragana: string; completed: string; remained: string };
+  failCount: number;
+  charsPerMin: number;
+  accuracyPct: number;
+  memos: string[];
+  cards: string[];
+  lastResult: LastResult | null;
+}) => {
+  const catMeta = PLAN_CATEGORY_META[ticket.category];
+  const accent = activeEvent ? '#ff8a3c' : catMeta.color;
+  return (
+    <div
+      style={{
+        flex: 1,
+        minHeight: 0,
+        background: DEV.panelBg,
+        border: `2px solid ${DEV.panelBorder}`,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+        imageRendering: 'pixelated',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* ヘッダー：企画フェーズ ＋ PHASE ドット */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '8px 12px',
+          borderBottom: `2px solid ${DEV.panelBorder}`,
+        }}
+      >
+        <span style={{ color: PLAN.accent, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}>
+          💡 企画フェーズ
+        </span>
+        <span style={{ fontSize: 11, color: DEV.sub }}>
+          PHASE {litPhaseDots} / 6
+          <span style={{ display: 'inline-flex', gap: 3, marginLeft: 6, verticalAlign: 'middle' }}>
+            {Array.from({ length: 6 }, (_, i) => (
+              <span
+                key={i}
+                style={{
+                  width: 7,
+                  height: 7,
+                  display: 'inline-block',
+                  background: i < litPhaseDots ? PLAN.accent : '#2a2414',
+                  border: '1px solid #05080c',
+                }}
+              />
+            ))}
+          </span>
+        </span>
+      </div>
+
+      <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+        {/* ①企画チケット／イベント（今なにを決めようとしているか）。高さ固定で下の入力欄を動かさない */}
+        <div
+          className={activeEvent ? 'dev-event-active' : undefined}
+          style={{
+            ...devBox(),
+            gap: 4,
+            borderColor: activeEvent ? '#ff8a3c' : DEV.panelBorder,
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            height: TICKET_CARD_HEIGHT,
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 10, color: DEV.sub }}>
+              {activeEvent ? '⚠ イベント発生' : '企画チケット'}
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <span
+                style={{
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: DEV.cream,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {activeEvent ? activeEvent.name : ticket.flavor.title}
+              </span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  color: accent,
+                  border: `1px solid ${accent}`,
+                  background: activeEvent ? '#3a2205' : catMeta.dim,
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                {activeEvent ? '⚡ イベント対応' : `${catMeta.icon} ${catMeta.label}`}
+              </span>
+            </div>
+            <span
+              style={{
+                fontSize: 11,
+                color: DEV.sub,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {activeEvent ? activeEvent.flavor : ticket.flavor.desc}
+            </span>
+          </div>
+          {!activeEvent && (
+            <div style={{ width: 84, display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+              <span style={{ fontSize: 10, color: DEV.sub, whiteSpace: 'nowrap' }}>チケット進捗</span>
+              <span
+                style={{
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: catMeta.color,
+                  fontVariantNumeric: 'tabular-nums',
+                  lineHeight: 1,
+                }}
+              >
+                {Math.floor(ticketProgressPct)}%
+              </span>
+            </div>
+          )}
+        </div>
+        <div style={{ height: 6 }}>
+          {!activeEvent && (
+            <SegGauge pct={ticketProgressPct} color={catMeta.color} track="#0c1207" height={6} />
+          )}
+        </div>
+
+        {/* ②入力する文章（企画は紙っぽい明るい入力枠で会議感を出す） */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+            <div style={{ fontSize: 11, color: PLAN.accent, fontWeight: 700, marginBottom: 4 }}>
+              入力する文章
+            </div>
+            <div
+              style={{
+                background: PLAN.paper,
+                border: `2px solid ${accent}`,
+                padding: '10px 12px',
+                fontSize: 26,
+                color: PLAN.ink,
+                letterSpacing: '0.04em',
+                minHeight: 38,
+                overflowWrap: 'anywhere',
+                wordBreak: 'break-word',
+              }}
+            >
+              {view.hiragana}
+            </div>
+          </div>
+          <div style={{ width: 96, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ ...devBox(), gap: 1, padding: 5 }}>
+              <span style={{ fontSize: 9, color: DEV.sub }}>⏩入力速度</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: DEV.cream, fontVariantNumeric: 'tabular-nums' }}>
+                {charsPerMin}
+              </span>
+              <span style={{ fontSize: 8, color: DEV.sub }}>文字/分</span>
+            </div>
+            <div style={{ ...devBox(), gap: 1, padding: 5 }}>
+              <span style={{ fontSize: 9, color: DEV.sub }}>🎯正確さ</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: DEV.cream, fontVariantNumeric: 'tabular-nums' }}>
+                {accuracyPct}%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: 11, color: PLAN.accent, fontWeight: 700, marginBottom: 4 }}>
+            ローマ字入力
+          </div>
+          <div
+            key={`miss-${failCount}`}
+            className={failCount > 0 ? 'dev-miss-shake' : undefined}
+            style={{
+              background: '#0c1207',
+              border: `1px solid ${DEV.panelBorder}`,
+              padding: '7px 12px',
+              fontSize: 18,
+              letterSpacing: '0.08em',
+              minHeight: 26,
+              overflowWrap: 'anywhere',
+              wordBreak: 'break-word',
+            }}
+          >
+            <span style={{ color: PLAN.accent }}>{view.completed}</span>
+            <span className="dev-cursor" style={{ color: DEV.white }}>
+              |
+            </span>
+            {view.remained.length > 0 && (
+              <span className="dev-next-key">{view.remained.slice(0, 1)}</span>
+            )}
+            <span style={{ color: '#5a6e3a' }}>{view.remained.slice(1)}</span>
+          </div>
+        </div>
+
+        {/* 企画中の様子：企画メモ＋アイデアカード（コード画面は出さない） */}
+        <PlanBoard memos={memos} cards={cards} />
+
+        {/* ③今回の結果（入力した結果、企画がどう良くなったか） */}
+        <ResultCard result={lastResult} />
+      </div>
+    </div>
+  );
+};
+
+const PLAN_BOARD_HEIGHT = 96;
+
+/** 企画中の様子：左＝ノート風の企画メモ、右＝コルクボードに増えていく付箋（アイデアカード） */
+const PlanBoard = ({ memos, cards }: { memos: string[]; cards: string[] }) => (
+  <div style={{ display: 'flex', gap: 8, minWidth: 0 }}>
+    {/* 企画メモ（ノート紙） */}
+    <div
+      style={{
+        flex: 1,
+        minWidth: 0,
+        background: PLAN.paper,
+        border: `1px solid ${PLAN.paperLine}`,
+        padding: '5px 10px',
+        height: PLAN_BOARD_HEIGHT,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <span style={{ fontSize: 10, fontWeight: 700, color: PLAN.inkSub, marginBottom: 2 }}>
+        📝 企画メモ
+      </span>
+      {memos.length === 0 ? (
+        <span style={{ fontSize: 11, color: PLAN.inkSub }}>まだメモはない…</span>
+      ) : (
+        memos.map((m, i) => (
+          <span
+            key={`${i}-${m}`}
+            className={i === memos.length - 1 ? 'dev-stat-pop' : undefined}
+            style={{
+              fontSize: 11,
+              color: PLAN.ink,
+              lineHeight: '15px',
+              borderBottom: `1px dashed ${PLAN.paperLine}`,
+              overflowWrap: 'anywhere',
+            }}
+          >
+            ・{m}
+          </span>
+        ))
+      )}
+    </div>
+    {/* アイデアカード（付箋） */}
+    <div
+      style={{
+        width: 218,
+        flexShrink: 0,
+        background: PLAN.cork,
+        border: `1px solid ${DEV.panelBorder}`,
+        padding: 6,
+        height: PLAN_BOARD_HEIGHT,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+      }}
+    >
+      <span style={{ fontSize: 10, fontWeight: 700, color: '#e8d5b5' }}>💡 アイデアカード</span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignContent: 'flex-start' }}>
+        {cards.length === 0 ? (
+          <span style={{ fontSize: 10, color: '#9a8265' }}>アイデア待ち…</span>
+        ) : (
+          cards.map((c, i) => (
+            <span
+              key={c}
+              className="dev-stat-pop"
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: PLAN.ink,
+                background: IDEA_CARD_COLORS[i % IDEA_CARD_COLORS.length],
+                padding: '4px 8px',
+                boxShadow: '1px 2px 0 rgba(0,0,0,0.45)',
+                transform: `rotate(${i % 2 === 0 ? -2 : 2}deg)`,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {c}
+            </span>
+          ))
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+/** 右ペイン：現在の企画書（企画フェーズ中）。決定事項が埋まっていく紙のドキュメント */
+const PlanDocPanel = ({
+  title,
+  genreEmoji,
+  genreName,
+  themeName,
+  scaleName,
+  decided,
+  currentTicket,
+  planDone,
+}: {
+  title: string;
+  genreEmoji: string;
+  genreName: string;
+  themeName: string;
+  scaleName: string;
+  decided: { category: PlanCategory; decided: string }[];
+  currentTicket: ReturnType<typeof getPlanTicketAt>;
+  planDone: boolean;
+}) => {
+  const decidedOf = (c: PlanCategory) => decided.find((d) => d.category === c)?.decided;
+  const row = (label: string, value: string | undefined) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <span style={{ fontSize: 9, color: PLAN.inkSub }}>{label}</span>
+      <span
+        style={{
+          fontSize: value ? 12 : 11,
+          fontWeight: value ? 700 : 400,
+          color: value ? PLAN.ink : PLAN.inkSub,
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {value ?? '検討中…'}
+      </span>
+    </div>
+  );
+  return (
+    <div
+      style={{
+        flex: 1,
+        minHeight: 0,
+        overflow: 'hidden',
+        background: PLAN.paper,
+        border: `2px solid ${PLAN.paperLine}`,
+        padding: 10,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 7,
+      }}
+    >
+      <span style={{ fontSize: 12, fontWeight: 700, color: PLAN.ink }}>📋 現在の企画書</span>
+      {row('タイトル案', `${genreEmoji} ${title}`)}
+      <span style={{ fontSize: 10, color: PLAN.inkSub }}>
+        ジャンル：{genreName} ／ テーマ：{themeName} ／ 規模：{scaleName}
+      </span>
+      {row('ターゲット', decidedOf('target'))}
+      {row('ゲームの核', decidedOf('concept'))}
+
+      <div
+        style={{
+          borderTop: `1px dashed ${PLAN.paperLine}`,
+          paddingTop: 6,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 3,
+        }}
+      >
+        <span style={{ fontSize: 9, color: PLAN.inkSub }}>現在決まっている内容</span>
+        {PLAN_CATEGORY_ORDER.map((c) => {
+          const done = decided.some((d) => d.category === c);
+          const meta = PLAN_CATEGORY_META[c];
+          return (
+            <span
+              key={c}
+              style={{
+                fontSize: 11,
+                fontWeight: done ? 700 : 400,
+                color: done ? PLAN.ink : PLAN.inkSub,
+              }}
+            >
+              {done ? '✓' : '□'} {meta.docLabel}
+              {done && (
+                <span style={{ fontWeight: 400, color: PLAN.inkSub }}>
+                  ：{decided.find((d) => d.category === c)?.decided}
+                </span>
+              )}
+            </span>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <span style={{ fontSize: 9, color: PLAN.inkSub }}>次に決めること</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: PLAN.ink }}>
+          {planDone ? '🎉 企画完了！開発へ！' : currentTicket.flavor.title}
+        </span>
+      </div>
+    </div>
+  );
+};
 
 /**
  * フェーズ入場時に発生率で当たったイベントだけを積む（development 以外のフェーズ用）。

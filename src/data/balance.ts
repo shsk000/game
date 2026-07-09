@@ -287,6 +287,14 @@ export const KEYS_PER_KANA = 2.0;
 export const DEV_PHRASES_PER_WEEK = 3;
 
 /**
+ * v0.15.3：企画フェーズ（＋テスト/デバッグの仕上げ）ぶんのスケジュール猶予（週）。
+ * neededWeeks は開発フェーズの作業量だけを想定した数字なので、
+ * 企画チケットのタイピングに使うぶんを予定週へ上乗せして「予定超過」判定を公平にする。
+ * 例：mini 8 週 → 予定 8 + 4 = 12 週。速い人は予定内、遅いと超過＝固定費がかさむ（v11 プレッシャー設計は維持）。
+ */
+export const planWeeksAllowance = (neededWeeks: number): number => Math.ceil(neededWeeks / 2);
+
+/**
  * 「速く打つほどある程度早く終わる」ための速度ボーナス。
  * フレーズ 1 本の進捗寄与 = 1 × (1 + bonus)。bonus は wpm に応じて 0〜maxBonus。
  * - baseWpm 以下：ボーナス 0（1 本 = 1.0 進捗）
