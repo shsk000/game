@@ -28,6 +28,15 @@ const TAG_AFFINITY: Array<[string, string, number]> = [
   ['story', 'classic', 0.2],
   ['story', 'epic', 0.2],
   ['story', 'daily', 0.1],
+  // v0.14：ミスマッチ（噛み合わない企画は 1.0 未満に落ちる）。
+  // 旧状態はマイナスが scary×cute の 1 個だけで、180 組中 1.0 未満が 4 組しか無く
+  // 「地雷を踏む学習」が機能していなかった（オーナー指摘）。約 24% が 1.0 未満になる配分。
+  // ※ DIVINE（racing|sushi 等）は救済されるので「例外の発見」はむしろ際立つ
+  ['fast', 'daily', -0.15], // スピード系 × 日常 ＝ 企画が地味
+  ['logic', 'epic', -0.15], // 理屈系 × 壮大 ＝ 食い合わせが悪い
+  ['wild', 'daily', -0.1], // 豪快系 × 日常 ＝ 盛り上がらない
+  ['epic', 'gourmet', -0.15], // 壮大 × グルメ ＝ 空回り
+  ['scary', 'daily', -0.1], // ホラー × 日常 ＝ 怖くない
 ];
 
 const tagPairBonus = (gTags: string[], tTags: string[]): number => {

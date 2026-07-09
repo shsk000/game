@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ads } from '../../ads/AdProvider';
 import { JacketView } from '../../components/JacketView';
 import { Tutorial } from '../../components/Tutorial';
 import { PixelButton, PixelWindow } from '../../components/ui';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
-import type { CategoryId } from '../../data/categories';
-import { CATEGORIES, CATEGORY_BY_ID, categoryAffinity } from '../../data/categories';
+import { planWeeksAllowance } from '../../data/balance';
 import { compatLabel, getCompat } from '../../data/compatibility';
 import type { GenreId } from '../../data/genres';
 import { GENRE_BY_ID, GENRES } from '../../data/genres';
@@ -115,7 +114,6 @@ export const PlanScreen = () => {
   const unlocked = useGameStore((s) => s.unlockedScales);
   const unlockedGenres = useGameStore((s) => s.unlockedGenres);
   const unlockedThemes = useGameStore((s) => s.unlockedThemes);
-  const unlockedCategories = useGameStore((s) => s.unlockedCategories);
   const funds = useGameStore((s) => s.funds);
   const employees = useGameStore((s) => s.employees);
   const library = useGameStore((s) => s.library);
@@ -132,7 +130,6 @@ export const PlanScreen = () => {
   const [genreId, setGenreId] = useState<GenreId>(firstGenre);
   const [themeId, setThemeId] = useState<ThemeId>(firstTheme);
   const [scale, setScale] = useState<Scale>('mini');
-  const [selectedCategories, setSelectedCategories] = useState<CategoryId[]>([]);
   const [assignedEmployeeIds, setAssignedEmployeeIds] = useState<string[]>([]);
   const [surveyedCompat, setSurveyedCompat] = useState<number | null>(null);
   const [adRunning, setAdRunning] = useState(false);
@@ -148,11 +145,6 @@ export const PlanScreen = () => {
     setSurveyedCompat(null);
   }, [genreId, themeId]);
 
-  // 解放外カテゴリが選択に残っていたら除去
-  useEffect(() => {
-    setSelectedCategories((prev) => prev.filter((id) => unlockedCategories.includes(id)));
-  }, [unlockedCategories]);
-
   // 退職などで存在しなくなった従業員が割当に残っていたら除去
   useEffect(() => {
     setAssignedEmployeeIds((prev) => prev.filter((id) => employees.some((e) => e.id === id)));
@@ -162,22 +154,6 @@ export const PlanScreen = () => {
   const isTrendyTheme = trend && trend.themeId === themeId;
 
   const pioneer = !library.some((w) => w.genreId === genreId && w.themeId === themeId);
-
-  const categoryHitTotal = useMemo(() => {
-    return selectedCategories.reduce((sum, cid) => {
-      const cat = CATEGORY_BY_ID[cid];
-      if (!cat) return sum;
-      return sum + categoryAffinity(cat, genreId, themeId);
-    }, 0);
-  }, [selectedCategories, genreId, themeId]);
-
-  const toggleCategory = (id: CategoryId) => {
-    setSelectedCategories((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
-      if (prev.length >= 3) return prev;
-      return [...prev, id];
-    });
-  };
 
   const toggleEmployee = (id: string) => {
     setAssignedEmployeeIds((prev) => {
@@ -200,11 +176,12 @@ export const PlanScreen = () => {
     });
   };
 
-  const canStart = selectedCategories.length === 3 && assignedEmployeeIds.length >= 1;
+  // v0.14：カテゴリ選択は廃止（オーナー決定）。従業員 1 人以上で開始できる
+  const canStart = assignedEmployeeIds.length >= 1;
 
   const handleStart = () => {
     if (!canStart) return;
-    startProject(genreId, themeId, scale, selectedCategories, assignedEmployeeIds);
+    startProject(genreId, themeId, scale, assignedEmployeeIds);
   };
 
   // v0.11 G2：PlanScreen は ScreenOverlay の中身として描画される（ページ遷移しない）
@@ -312,7 +289,9 @@ export const PlanScreen = () => {
             {(() => {
               const def = SCALE_BY_ID[scale];
               const range = estimateRevenueRange(def.baseUnit);
-              const monthCount = Math.round(def.neededWeeks / 4);
+              // v0.15.3：予定週は企画・仕上げの猶予込みで案内する
+              const totalWeeks = def.neededWeeks + planWeeksAllowance(def.neededWeeks);
+              const monthCount = Math.round(totalWeeks / 4);
               // E-4: 中央値売上で見込み利益。赤字なら赤色で警告
               const profitMid = computeProfitForScale({
                 totalRevenue: range.mid,
@@ -344,7 +323,7 @@ export const PlanScreen = () => {
                   />
                   <EstimateBox
                     label="予想開発期間"
-                    value={`${formatWeeks(def.neededWeeks)}（${monthCount} ヶ月）`}
+                    value={`${formatWeeks(totalWeeks)}（${monthCount} ヶ月）`}
                     accent={COLORS.accentOrange}
                   />
                   <EstimateBox
@@ -367,63 +346,6 @@ export const PlanScreen = () => {
                 </div>
               );
             })()}
-          </div>
-        </PixelWindow>
-
-        {/* カテゴリ */}
-        <PixelWindow
-          title={
-            <span>
-              開発カテゴリを選ぶ
-              <span style={subMetaStyle}>選択 {selectedCategories.length}/3</span>
-            </span>
-          }
-          variant="standard"
-        >
-          <div style={sectionStyle}>
-            <div style={chipRowStyle}>
-              {CATEGORIES.filter((c) => unlockedCategories.includes(c.id)).map((c) => {
-                const isSelected = selectedCategories.includes(c.id);
-                const reachedMax = selectedCategories.length >= 3 && !isSelected;
-                return (
-                  // テスト互換性のため <button> + data-category-id を必ず付与
-                  <button
-                    key={c.id}
-                    type="button"
-                    data-category-id={c.id}
-                    disabled={reachedMax}
-                    onClick={() => toggleCategory(c.id)}
-                    title={reachedMax ? '3つまで選択できます' : ''}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6,
-                      padding: '4px 10px',
-                      fontFamily: 'inherit',
-                      fontSize: 12,
-                      fontWeight: 700,
-                      letterSpacing: '0.06em',
-                      background: isSelected ? '#2a7a3c' : '#eef0f3',
-                      color: isSelected ? '#fff8e0' : COLORS.textDark,
-                      border: `3px solid ${COLORS.borderHard}`,
-                      cursor: reachedMax ? 'not-allowed' : 'pointer',
-                      opacity: reachedMax ? 0.55 : 1,
-                      boxShadow: isSelected
-                        ? 'inset 2px 2px 0 rgba(0,0,0,0.25)'
-                        : 'inset 0 0 0 2px rgba(255,255,255,0.35), 2px 2px 0 rgba(0,0,0,0.5)',
-                      imageRendering: 'pixelated',
-                      userSelect: 'none',
-                    }}
-                  >
-                    {c.emoji} {c.name}
-                  </button>
-                );
-              })}
-            </div>
-            <p style={hintStyle}>
-              相性合計（推定）: <strong>{categoryHitTotal}</strong>
-            </p>
           </div>
         </PixelWindow>
 
@@ -497,15 +419,7 @@ export const PlanScreen = () => {
                       <span style={{ fontSize: 11, color: COLORS.textSub }}>
                         {roleLabel} ／ power {e.power}
                       </span>
-                      {e.specialties.length > 0 && (
-                        <span style={{ fontSize: 11, color: COLORS.textSub, marginLeft: 'auto' }}>
-                          {e.specialties
-                            .map(
-                              (sp) => `${CATEGORY_BY_ID[sp.categoryId]?.emoji ?? ''}+${sp.bonus}`,
-                            )
-                            .join(' ')}
-                        </span>
-                      )}
+                      {/* v0.14：得意分野表示はカテゴリ廃止に伴い一旦撤去（ジャンル連動への転用を検討中） */}
                     </label>
                   </li>
                 );
@@ -607,9 +521,6 @@ export const PlanScreen = () => {
                     🌱 新規開拓 +30%
                   </span>
                 )}
-                <p style={{ ...hintStyle, fontSize: 11 }}>
-                  相性合計（推定）: <strong>{categoryHitTotal}</strong>
-                </p>
                 {surveyedCompat !== null ? (
                   <p
                     style={{
@@ -649,9 +560,7 @@ export const PlanScreen = () => {
                 ▶ 開発開始
               </PixelButton>
               {!canStart && (
-                <p style={{ ...hintStyle, fontSize: 10 }}>
-                  ※カテゴリ 3 つ + 従業員 1 人以上が必要
-                </p>
+                <p style={{ ...hintStyle, fontSize: 10 }}>※従業員 1 人以上のアサインが必要</p>
               )}
               <p style={{ ...hintStyle, fontSize: 11 }}>資金: {formatYen(funds)}</p>
             </div>

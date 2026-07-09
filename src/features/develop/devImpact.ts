@@ -72,15 +72,24 @@ export const ratingForInterval = (intervalMs: number): KeystrokeRating => {
 };
 
 /**
- * フレーズ 1 本完走あたりの進捗寄与（作業量）。
- * 速く打つ（wpm 高い）ほど 1 本の寄与が増え、少ないフレーズ数で workTarget に到達＝早期完了。
- * 通常 1 本＝1.0〜(1+maxBonus)。バグ修正フレーズは base を 3 にして手応えを出す。
+ * v0.14 ノリゲージ（北極星 §4「前向きな緊張」の確定装置）：
+ * コンボが進捗の倍率になる。0 コンボ ×1.0 → 200 コンボで ×2.0（線形・上限 200）。
+ * ミスで途切れると倍率が ×1.0 に戻る＝「惜しい！」。打ち続ける理由を数式に組み込む。
  */
-export const progressGain = (wpm: number, isBug: boolean): number => {
+export const NORI_MAX_COMBO = 200;
+export const noriMultiplier = (combo: number): number =>
+  1 + clamp(combo, 0, NORI_MAX_COMBO) / NORI_MAX_COMBO;
+
+/**
+ * フレーズ 1 本完走あたりの進捗寄与（作業量）。
+ * 速く打つ（wpm 高い）ほど 1 本の寄与が増え、さらにノリ倍率（コンボ）が乗る。
+ * 通常 1 本＝1.0〜(1+maxBonus)×ノリ2.0。バグ修正フレーズは base 3 で手応えを出す。
+ */
+export const progressGain = (wpm: number, isBug: boolean, combo = 0): number => {
   const { baseWpm, fastWpm, maxBonus } = DEV_SPEED_GAIN;
   const t = clamp((wpm - baseWpm) / (fastWpm - baseWpm), 0, 1);
   const factor = 1 + t * maxBonus;
-  return (isBug ? 3 : 1) * factor;
+  return (isBug ? 3 : 1) * factor * noriMultiplier(combo);
 };
 
 /** ランク → 表示色 */

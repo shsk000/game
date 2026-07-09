@@ -23,11 +23,8 @@ import {
   saveDoor,
   saveWallCatalog,
   type WallItem,
-  wallImg,
-  wallOffset,
   wallSkewDeg,
 } from '../lib/officeLayout';
-import { wallSpanOffset } from '../lib/officeGeometry';
 
 /**
  * 物体エディタ（dev 専用、?tuner）。1つの URL で全物体の「セル内の置き方」を定義する。

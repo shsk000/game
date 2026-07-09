@@ -1359,6 +1359,208 @@ body,
   animation: dev-rating-fade 600ms steps(4) both;
 }
 
+/* v0.14 0.1 秒ジュース：正打で最後の文字が光る（key 再生） */
+/* v0.14 0.1 秒ジュース：ミスで入力枠が揺れる（failCount の key 再生） */
+@keyframes dev-miss-shake {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  50% {
+    transform: translateX(4px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+.dev-miss-shake {
+  animation: dev-miss-shake 160ms steps(4) both;
+}
+
+/* v0.14 イベント割り込み：入力枠がオレンジで明滅（イベントミッション中） */
+@keyframes dev-event-pulse {
+  0%,
+  100% {
+    border-color: #e29001;
+  }
+  50% {
+    border-color: #7a5200;
+  }
+}
+.dev-event-active {
+  animation: dev-event-pulse 800ms steps(2) infinite;
+}
+
+/* v0.14 後期：イベント発生の全画面フラッシュ（文字を見ていなくても気づく。操作は透過） */
+@keyframes dev-flash-vignette-kf {
+  0% {
+    box-shadow: inset 0 0 120px 40px rgba(226, 144, 1, 0.75);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 rgba(226, 144, 1, 0);
+  }
+}
+.dev-flash-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  animation: dev-flash-vignette-kf 700ms steps(5) both;
+}
+
+/* v0.15.2：プログラム画面プレビューの新規コード行がフラッシュして出現 */
+@keyframes dev-code-line-kf {
+  0% {
+    color: #d7ffb0;
+  }
+  100% {
+    color: #6fe07a;
+  }
+}
+.dev-code-line {
+  animation: dev-code-line-kf 300ms steps(3) both;
+}
+
+/* v0.15 ビルドアップ：属性値が増えた瞬間に数字が弾む（key 再生） */
+@keyframes dev-stat-pop-kf {
+  0% {
+    transform: scale(1.6);
+  }
+  60% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.dev-stat-pop {
+  display: inline-block;
+  animation: dev-stat-pop-kf 220ms steps(3) both;
+}
+
+/* v0.15.2：グラフィック作業中パネルのキャラを常時ゆらす（生きている感） */
+@keyframes dev-sprite-idle-kf {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-4px);
+  }
+}
+.dev-sprite-idle {
+  display: inline-block;
+  animation: dev-sprite-idle-kf 700ms steps(4) infinite alternate;
+}
+
+/* v0.15.2：グラフィック作業中パネルのスパークル（ドット絵スター）が回転しながら明滅 */
+@keyframes dev-sparkle-twinkle-kf {
+  0% {
+    transform: scale(0.5) rotate(0deg);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.1) rotate(25deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.5) rotate(0deg);
+    opacity: 0.4;
+  }
+}
+.dev-sparkle-twinkle {
+  animation: dev-sparkle-twinkle-kf 900ms steps(6) infinite;
+}
+
+/* v0.15.2：実装ログは常にカーソル位置へ自動追従するため、手動スクロール用の見た目は隠す */
+.dev-code-scroll {
+  scrollbar-width: none;
+}
+.dev-code-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* v0.15.3：ローマ字入力の「次に打つ文字」ハイライト（打った文字より次の文字を目立たせる） */
+@keyframes dev-next-key-kf {
+  0%,
+  100% {
+    background: #2e4a14;
+  }
+  50% {
+    background: #416a1c;
+  }
+}
+.dev-next-key {
+  display: inline-block;
+  color: #fffdf2;
+  background: #2e4a14;
+  border-bottom: 2px solid #a6e138;
+  animation: dev-next-key-kf 600ms steps(2) infinite;
+}
+
+/* v0.15：フィーバー中の画面変化（背景が熱を帯びて脈動＋テキスト明滅） */
+@keyframes dev-fever-bg {
+  0%,
+  100% {
+    box-shadow: inset 0 0 90px 20px rgba(255, 90, 60, 0.22);
+  }
+  50% {
+    box-shadow: inset 0 0 130px 34px rgba(255, 160, 40, 0.34);
+  }
+}
+.dev-fever::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  pointer-events: none;
+  animation: dev-fever-bg 900ms steps(3) infinite;
+}
+@keyframes dev-fever-text-kf {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.dev-fever-text {
+  animation: dev-fever-text-kf 500ms steps(2) infinite;
+}
+
+/* v0.15.2：サウンド画面プレビューの波形バー（ランダムに揺れる） */
+@keyframes dev-wave-kf {
+  0% {
+    transform: scaleY(0.6);
+  }
+  100% {
+    transform: scaleY(1.15);
+  }
+}
+.dev-wave-bar {
+  display: inline-block;
+  transform-origin: bottom;
+  animation: dev-wave-kf 420ms steps(4) infinite alternate;
+}
+
+/* v0.15.2：結果カードが更新された瞬間に軽くポップ（key 再生） */
+@keyframes dev-result-pop-kf {
+  0% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.dev-result-pop {
+  animation: dev-result-pop-kf 180ms steps(3) both;
+}
+
 /*
  * G3: ジュース — ボタンの押し込み・ホバー（全ボタン共通、離散ステップ）。
  */

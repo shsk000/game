@@ -689,6 +689,12 @@ export const GENRE_BY_ID: Record<GenreId, Genre> = GENRES.reduce(
   {} as Record<GenreId, Genre>,
 );
 
+/** ジャンル代表スプライト（PixelLab生成・64x64・透過）。開発フェーズのグラフィック作業中パネルで使用 */
+export const genreSpriteUrl = (genreId: GenreId): string => `/sprites/genre/${genreId}.png`;
+
+/** ジャンル代表背景シーン（PixelLab生成・横長パノラマ・透過）。グラフィック作業中パネルの背景に使用 */
+export const genreBackgroundUrl = (genreId: GenreId): string => `/sprites/genre_bg/${genreId}.png`;
+
 export const getPhrases = (genreId: GenreId, count: number): string[] => {
   const pool = GENRE_BY_ID[genreId].snippets;
   const result: string[] = [];

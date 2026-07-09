@@ -3,6 +3,7 @@ import { ads } from '../../ads/AdProvider';
 import { JacketView } from '../../components/JacketView';
 import { PixelWindow } from '../../components/ui';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
+import { QUALITY_WEIGHTS } from '../../data/balance';
 import { compatLabel, getCompat } from '../../data/compatibility';
 import { GENRE_BY_ID } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
@@ -36,8 +37,33 @@ const stageReached = (current: RevealStage, target: RevealStage): boolean => {
   return order.indexOf(current) >= order.indexOf(target);
 };
 
-/** v0.10 §2-0 4 要素ウェイト */
-const WEIGHTS = { charPower: 0.5, genreAffinity: 0.25, performance: 0.15, luck: 0.1 };
+/** 4 要素ウェイト（v0.14 で再配分。balance.ts の QUALITY_WEIGHTS と同期） */
+const WEIGHTS = {
+  charPower: QUALITY_WEIGHTS.charPower,
+  genreAffinity: QUALITY_WEIGHTS.genreAffinity,
+  performance: QUALITY_WEIGHTS.typingScore,
+  luck: QUALITY_WEIGHTS.luck,
+};
+
+/**
+ * v0.14 §5-3：開発完了（打ち上げ）のフレーバー追加評価。
+ * リリース結果から該当するものを列挙（ランダム入力イベントではなく結果演出）。
+ */
+const completionAwards = (w: {
+  isMasterpiece: boolean;
+  metascore: number;
+  fansGained: number;
+}): { icon: string; title: string; note: string }[] => {
+  const list: { icon: string; title: string; note: string }[] = [];
+  if (w.isMasterpiece) list.push({ icon: '🏆', title: '神ゲー認定！', note: 'レビューで超高評価' });
+  if (w.metascore >= 90) list.push({ icon: '🏅', title: 'アワードノミネート', note: '会社の名が業界に轟く' });
+  if (w.metascore >= 80) list.push({ icon: '📈', title: '初週売上好調', note: '予想以上に売れている' });
+  if (w.fansGained >= 40) list.push({ icon: '🎨', title: 'ファンアート投稿', note: 'ユーザーが作品を盛り上げている' });
+  if (w.metascore >= 70) list.push({ icon: '💌', title: '続編希望の声', note: 'SNS で次回作を求める声' });
+  if (list.length === 0)
+    list.push({ icon: '🌱', title: '静かな船出', note: '次回作で巻き返そう' });
+  return list;
+};
 
 export const ReleaseScreen = () => {
   const work = useGameStore((s) => s.lastReleased);
@@ -302,39 +328,57 @@ export const ReleaseScreen = () => {
           </div>
 
           <div className="breakdown-list">
+            {/* v0.14：内訳の読み方を明示（「41 → +14」が何なのか分からない問題への対応） */}
+            <p style={{ margin: '0 0 4px', fontSize: 11, opacity: 0.75 }}>
+              各要素の実力（0〜100 点）× 重み ＝ 品質 Q への加点。合計が Q になる
+            </p>
             {stageReached(stage, 'reveal-character') && (
               <div className="breakdown-row">
                 <span className="breakdown-emoji">🧑‍💻</span>
-                <span className="breakdown-label">キャラ能力 (×50%)</span>
-                <span className="breakdown-value">
-                  {work.breakdown.charPower ?? 0} → +{Math.round(charContrib)}
+                <span className="breakdown-label">
+                  キャラ能力 {work.breakdown.charPower ?? 0}点 ×{' '}
+                  {Math.round(WEIGHTS.charPower * 100)}%
                 </span>
+                <span className="breakdown-value">品質 +{Math.round(charContrib)}</span>
               </div>
             )}
             {stageReached(stage, 'reveal-affinity') && (
               <div className="breakdown-row">
                 <span className="breakdown-emoji">🧩</span>
-                <span className="breakdown-label">ジャンル相性 (×25%)</span>
-                <span className="breakdown-value">
-                  {work.breakdown.genreAffinity ?? 0} → +{Math.round(affContrib)}
+                <span className="breakdown-label">
+                  ジャンル相性 {work.breakdown.genreAffinity ?? 0}点 ×{' '}
+                  {Math.round(WEIGHTS.genreAffinity * 100)}%
                 </span>
+                <span className="breakdown-value">品質 +{Math.round(affContrib)}</span>
               </div>
             )}
             {stageReached(stage, 'reveal-performance') && (
               <div className="breakdown-row">
                 <span className="breakdown-emoji">⚡</span>
-                <span className="breakdown-label">タイピング演技 (×15%)</span>
-                <span className="breakdown-value">
-                  {work.breakdown.performance ?? 0} → +{Math.round(perfContrib)}
+                <span className="breakdown-label">
+                  タイピング演技 {work.breakdown.performance ?? 0}点 ×{' '}
+                  {Math.round(WEIGHTS.performance * 100)}%
                 </span>
+                <span className="breakdown-value">品質 +{Math.round(perfContrib)}</span>
               </div>
             )}
             {stageReached(stage, 'reveal-luck') && (
               <div className="breakdown-row">
                 <span className="breakdown-emoji">🎲</span>
-                <span className="breakdown-label">運 (×10%)</span>
+                <span className="breakdown-label">
+                  運 {work.breakdown.luck ?? 50}点 × {Math.round(WEIGHTS.luck * 100)}%
+                </span>
+                <span className="breakdown-value">品質 +{Math.round(luckContrib)}</span>
+              </div>
+            )}
+            {/* v0.14：開発中イベントの成果（面白さ/操作性/バランス−バグ率）を品質加点として開示 */}
+            {stageReached(stage, 'reveal-luck') && (work.breakdown.axisBonus ?? 0) !== 0 && (
+              <div className="breakdown-row">
+                <span className="breakdown-emoji">🎪</span>
+                <span className="breakdown-label">イベント成果（開発中に稼いだ面白さ等）</span>
                 <span className="breakdown-value">
-                  {work.breakdown.luck ?? 50} → +{Math.round(luckContrib)}
+                  品質 {(work.breakdown.axisBonus ?? 0) > 0 ? '+' : ''}
+                  {work.breakdown.axisBonus}
                 </span>
               </div>
             )}
@@ -518,6 +562,56 @@ export const ReleaseScreen = () => {
                   </button>
                 )}
               </div>
+
+              {/* v0.14 開発完了フェーズ：打ち上げ（結果演出。spec §5-3） */}
+              <PixelWindow title="🎉 開発完了！ 打ち上げ" variant="emphasis" style={{ marginTop: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div
+                    style={{
+                      border: '2px solid #2b3a1c',
+                      overflow: 'hidden',
+                      aspectRatio: '3 / 1',
+                    }}
+                  >
+                    <img
+                      src={`${import.meta.env.BASE_URL}phase/complete.png`}
+                      alt="打ち上げ"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        objectPosition: 'center 30%',
+                        imageRendering: 'pixelated',
+                      }}
+                    />
+                  </div>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>
+                    リリースおめでとう！！ チーム全員おつかれさまでした！
+                  </p>
+                  <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {completionAwards(work).map((a) => (
+                      <li key={a.title} style={{ fontSize: 13 }}>
+                        {a.icon} <strong>{a.title}</strong>
+                        <span style={{ fontSize: 11, opacity: 0.8, marginLeft: 6 }}>{a.note}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr auto',
+                      rowGap: 2,
+                      fontSize: 12,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    <span>ファン増加</span>
+                    <strong>+{work.fansGained} 人</strong>
+                    <span>開発期間</span>
+                    <strong>{formatWeeks(work.developWeeks ?? 0)}</strong>
+                  </div>
+                </div>
+              </PixelWindow>
 
               <button className="primary-btn" onClick={handleNext}>
                 次へ（オフィス）

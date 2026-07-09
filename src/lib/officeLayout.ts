@@ -7,7 +7,7 @@
  * - 確定したら、ツール出力の値を下の DEFAULT_* に転記してコードに焼き込む。
  */
 
-import { ROOM, type Placement } from './officeGeometry';
+import { type Placement } from './officeGeometry';
 
 /** ドアもセル基準＋セル内オフセット（ox,oy）で置く。机と同じ「セル＋セル内位置」方式。 */
 export type DoorCfg = { img: string; i: number; j: number; w: number; ox: number; oy: number };

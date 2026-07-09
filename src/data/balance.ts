@@ -237,16 +237,22 @@ export const SCALE_BALANCE: Record<
 // ============================================================
 
 /**
- * 4 要素品質計算のウェイト（balance-design §0 確定）。
+ * 4 要素品質計算のウェイト。
  *
- *   final = (charPower × 0.5 + genreAffinity × 0.25 + typingScore × 0.15 + luck × 0.1)
- *           × luckMultiplier(0.9〜1.1) × gachaMul(1.0 or 1.5)
+ * v0.14 再配分（オーナー指示 2026-06-27）：
+ * - タイピング 15%→37%：最大レバー化＝北極星「タイピングが主役」を数式で担保
+ * - 運 10%→3%：適当プレイが運で 70 の壁（売上×33 倍）を越えないように
+ * - 社員 50%→35%：ミニ規模では 2 人雇うだけで power 上限に飽和し、
+ *   放置プレイでも高得点が出てしまっていた問題の緩和
+ *
+ *   final = (charPower × 0.35 + genreAffinity × 0.25 + typingScore × 0.37 + luck × 0.03)
+ *           × luckMultiplier(0.97〜1.03)
  */
 export const QUALITY_WEIGHTS = {
-  charPower: 0.5,
+  charPower: 0.35,
   genreAffinity: 0.25,
-  typingScore: 0.15,
-  luck: 0.1,
+  typingScore: 0.37,
+  luck: 0.03,
 } as const;
 
 /**
@@ -279,6 +285,14 @@ export const KEYS_PER_KANA = 2.0;
  * 小さくしすぎると「数語で終了（B-Crit-2）」が再発するので下げすぎない。
  */
 export const DEV_PHRASES_PER_WEEK = 3;
+
+/**
+ * v0.15.3：企画フェーズ（＋テスト/デバッグの仕上げ）ぶんのスケジュール猶予（週）。
+ * neededWeeks は開発フェーズの作業量だけを想定した数字なので、
+ * 企画チケットのタイピングに使うぶんを予定週へ上乗せして「予定超過」判定を公平にする。
+ * 例：mini 8 週 → 予定 8 + 4 = 12 週。速い人は予定内、遅いと超過＝固定費がかさむ（v11 プレッシャー設計は維持）。
+ */
+export const planWeeksAllowance = (neededWeeks: number): number => Math.ceil(neededWeeks / 2);
 
 /**
  * 「速く打つほどある程度早く終わる」ための速度ボーナス。
