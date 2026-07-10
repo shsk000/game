@@ -29,32 +29,32 @@ export type ScaleDef = {
  * - neededWeeks, baseCost, monthlyRent は balance.ts から引く
  * - unlockCost は balance.ts の unlockCost を踏襲
  */
-export const SCALES: ScaleDef[] = (
-  ['mini', 'mobile', 'indie', 'hit', 'aaa'] as Scale[]
-).map((id) => {
-  const b = SCALE_BALANCE[id];
-  const meta: Record<
-    Scale,
-    { name: string; requiredLoC: number; baseQuality: number; baseUnit: number }
-  > = {
-    mini: { name: 'ミニゲーム', requiredLoC: 8, baseQuality: 30, baseUnit: 1_000_000 },
-    mobile: { name: 'スマホゲーム', requiredLoC: 20, baseQuality: 35, baseUnit: 3_000_000 },
-    indie: { name: 'インディー大作', requiredLoC: 50, baseQuality: 40, baseUnit: 8_000_000 },
-    hit: { name: '話題作', requiredLoC: 100, baseQuality: 45, baseUnit: 18_000_000 },
-    aaa: { name: 'AAAタイトル', requiredLoC: 200, baseQuality: 50, baseUnit: 40_000_000 },
-  };
-  return {
-    id,
-    name: meta[id].name,
-    requiredLoC: meta[id].requiredLoC,
-    baseQuality: meta[id].baseQuality,
-    baseUnit: meta[id].baseUnit,
-    unlockCost: b.unlockCost,
-    neededWeeks: b.neededWeeks,
-    baseCost: b.devCost,
-    monthlyRent: MONTHLY_RENT, // 一律
-  };
-});
+export const SCALES: ScaleDef[] = (['mini', 'mobile', 'indie', 'hit', 'aaa'] as Scale[]).map(
+  (id) => {
+    const b = SCALE_BALANCE[id];
+    const meta: Record<
+      Scale,
+      { name: string; requiredLoC: number; baseQuality: number; baseUnit: number }
+    > = {
+      mini: { name: 'ミニゲーム', requiredLoC: 8, baseQuality: 30, baseUnit: 1_000_000 },
+      mobile: { name: 'スマホゲーム', requiredLoC: 20, baseQuality: 35, baseUnit: 3_000_000 },
+      indie: { name: 'インディー大作', requiredLoC: 50, baseQuality: 40, baseUnit: 8_000_000 },
+      hit: { name: '話題作', requiredLoC: 100, baseQuality: 45, baseUnit: 18_000_000 },
+      aaa: { name: 'AAAタイトル', requiredLoC: 200, baseQuality: 50, baseUnit: 40_000_000 },
+    };
+    return {
+      id,
+      name: meta[id].name,
+      requiredLoC: meta[id].requiredLoC,
+      baseQuality: meta[id].baseQuality,
+      baseUnit: meta[id].baseUnit,
+      unlockCost: b.unlockCost,
+      neededWeeks: b.neededWeeks,
+      baseCost: b.devCost,
+      monthlyRent: MONTHLY_RENT, // 一律
+    };
+  },
+);
 
 export const SCALE_BY_ID: Record<Scale, ScaleDef> = SCALES.reduce(
   (acc, s) => {

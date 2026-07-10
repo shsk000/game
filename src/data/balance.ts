@@ -98,45 +98,62 @@ export const salesMultiplierForScore = (metascore: number): number => {
 };
 
 // ============================================================
-// 採用 power 分布（balance-design §4）
+// v0.16：power 正規化と役割換算（spec v16 §1-3）
 // ============================================================
 
 /**
- * 採用候補の power 値分布。
- *
- * - N（並）：power 0.5〜1.5、出現率 65%
- * - R（強い）：power 1.6〜3.0、出現率 25%
- * - SR（精鋭）：power 3.1〜5.0、出現率 8%
- * - SSR（伝説）：power 5.1〜8.0、出現率 2%
+ * power は全役割共通の 0..1 スケール（v0.16 で正規化。オーナー確定）。
+ * 役割ごとの実効果は使用側でこの係数を掛けて換算する。
+ * 旧スケール（プログラマー0.3〜1.2 / デザイナー2〜10 / 広報5〜20）は v5→v6 セーブ移行で換算。
  */
-export const HIRE_POWER_DISTRIBUTION = {
-  N: { rate: 0.65, powerMin: 0.5, powerMax: 1.5 },
-  R: { rate: 0.25, powerMin: 1.6, powerMax: 3.0 },
-  SR: { rate: 0.08, powerMin: 3.1, powerMax: 5.0 },
-  SSR: { rate: 0.02, powerMin: 5.1, powerMax: 8.0 },
+export const ROLE_EFFECT = {
+  /** プログラマー：自動開発速度 LoC/秒 = power × この値 */
+  programmerLocPerSec: 1.2,
+  /** デザイナー：品質基礎+ = power × この値 */
+  designerQualityBonus: 10,
+  /** 広報：売上ボーナス（比率）= power × この値（例 power 0.5 → +10%） */
+  prSalesBonus: 0.2,
 } as const;
 
-/** power 値からレアリティを引く（採用 UI 表示用） */
-export const rarityForPower = (power: number): 'N' | 'R' | 'SR' | 'SSR' => {
-  if (power >= HIRE_POWER_DISTRIBUTION.SSR.powerMin) return 'SSR';
-  if (power >= HIRE_POWER_DISTRIBUTION.SR.powerMin) return 'SR';
-  if (power >= HIRE_POWER_DISTRIBUTION.R.powerMin) return 'R';
-  return 'N';
-};
+/** 採用候補の初期 power レンジ（見習い帯。成長システムで育てるのが前提）叩き台 🔧 */
+export const CANDIDATE_POWER_RANGE = { min: 0.2, max: 0.6 } as const;
 
 // ============================================================
-// 月給テーブル（balance-design §6-1）
+// v0.16：社員成長（spec v16 §1。Lv10 = 数十作品規模＝終盤・オーナー確定）
+// ============================================================
+
+export const GROWTH = {
+  /** レベル上限 */
+  levelCap: 10,
+  /** リリース参加 1 回の基礎 exp */
+  expBase: 10,
+  /** メタスコア連動の追加 exp（しきい値の高い方から先に判定） */
+  expByMeta: [
+    { minMeta: 90, bonus: 30 },
+    { minMeta: 70, bonus: 15 },
+    { minMeta: 50, bonus: 5 },
+  ],
+  /** 次のレベルに必要な exp = expCurveBase × lv^expCurveExp */
+  expCurveBase: 20,
+  expCurveExp: 1.5,
+  /** power 成長：power = basePower × (1 + powerGrowthPerLevel × (lv − 1)) */
+  powerGrowthPerLevel: 0.15,
+} as const;
+
+// ============================================================
+// 月給テーブル（balance-design §6-1、v0.16 で正規化 power に追従）
 // ============================================================
 
 /**
- * 従業員 1 人あたりの月給。役職差なし、power のみで計算。
- *   月給 = base ¥30 万 + power × ¥20 万
+ * 従業員 1 人あたりの月給。役職差なし、power（0..1 正規化・成長込みの現在値）のみで計算。
+ *   月給 = base ¥30 万 + power × ¥60 万
  *
- * 例：power 1（N）¥50 万 / power 3（R）¥90 万 / power 5（SR）¥130 万 / power 7（SSR）¥170 万
+ * 例：新人 power 0.3 → ¥48 万 / 上位新人 0.6 → ¥66 万 / Lv10 精鋭 1.4 → ¥114 万
+ * 成長するほど高給になる＝強い会社は固定費も重い（経済の緊張を維持）。
  */
 export const MONTHLY_WAGE_FORMULA = {
   base: 300_000,
-  perPowerUnit: 200_000,
+  perPowerUnit: 600_000,
 } as const;
 
 export const computeMonthlyWage = (power: number): number =>
@@ -248,12 +265,24 @@ export const SCALE_BALANCE: Record<
  *   final = (charPower × 0.35 + genreAffinity × 0.25 + typingScore × 0.37 + luck × 0.03)
  *           × luckMultiplier(0.97〜1.03)
  */
+/**
+ * v0.16 改訂（オーナー確定「能力を一番考慮する」）：
+ * キャラ能力を最大の支配項（0.60）に。相性とタイピングを両方カンストしても
+ * 能力抜きでは品質 +30 が上限＝スコア帯は会社の育ちでしか上がらない。
+ * 旧: charPower 0.35 / genreAffinity 0.25 / typingScore 0.37 / luck 0.03
+ */
 export const QUALITY_WEIGHTS = {
-  charPower: 0.35,
-  genreAffinity: 0.25,
-  typingScore: 0.37,
-  luck: 0.03,
+  charPower: 0.6,
+  genreAffinity: 0.15,
+  typingScore: 0.15,
+  luck: 0.1,
 } as const;
+
+/**
+ * v0.16：ビルドアップ属性ボーナス（devStats → 品質加点）の上限。
+ * 旧実装は上限なしで青天井だったため、序盤でもスコアが積み上がりすぎた。
+ */
+export const STAT_QUALITY_BONUS_CAP = 8;
 
 /**
  * 各スコアの計算基準値（balance-design §6-3〜§6-5）。

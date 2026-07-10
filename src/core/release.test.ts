@@ -181,6 +181,30 @@ describe('computeRelease', () => {
     expect(patch.screen).toBe('release');
   });
 
+  it('参加社員はリリースで exp を得る（v0.16 成長システムの合流）', () => {
+    const worker = {
+      id: 'e1',
+      name: 'テスト 花子',
+      role: 'programmer' as const,
+      power: 0.4,
+      basePower: 0.4,
+      level: 1,
+      exp: 0,
+      wage: 540_000,
+      specialties: [],
+    };
+    const bystander = { ...worker, id: 'e2', name: 'テスト 次郎' };
+    const c = ctx({
+      employees: [worker, bystander],
+      current: project({ assignedEmployeeIds: ['e1'] }),
+    });
+    const { patch } = computeRelease(c, undefined, deps());
+    const [grown, idle] = patch.employees;
+    expect(grown.exp).toBeGreaterThan(0);
+    expect(idle.exp).toBe(0);
+    expect(Array.isArray(patch.lastLevelUps)).toBe(true);
+  });
+
   it('ゴースト（開発タイム記録）を上回ったら ghostBeaten', () => {
     const slow = computeRelease(
       ctx({ ghosts: { mini: 30, mobile: null, indie: null, hit: null, aaa: null } }),

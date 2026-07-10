@@ -199,18 +199,17 @@ export const PlanScreen = () => {
         background: COLORS.bgDark,
       }}
     >
-        {/* 左パネル：5 セクション（ジャンル/テーマ/規模/カテゴリ/従業員） */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-            height: '100%',
-            minHeight: 0,
-            overflow: 'auto',
-          }}
-        >
-
+      {/* 左パネル：5 セクション（ジャンル/テーマ/規模/カテゴリ/従業員） */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          height: '100%',
+          minHeight: 0,
+          overflow: 'auto',
+        }}
+      >
         {/* ジャンル — v0.10 仕上げ：未解放は何があるか見せない */}
         <PixelWindow title="ジャンルを選ぶ" variant="standard">
           <div style={chipRowStyle}>
@@ -417,7 +416,7 @@ export const PlanScreen = () => {
                       />
                       <strong style={{ minWidth: 80 }}>{e.name}</strong>
                       <span style={{ fontSize: 11, color: COLORS.textSub }}>
-                        {roleLabel} ／ power {e.power}
+                        {roleLabel} ／ Lv{e.level} power {e.power.toFixed(2)}
                       </span>
                       {/* v0.14：得意分野表示はカテゴリ廃止に伴い一旦撤去（ジャンル連動への転用を検討中） */}
                     </label>
@@ -427,145 +426,138 @@ export const PlanScreen = () => {
             </ul>
           )}
         </PixelWindow>
-        </div>
+      </div>
 
-        {/* 右パネル：企画プレビュー + 予測 + 開発開始 */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-            height: '100%',
-            minHeight: 0,
-            overflow: 'auto',
-          }}
-        >
-          {/* オフライン / 実績解除 通知（あれば） */}
-          {offlineReport && (
-            <PixelWindow title="📬 おかえりなさい" variant="emphasis" bodyStyle={{ padding: 8 }}>
-              <p style={{ margin: 0, fontSize: 12 }}>
-                離席中（{Math.round(offlineReport.awaySec / 60)}分）に ¥
-                {offlineReport.earned.toLocaleString()} 受領。
-              </p>
-              <div style={{ marginTop: 6 }}>
-                <PixelButton size="small" variant="secondary" onClick={clearOfflineReport}>
-                  閉じる
-                </PixelButton>
-              </div>
-            </PixelWindow>
-          )}
-          {newlyAchieved.length > 0 && (
-            <PixelWindow title="🏆 実績解除！" variant="emphasis" bodyStyle={{ padding: 8 }}>
-              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, lineHeight: 1.4 }}>
-                {newlyAchieved.map((id) => {
-                  const def = ACHIEVEMENT_BY_ID[id];
-                  return (
-                    <li key={id}>
-                      {def.emoji} <strong>{def.name}</strong>
-                    </li>
-                  );
-                })}
-              </ul>
-              <div style={{ marginTop: 6 }}>
-                <PixelButton size="small" variant="secondary" onClick={clearNewlyAchieved}>
-                  閉じる
-                </PixelButton>
-              </div>
-            </PixelWindow>
-          )}
-
-          {/* トレンド */}
-          <PixelWindow title="📈 トレンド" variant="standard" bodyStyle={{ padding: 8 }}>
-            <p
-              style={{
-                margin: 0,
-                fontSize: 13,
-                fontWeight: 700,
-                color: COLORS.trendHot,
-              }}
-            >
-              {trend ? trendLabel(trend) : '—'}
+      {/* 右パネル：企画プレビュー + 予測 + 開発開始 */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          height: '100%',
+          minHeight: 0,
+          overflow: 'auto',
+        }}
+      >
+        {/* オフライン / 実績解除 通知（あれば） */}
+        {offlineReport && (
+          <PixelWindow title="📬 おかえりなさい" variant="emphasis" bodyStyle={{ padding: 8 }}>
+            <p style={{ margin: 0, fontSize: 12 }}>
+              離席中（{Math.round(offlineReport.awaySec / 60)}分）に ¥
+              {offlineReport.earned.toLocaleString()} 受領。
             </p>
-            <p style={{ ...hintStyle, marginTop: 2 }}>合致 ×1.3（片方）／ ×1.7（両方）</p>
+            <div style={{ marginTop: 6 }}>
+              <PixelButton size="small" variant="secondary" onClick={clearOfflineReport}>
+                閉じる
+              </PixelButton>
+            </div>
           </PixelWindow>
+        )}
+        {newlyAchieved.length > 0 && (
+          <PixelWindow title="🏆 実績解除！" variant="emphasis" bodyStyle={{ padding: 8 }}>
+            <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, lineHeight: 1.4 }}>
+              {newlyAchieved.map((id) => {
+                const def = ACHIEVEMENT_BY_ID[id];
+                return (
+                  <li key={id}>
+                    {def.emoji} <strong>{def.name}</strong>
+                  </li>
+                );
+              })}
+            </ul>
+            <div style={{ marginTop: 6 }}>
+              <PixelButton size="small" variant="secondary" onClick={clearNewlyAchieved}>
+                閉じる
+              </PixelButton>
+            </div>
+          </PixelWindow>
+        )}
 
-          {/* 企画プレビュー */}
-          <PixelWindow title="🎮 企画プレビュー" variant="emphasis" bodyStyle={{ padding: 8 }}>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-              <JacketView genreId={genreId} themeId={themeId} size="sm" />
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {/* トレンド */}
+        <PixelWindow title="📈 トレンド" variant="standard" bodyStyle={{ padding: 8 }}>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 13,
+              fontWeight: 700,
+              color: COLORS.trendHot,
+            }}
+          >
+            {trend ? trendLabel(trend) : '—'}
+          </p>
+          <p style={{ ...hintStyle, marginTop: 2 }}>合致 ×1.3（片方）／ ×1.7（両方）</p>
+        </PixelWindow>
+
+        {/* 企画プレビュー */}
+        <PixelWindow title="🎮 企画プレビュー" variant="emphasis" bodyStyle={{ padding: 8 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <JacketView genreId={genreId} themeId={themeId} size="sm" />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: COLORS.textDark,
+                }}
+              >
+                {GENRE_BY_ID[genreId].name} × {THEME_BY_ID[themeId].name}
+                {(isTrendyGenre || isTrendyTheme) && (
+                  <span style={{ color: COLORS.trendHot, marginLeft: 4 }}>🔥</span>
+                )}
+              </p>
+              {pioneer && (
+                <span
+                  style={{
+                    padding: '1px 6px',
+                    background: COLORS.pioneer,
+                    color: '#ffffff',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    width: 'fit-content',
+                  }}
+                >
+                  🌱 新規開拓 +30%
+                </span>
+              )}
+              {surveyedCompat !== null ? (
                 <p
                   style={{
                     margin: 0,
-                    fontSize: 13,
+                    color: COLORS.warn,
+                    fontSize: 12,
                     fontWeight: 700,
-                    color: COLORS.textDark,
                   }}
                 >
-                  {GENRE_BY_ID[genreId].name} × {THEME_BY_ID[themeId].name}
-                  {(isTrendyGenre || isTrendyTheme) && (
-                    <span style={{ color: COLORS.trendHot, marginLeft: 4 }}>🔥</span>
-                  )}
+                  相性: {compatLabel(surveyedCompat)} ({surveyedCompat.toFixed(2)}x)
                 </p>
-                {pioneer && (
-                  <span
-                    style={{
-                      padding: '1px 6px',
-                      background: COLORS.pioneer,
-                      color: '#ffffff',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      width: 'fit-content',
-                    }}
-                  >
-                    🌱 新規開拓 +30%
-                  </span>
-                )}
-                {surveyedCompat !== null ? (
-                  <p
-                    style={{
-                      margin: 0,
-                      color: COLORS.warn,
-                      fontSize: 12,
-                      fontWeight: 700,
-                    }}
-                  >
-                    相性: {compatLabel(surveyedCompat)} ({surveyedCompat.toFixed(2)}x)
-                  </p>
-                ) : (
-                  <PixelButton
-                    size="small"
-                    variant="secondary"
-                    onClick={handleSurvey}
-                    disabled={adRunning}
-                  >
-                    {adRunning ? '広告中…' : '📺 市場調査'}
-                  </PixelButton>
-                )}
-              </div>
-            </div>
-          </PixelWindow>
-
-          {/* 開発開始ボタン（常時固定） */}
-          <PixelWindow variant="emphasis" bodyStyle={{ padding: 10 }}>
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch' }}
-            >
-              <PixelButton
-                size="large"
-                variant="primary"
-                onClick={handleStart}
-                disabled={!canStart}
-              >
-                ▶ 開発開始
-              </PixelButton>
-              {!canStart && (
-                <p style={{ ...hintStyle, fontSize: 10 }}>※従業員 1 人以上のアサインが必要</p>
+              ) : (
+                <PixelButton
+                  size="small"
+                  variant="secondary"
+                  onClick={handleSurvey}
+                  disabled={adRunning}
+                >
+                  {adRunning ? '広告中…' : '📺 市場調査'}
+                </PixelButton>
               )}
-              <p style={{ ...hintStyle, fontSize: 11 }}>資金: {formatYen(funds)}</p>
             </div>
-          </PixelWindow>
-        </div>
+          </div>
+        </PixelWindow>
+
+        {/* 開発開始ボタン（常時固定） */}
+        <PixelWindow variant="emphasis" bodyStyle={{ padding: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch' }}>
+            <PixelButton size="large" variant="primary" onClick={handleStart} disabled={!canStart}>
+              ▶ 開発開始
+            </PixelButton>
+            {!canStart && (
+              <p style={{ ...hintStyle, fontSize: 10 }}>※従業員 1 人以上のアサインが必要</p>
+            )}
+            <p style={{ ...hintStyle, fontSize: 11 }}>資金: {formatYen(funds)}</p>
+          </div>
+        </PixelWindow>
+      </div>
 
       {!tutorialDone && <Tutorial />}
     </div>

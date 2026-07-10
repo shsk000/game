@@ -11,21 +11,20 @@ import {
   type EconomyCtx,
 } from './economy';
 
-const programmer = (power: number): Employee => ({
-  id: `p-${power}`,
-  name: 'テスト社員',
-  role: 'programmer',
-  power,
-  wage: employeeMonthlyWage({
-    id: '',
-    name: '',
+const programmer = (power: number): Employee => {
+  const base: Employee = {
+    id: `p-${power}`,
+    name: 'テスト社員',
     role: 'programmer',
     power,
+    basePower: power,
+    level: 1,
+    exp: 0,
     wage: 0,
     specialties: [],
-  }),
-  specialties: [],
-});
+  };
+  return { ...base, wage: employeeMonthlyWage(base) };
+};
 
 const ctx = (over: Partial<EconomyCtx> = {}): EconomyCtx => ({
   funds: 1_000_000,

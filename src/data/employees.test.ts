@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mulberry32 } from '../core/ports';
-import { computeMonthlyWage } from './balance';
+import { CANDIDATE_POWER_RANGE, computeMonthlyWage, ROLE_EFFECT } from './balance';
 import {
   newCandidate,
   REFRESH_COST,
@@ -21,19 +21,14 @@ describe('newCandidate', () => {
     expect(a.specialties).toEqual(b.specialties);
   });
 
-  it('power は役職ごとの値域に収まる', () => {
+  it('power は見習い帯（CANDIDATE_POWER_RANGE）に収まり、成長フィールドが初期化される', () => {
     for (let seed = 0; seed < 50; seed++) {
       const c = newCandidate(fixedDeps(seed));
-      if (c.role === 'programmer') {
-        expect(c.power).toBeGreaterThanOrEqual(0.3);
-        expect(c.power).toBeLessThanOrEqual(1.2);
-      } else if (c.role === 'designer') {
-        expect(c.power).toBeGreaterThanOrEqual(2);
-        expect(c.power).toBeLessThanOrEqual(10);
-      } else {
-        expect(c.power).toBeGreaterThanOrEqual(5);
-        expect(c.power).toBeLessThanOrEqual(20);
-      }
+      expect(c.power).toBeGreaterThanOrEqual(CANDIDATE_POWER_RANGE.min);
+      expect(c.power).toBeLessThanOrEqual(CANDIDATE_POWER_RANGE.max);
+      expect(c.basePower).toBe(c.power);
+      expect(c.level).toBe(1);
+      expect(c.exp).toBe(0);
     }
   });
 
@@ -72,11 +67,11 @@ describe('集計ヘルパー', () => {
     );
   });
 
-  it('sumProgrammerSpeed はプログラマーの power 合計のみ', () => {
+  it('sumProgrammerSpeed はプログラマーのみ power × 係数で合算する', () => {
     const p1 = emp({ id: 'p1', role: 'programmer' as const, power: 0.5 });
     const p2 = emp({ id: 'p2', role: 'programmer' as const, power: 0.7 });
-    const d = emp({ id: 'd', role: 'designer' as const, power: 9 });
-    expect(sumProgrammerSpeed([p1, p2, d])).toBeCloseTo(1.2);
+    const d = emp({ id: 'd', role: 'designer' as const, power: 0.9 });
+    expect(sumProgrammerSpeed([p1, p2, d])).toBeCloseTo(1.2 * ROLE_EFFECT.programmerLocPerSec);
   });
 
   it('sumEmployeeCategoryBonus は割当済み社員×一致カテゴリのみ加算', () => {

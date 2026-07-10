@@ -82,8 +82,17 @@ export type Employee = {
   id: string;
   name: string;
   role: EmployeeRole;
-  /** 役職パラメータ：プログラマーはLoC/秒、デザイナーは品質基礎+、広報は売上%加算 */
+  /**
+   * v0.16：全役割共通の 0..1 正規化スケール（成長込みの現在値）。
+   * 実効果は使用側で ROLE_EFFECT 係数を掛ける（LoC/秒・品質+・売上%）。
+   */
   power: number;
+  /** v0.16：素質（採用時に決まる 0.2〜0.6）。power = basePower × レベル成長率 */
+  basePower: number;
+  /** v0.16：レベル（1〜GROWTH.levelCap）。リリース参加の exp で上がる */
+  level: number;
+  /** v0.16：現在の経験値（レベルアップで消費） */
+  exp: number;
   wage: number;
   specialties: EmployeeSpecialty[];
 };

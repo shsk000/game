@@ -56,18 +56,22 @@ const completionAwards = (w: {
 }): { icon: string; title: string; note: string }[] => {
   const list: { icon: string; title: string; note: string }[] = [];
   if (w.isMasterpiece) list.push({ icon: '🏆', title: '神ゲー認定！', note: 'レビューで超高評価' });
-  if (w.metascore >= 90) list.push({ icon: '🏅', title: 'アワードノミネート', note: '会社の名が業界に轟く' });
-  if (w.metascore >= 80) list.push({ icon: '📈', title: '初週売上好調', note: '予想以上に売れている' });
-  if (w.fansGained >= 40) list.push({ icon: '🎨', title: 'ファンアート投稿', note: 'ユーザーが作品を盛り上げている' });
-  if (w.metascore >= 70) list.push({ icon: '💌', title: '続編希望の声', note: 'SNS で次回作を求める声' });
-  if (list.length === 0)
-    list.push({ icon: '🌱', title: '静かな船出', note: '次回作で巻き返そう' });
+  if (w.metascore >= 90)
+    list.push({ icon: '🏅', title: 'アワードノミネート', note: '会社の名が業界に轟く' });
+  if (w.metascore >= 80)
+    list.push({ icon: '📈', title: '初週売上好調', note: '予想以上に売れている' });
+  if (w.fansGained >= 40)
+    list.push({ icon: '🎨', title: 'ファンアート投稿', note: 'ユーザーが作品を盛り上げている' });
+  if (w.metascore >= 70)
+    list.push({ icon: '💌', title: '続編希望の声', note: 'SNS で次回作を求める声' });
+  if (list.length === 0) list.push({ icon: '🌱', title: '静かな船出', note: '次回作で巻き返そう' });
   return list;
 };
 
 export const ReleaseScreen = () => {
   const work = useGameStore((s) => s.lastReleased);
   const current = useGameStore((s) => s.current);
+  const lastLevelUps = useGameStore((s) => s.lastLevelUps);
   const releaseWork = useGameStore((s) => s.releaseWork);
   const goTo = useGameStore((s) => s.goTo);
   const clearNewlyAchieved = useGameStore((s) => s.clearNewlyAchieved);
@@ -451,6 +455,16 @@ export const ReleaseScreen = () => {
                   })}
                 </div>
               )}
+              {/* v0.16：社員成長。参加社員のレベルアップを開封演出に同居させる */}
+              {lastLevelUps.length > 0 && (
+                <div className="achievement-badge-stack">
+                  {lastLevelUps.map((lu) => (
+                    <div key={`${lu.employeeId}-${lu.level}`} className="achievement-badge">
+                      ⬆ {lu.name} が Lv{lu.level} になった！
+                    </div>
+                  ))}
+                </div>
+              )}
               <ul className="release-stats">
                 <li>品質 Q {work.quality}</li>
                 <li>
@@ -564,7 +578,11 @@ export const ReleaseScreen = () => {
               </div>
 
               {/* v0.14 開発完了フェーズ：打ち上げ（結果演出。spec §5-3） */}
-              <PixelWindow title="🎉 開発完了！ 打ち上げ" variant="emphasis" style={{ marginTop: 10 }}>
+              <PixelWindow
+                title="🎉 開発完了！ 打ち上げ"
+                variant="emphasis"
+                style={{ marginTop: 10 }}
+              >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div
                     style={{
@@ -588,7 +606,16 @@ export const ReleaseScreen = () => {
                   <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>
                     リリースおめでとう！！ チーム全員おつかれさまでした！
                   </p>
-                  <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <ul
+                    style={{
+                      listStyle: 'none',
+                      margin: 0,
+                      padding: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                    }}
+                  >
                     {completionAwards(work).map((a) => (
                       <li key={a.title} style={{ fontSize: 13 }}>
                         {a.icon} <strong>{a.title}</strong>

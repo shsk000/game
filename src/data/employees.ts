@@ -1,7 +1,7 @@
 import type { Deps, Rng } from '../core/ports';
 import { defaultDeps } from '../core/ports';
 import type { Candidate, Employee, EmployeeRole, EmployeeSpecialty } from '../state/types';
-import { computeMonthlyWage } from './balance';
+import { CANDIDATE_POWER_RANGE, computeMonthlyWage, ROLE_EFFECT } from './balance';
 import type { CategoryId } from './categories';
 
 const SURNAMES = [
@@ -64,15 +64,12 @@ const randomName = (rng: Rng) => `${pick(SURNAMES, rng)} ${pick(GIVEN, rng)}`;
 const ROLE_DICE: EmployeeRole[] = ['programmer', 'programmer', 'designer', 'designer', 'pr'];
 
 /**
- * 職種別の力量レンジ:
- *  - programmer: LoC/sec 0.3〜1.2
- *  - designer:   品質基礎+ 2〜10
- *  - pr:         売上%加算 5〜20
+ * v0.16：power は全役割共通の 0..1 正規化スケール（balance.ts ROLE_EFFECT で換算）。
+ * 候補は「見習い帯」（CANDIDATE_POWER_RANGE 0.2〜0.6）で生成し、成長システムで育てる。
  */
-const rollPower = (role: EmployeeRole, rng: Rng): number => {
-  if (role === 'programmer') return Math.round((0.3 + rng() * 0.9) * 10) / 10;
-  if (role === 'designer') return Math.round(2 + rng() * 8);
-  return Math.round(5 + rng() * 15);
+const rollPower = (rng: Rng): number => {
+  const { min, max } = CANDIDATE_POWER_RANGE;
+  return Math.round((min + rng() * (max - min)) * 100) / 100;
 };
 
 /**
@@ -132,26 +129,38 @@ let counter = 0;
 export const newCandidate = (deps: Deps = defaultDeps): Candidate => {
   const { rng, now } = deps;
   const role = pick(ROLE_DICE, rng);
-  const power = rollPower(role, rng);
+  const power = rollPower(rng);
   counter += 1;
   return {
     id: `c-${now()}-${counter}`,
     name: randomName(rng),
     role,
     power,
+    basePower: power,
+    level: 1,
+    exp: 0,
     wage: wageFor(role, power),
     specialties: rollSpecialties(role, rng),
   };
 };
 
+/** プログラマーの自動開発速度合計（LoC/秒）。v0.16：正規化 power × 係数 */
 export const sumProgrammerSpeed = (employees: Employee[]): number =>
-  employees.filter((e) => e.role === 'programmer').reduce((a, b) => a + b.power, 0);
+  employees
+    .filter((e) => e.role === 'programmer')
+    .reduce((a, b) => a + b.power * ROLE_EFFECT.programmerLocPerSec, 0);
 
+/** デザイナーの品質基礎ボーナス合計。v0.16：正規化 power × 係数 */
 export const sumDesignerBonus = (employees: Employee[]): number =>
-  employees.filter((e) => e.role === 'designer').reduce((a, b) => a + b.power, 0);
+  employees
+    .filter((e) => e.role === 'designer')
+    .reduce((a, b) => a + b.power * ROLE_EFFECT.designerQualityBonus, 0);
 
+/** 広報の売上ボーナス合計（比率）。v0.16：正規化 power × 係数 */
 export const sumPrBonus = (employees: Employee[]): number =>
-  employees.filter((e) => e.role === 'pr').reduce((a, b) => a + b.power, 0) / 100;
+  employees
+    .filter((e) => e.role === 'pr')
+    .reduce((a, b) => a + b.power * ROLE_EFFECT.prSalesBonus, 0);
 
 /**
  * 割当従業員のうち、選択カテゴリにマッチする specialty.bonus の総和。

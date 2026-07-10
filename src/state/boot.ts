@@ -34,7 +34,7 @@ const persistedSnapshot = (s: GameState): Omit<storage.Persisted, 'version' | 'l
 });
 
 const saveNow = (s: GameState, nowMs: number) => {
-  storage.save({ version: 5, ...persistedSnapshot(s), lastSeenAt: nowMs });
+  storage.save({ version: 6, ...persistedSnapshot(s), lastSeenAt: nowMs });
 };
 
 /**
@@ -102,7 +102,7 @@ export const bootGameStore = (deps?: Deps): void => {
     persistedSnapshot,
     (snap) =>
       storage.save({
-        version: 5,
+        version: 6,
         ...snap,
         lastSeenAt: resolved.now(),
       }),

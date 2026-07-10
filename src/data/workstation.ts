@@ -44,7 +44,16 @@ export const WS_NW: WsConfig = {
   layers: [
     { img: 'desk.png', w: 77, ox: -25, oy: -19, z: 1 },
     { img: 'laptop.png', w: 43, ox: -22, oy: -56, z: 2 },
-    { img: 'person_sit_nw.png', w: 118, ox: -3, oy: -9, z: 6, clipTop: 79, clipBot: 28, clipSide: 'left' },
+    {
+      img: 'person_sit_nw.png',
+      w: 118,
+      ox: -3,
+      oy: -9,
+      z: 6,
+      clipTop: 79,
+      clipBot: 28,
+      clipSide: 'left',
+    },
   ],
   chair: { img: 'chair.png', w: 56, ox: -2, oy: -23, zBack: 2, zFront: 5, top: 57, bot: 24 },
   cellOffset: { x: 14, y: 40 },
@@ -57,7 +66,17 @@ export const WS_SE: WsConfig = {
     { img: 'laptop_se.png', w: 43, ox: 0, oy: -42, z: 8 },
     { img: 'person_sit.png', w: 118, ox: -16, oy: -9, z: 6 },
   ],
-  chair: { img: 'chair_se.png', w: 56, ox: -17, oy: -26, zBack: 2, zFront: 5, top: 57, bot: 24, backSide: 'left' },
+  chair: {
+    img: 'chair_se.png',
+    w: 56,
+    ox: -17,
+    oy: -26,
+    zBack: 2,
+    zFront: 5,
+    top: 57,
+    bot: 24,
+    backSide: 'left',
+  },
   cellOffset: { x: 9, y: 39 },
 };
 
@@ -66,7 +85,8 @@ export const WS_LAYERS = WS_NW.layers;
 export const WS_CHAIR = WS_NW.chair;
 
 /** 分割線より左側を残す clip-path（座面+前脚／社員クリップ用）。 */
-export const clipKeepLeft = (top: number, bot: number) => `polygon(0 0, ${top}% 0, ${bot}% 100%, 0 100%)`;
+export const clipKeepLeft = (top: number, bot: number) =>
+  `polygon(0 0, ${top}% 0, ${bot}% 100%, 0 100%)`;
 
 /** 分割線より右側を残す clip-path（背もたれ用）。 */
 export const clipKeepRight = (top: number, bot: number) =>

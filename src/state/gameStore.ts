@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { computeBorrow, computeMonthlyTick, computeRepay } from '../core/economy';
+import type { LevelUp } from '../core/growth';
 import { type Deps, defaultDeps } from '../core/ports';
 import { evaluateAchievements } from '../core/progression';
 import { computeRelease, type ReleaseOpts } from '../core/release';
@@ -157,6 +158,8 @@ export type GameState = {
   tutorialDone: boolean;
   current: CurrentProject | null;
   lastReleased: Work | null;
+  /** v0.16：直近リリースで発生した社員レベルアップ（ReleaseScreen 開封演出用） */
+  lastLevelUps: LevelUp[];
   offlineReport: OfflineReport | null;
   /** v0.10：ゲーム内日付（週単位） */
   currentDate: GameDate;
@@ -201,6 +204,7 @@ export const useGameStore = create<GameState>()(
     tutorialDone: false,
     current: null,
     lastReleased: null,
+    lastLevelUps: [],
     offlineReport: null,
     currentDate: pureDefaults.currentDate ?? INITIAL_GAME_DATE,
     lastFixedCost: null,
@@ -576,6 +580,7 @@ export const useGameStore = create<GameState>()(
         tutorialDone: false,
         current: null,
         lastReleased: null,
+        lastLevelUps: [],
         offlineReport: null,
         currentDate: d.currentDate,
         lastFixedCost: null,

@@ -1,45 +1,45 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
-import {
-  type AxisDelta,
-  type DevEvent,
-  EVENT_CATEGORY_META,
-  PHASE_EVENTS,
-  formatAxisDelta,
-} from '../../data/events';
+import { planWeeksAllowance } from '../../data/balance';
+import { buildLine } from '../../data/codeSnippets';
 import {
   ATTR_BASE_GAIN,
   CATEGORY_META,
   comboAttrMultiplier,
   getTicketAt,
-  pickPhrase,
   PHRASES_PER_TICKET,
-  speedRank,
+  pickPhrase,
   type SpeedRank,
+  speedRank,
   type TicketCategory,
 } from '../../data/devPhrases';
-import { buildLine } from '../../data/codeSnippets';
+import {
+  type AxisDelta,
+  type DevEvent,
+  EVENT_CATEGORY_META,
+  formatAxisDelta,
+  PHASE_EVENTS,
+} from '../../data/events';
+import { GENRE_BY_ID, type GenreId, genreBackgroundUrl, genreSpriteUrl } from '../../data/genres';
 import {
   GENRE_PLAN_CONTENT,
   getPlanTicketAt,
   IDEA_CARD_COLORS,
   PHRASES_PER_PLAN_TICKET,
-  pickPlanMemo,
-  pickPlanPhrase,
   PLAN_BASE_GAIN,
   PLAN_CATEGORY_META,
   PLAN_CATEGORY_ORDER,
   type PlanCategory,
+  pickPlanMemo,
+  pickPlanPhrase,
 } from '../../data/planTickets';
-import { GENRE_BY_ID, genreBackgroundUrl, genreSpriteUrl, type GenreId } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
 import { DEV_PHASE_META, DEV_PHASE_ORDER, type DevPhase, dateToWeekIndex } from '../../state/types';
-import { planWeeksAllowance } from '../../data/balance';
+import { sfx } from '../../utils/sfx';
 import { computeDevImpact, progressGain, toCharsPerMin } from './devImpact';
 import { useTyping } from './useTyping';
-import { sfx } from '../../utils/sfx';
 
 /** v0.15.2 フィーバー定数（叩き台 🔧）：正打 60 打で MAX、15 秒間 進捗×2 */
 const FEVER_MAX = 60;
@@ -113,9 +113,9 @@ export const DevelopScreen = () => {
   const ticketIndexRef = useRef(0);
   const [ticketPhraseCount, setTicketPhraseCount] = useState(0);
   const ticketPhraseCountRef = useRef(0);
-  const [completedTickets, setCompletedTickets] = useState<{ title: string; category: TicketCategory }[]>(
-    [],
-  );
+  const [completedTickets, setCompletedTickets] = useState<
+    { title: string; category: TicketCategory }[]
+  >([]);
   const currentTicket = useMemo(() => getTicketAt(genreId, ticketIndex), [genreId, ticketIndex]);
   const nextTicket = useMemo(() => getTicketAt(genreId, ticketIndex + 1), [genreId, ticketIndex]);
 
@@ -323,7 +323,9 @@ export const DevelopScreen = () => {
         }
 
         if (finishing) {
-          setCompletedTickets((l) => [...l, { title: currentTicket.flavor.title, category }].slice(-6));
+          setCompletedTickets((l) =>
+            [...l, { title: currentTicket.flavor.title, category }].slice(-6),
+          );
           ticketIndexRef.current += 1;
           setTicketIndex(ticketIndexRef.current);
           ticketPhraseCountRef.current = 0;
@@ -396,7 +398,10 @@ export const DevelopScreen = () => {
   const charsPerMin = toCharsPerMin(wpm);
   const accuracyPct = Math.round(accuracy * 1000) / 10;
   const progressPct = Math.max(0, Math.min(100, (current.doneLoC / workTarget) * 100));
-  const litPhaseDots = Math.max(1, Math.min(TOTAL_PHASE_DOTS, Math.ceil((progressPct / 100) * TOTAL_PHASE_DOTS)));
+  const litPhaseDots = Math.max(
+    1,
+    Math.min(TOTAL_PHASE_DOTS, Math.ceil((progressPct / 100) * TOTAL_PHASE_DOTS)),
+  );
 
   // 企画の進捗（企画書完成度）：完了チケット＋現在チケット内のフレーズ消化
   const planProgressPct = Math.min(
@@ -409,10 +414,7 @@ export const DevelopScreen = () => {
   );
 
   // 予定週 = 開発ぶん（neededWeeks）＋企画・仕上げの猶予（v0.15.3）
-  const plannedWeeks = Math.max(
-    1,
-    scaleDef.neededWeeks + planWeeksAllowance(scaleDef.neededWeeks),
-  );
+  const plannedWeeks = Math.max(1, scaleDef.neededWeeks + planWeeksAllowance(scaleDef.neededWeeks));
   const elapsedWeeks = current.startDate
     ? Math.max(0, dateToWeekIndex(currentDate) - dateToWeekIndex(current.startDate))
     : 0;
@@ -450,7 +452,9 @@ export const DevelopScreen = () => {
         }}
       >
         {/* 左：フェーズ進行 ＋ チーム ＋ 開発全体の進捗 */}
-        <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, minWidth: 0 }}>
+        <aside
+          style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, minWidth: 0 }}
+        >
           <PhaseProgressList phase={phase} />
           <TeamStatus
             employeeIds={current.assignedEmployeeIds}
@@ -499,8 +503,8 @@ export const DevelopScreen = () => {
               ticketProgressPct={Math.min(
                 100,
                 ((ticketPhraseCount +
-                  (view.completed.length /
-                    Math.max(1, view.completed.length + view.remained.length))) /
+                  view.completed.length /
+                    Math.max(1, view.completed.length + view.remained.length)) /
                   PHRASES_PER_TICKET) *
                   100,
               )}
@@ -526,8 +530,8 @@ export const DevelopScreen = () => {
               ticketProgressPct={Math.min(
                 100,
                 ((planPhraseCount +
-                  (view.completed.length /
-                    Math.max(1, view.completed.length + view.remained.length))) /
+                  view.completed.length /
+                    Math.max(1, view.completed.length + view.remained.length)) /
                   PHRASES_PER_PLAN_TICKET) *
                   100,
               )}
@@ -552,7 +556,9 @@ export const DevelopScreen = () => {
         </main>
 
         {/* 右：企画中は「現在の企画書」、開発中は「現在のプロジェクト＋開発内容」 */}
-        <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, minWidth: 0 }}>
+        <aside
+          style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, minWidth: 0 }}
+        >
           {isPlanning ? (
             <PlanDocPanel
               title={current.title}
@@ -577,7 +583,9 @@ export const DevelopScreen = () => {
               </div>
 
               <div style={{ ...devBox(), gap: 4, flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>現在の開発内容</span>
+                <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>
+                  現在の開発内容
+                </span>
                 {completedTickets.length === 0 ? (
                   <span style={{ fontSize: 11, color: '#5a6e3a' }}>まだ着手した作業がない…</span>
                 ) : (
@@ -694,7 +702,7 @@ const TeamStatus = ({
               <span style={{ marginLeft: 'auto', fontSize: 12 }}>{excited ? '😄' : '🙂'}</span>
             </div>
             <SegGauge
-              pct={Math.min(100, (e.power / 8) * 100)}
+              pct={Math.min(100, (e.power / 1.5) * 100)}
               color={roleColor[e.role] ?? DEV.green}
               track="#0c1207"
               height={5}
@@ -778,13 +786,18 @@ const DevelopCenter = ({
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {feverActive && (
-            <span className="dev-fever-text" style={{ fontSize: 12, fontWeight: 700, color: '#ff5a3c' }}>
+            <span
+              className="dev-fever-text"
+              style={{ fontSize: 12, fontWeight: 700, color: '#ff5a3c' }}
+            >
               🔥FEVER 進捗×2
             </span>
           )}
           <span style={{ fontSize: 11, color: DEV.sub }}>
             PHASE {litPhaseDots} / 6
-            <span style={{ display: 'inline-flex', gap: 3, marginLeft: 6, verticalAlign: 'middle' }}>
+            <span
+              style={{ display: 'inline-flex', gap: 3, marginLeft: 6, verticalAlign: 'middle' }}
+            >
               {Array.from({ length: 6 }, (_, i) => (
                 <span
                   key={i}
@@ -862,8 +875,18 @@ const DevelopCenter = ({
             </span>
           </div>
           {!activeEvent && (
-            <div style={{ width: 84, display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-              <span style={{ fontSize: 10, color: DEV.sub, whiteSpace: 'nowrap' }}>チケット進捗</span>
+            <div
+              style={{
+                width: 84,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+                alignItems: 'flex-end',
+              }}
+            >
+              <span style={{ fontSize: 10, color: DEV.sub, whiteSpace: 'nowrap' }}>
+                チケット進捗
+              </span>
               <span
                 style={{
                   fontSize: 22,
@@ -910,14 +933,28 @@ const DevelopCenter = ({
           <div style={{ width: 96, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ ...devBox(), gap: 1, padding: 5 }}>
               <span style={{ fontSize: 9, color: DEV.sub }}>⏩入力速度</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: DEV.cream, fontVariantNumeric: 'tabular-nums' }}>
+              <span
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: DEV.cream,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
                 {charsPerMin}
               </span>
               <span style={{ fontSize: 8, color: DEV.sub }}>文字/分</span>
             </div>
             <div style={{ ...devBox(), gap: 1, padding: 5 }}>
               <span style={{ fontSize: 9, color: DEV.sub }}>🎯正確さ</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: DEV.cream, fontVariantNumeric: 'tabular-nums' }}>
+              <span
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: DEV.cream,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
                 {accuracyPct}%
               </span>
             </div>
@@ -996,7 +1033,8 @@ const WorkInProgressPanel = (props: {
         genre={props.genre}
       />
     );
-  if (category === 'sound') return <SoundMeterPanel beatKey={props.soundBeatKey} title={props.ticketTitle} />;
+  if (category === 'sound')
+    return <SoundMeterPanel beatKey={props.soundBeatKey} title={props.ticketTitle} />;
   return <DesignMemoPanel notes={props.designNotes} />;
 };
 
@@ -1004,8 +1042,25 @@ const WIP_HEIGHT = 74;
 
 /** 疑似シンタックスハイライト：IDE風に予約語/関数名/クラス名/文字列/数値/記号を色分け */
 const CODE_KEYWORDS = new Set([
-  'function', 'const', 'let', 'var', 'return', 'async', 'await', 'class',
-  'extends', 'interface', 'private', 'public', 'for', 'of', 'new', 'export', 'if', 'else', 'void',
+  'function',
+  'const',
+  'let',
+  'var',
+  'return',
+  'async',
+  'await',
+  'class',
+  'extends',
+  'interface',
+  'private',
+  'public',
+  'for',
+  'of',
+  'new',
+  'export',
+  'if',
+  'else',
+  'void',
 ]);
 
 const CODE_COLORS: Record<string, string> = {
@@ -1170,23 +1225,24 @@ const GraphicsCanvasPanel = ({
           />
         )}
         {/* ②装飾のキラキラ（チケット内2問目を打ち終えると登場） */}
-        {showSparkles && sparkleSpots.slice(0, litFrames).map((pos, i) => (
-          <img
-            key={`${frame}-${i}`}
-            src="/sprites/effects/sparkle.png"
-            alt=""
-            className="dev-sparkle-twinkle"
-            style={{
-              position: 'absolute',
-              width: 12,
-              height: 12,
-              imageRendering: 'pixelated',
-              top: pos.top,
-              left: pos.left,
-              animationDelay: pos.delay,
-            }}
-          />
-        ))}
+        {showSparkles &&
+          sparkleSpots.slice(0, litFrames).map((pos, i) => (
+            <img
+              key={`${frame}-${i}`}
+              src="/sprites/effects/sparkle.png"
+              alt=""
+              className="dev-sparkle-twinkle"
+              style={{
+                position: 'absolute',
+                width: 12,
+                height: 12,
+                imageRendering: 'pixelated',
+                top: pos.top,
+                left: pos.left,
+                animationDelay: pos.delay,
+              }}
+            />
+          ))}
         {genre ? (
           <span className="dev-sprite-idle" style={{ position: 'relative' }}>
             <img
@@ -1301,7 +1357,15 @@ const RANK_COLOR: Record<SpeedRank, string> = {
 const ResultCard = ({ result }: { result: LastResult | null }) => {
   if (!result) {
     return (
-      <div style={{ ...devBox(), gap: 4, minHeight: 58, alignItems: 'center', justifyContent: 'center' }}>
+      <div
+        style={{
+          ...devBox(),
+          gap: 4,
+          minHeight: 58,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         <span style={{ fontSize: 11, color: '#3f5226' }}>まだ入力していない…</span>
       </div>
     );
@@ -1309,11 +1373,17 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
   if (result.kind === 'event') {
     const color = '#5fe08a';
     return (
-      <div key={result.ts} className="dev-result-pop" style={{ ...devBox(), gap: 4, borderColor: color }}>
+      <div
+        key={result.ts}
+        className="dev-result-pop"
+        style={{ ...devBox(), gap: 4, borderColor: color }}
+      >
         <span style={{ fontSize: 13, fontWeight: 700, color }}>
           {EVENT_CATEGORY_META[result.event.category].icon} {result.event.name} 解決！
         </span>
-        <span style={{ fontSize: 11, color: DEV.cream }}>{formatAxisDelta(result.event.success)}</span>
+        <span style={{ fontSize: 11, color: DEV.cream }}>
+          {formatAxisDelta(result.event.success)}
+        </span>
       </div>
     );
   }
@@ -1445,7 +1515,9 @@ const PlanningCenter = ({
           borderBottom: `2px solid ${DEV.panelBorder}`,
         }}
       >
-        <span style={{ color: PLAN.accent, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}>
+        <span
+          style={{ color: PLAN.accent, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}
+        >
           💡 企画フェーズ
         </span>
         <span style={{ fontSize: 11, color: DEV.sub }}>
@@ -1526,8 +1598,18 @@ const PlanningCenter = ({
             </span>
           </div>
           {!activeEvent && (
-            <div style={{ width: 84, display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-              <span style={{ fontSize: 10, color: DEV.sub, whiteSpace: 'nowrap' }}>チケット進捗</span>
+            <div
+              style={{
+                width: 84,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+                alignItems: 'flex-end',
+              }}
+            >
+              <span style={{ fontSize: 10, color: DEV.sub, whiteSpace: 'nowrap' }}>
+                チケット進捗
+              </span>
               <span
                 style={{
                   fontSize: 22,
@@ -1573,14 +1655,28 @@ const PlanningCenter = ({
           <div style={{ width: 96, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ ...devBox(), gap: 1, padding: 5 }}>
               <span style={{ fontSize: 9, color: DEV.sub }}>⏩入力速度</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: DEV.cream, fontVariantNumeric: 'tabular-nums' }}>
+              <span
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: DEV.cream,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
                 {charsPerMin}
               </span>
               <span style={{ fontSize: 8, color: DEV.sub }}>文字/分</span>
             </div>
             <div style={{ ...devBox(), gap: 1, padding: 5 }}>
               <span style={{ fontSize: 9, color: DEV.sub }}>🎯正確さ</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: DEV.cream, fontVariantNumeric: 'tabular-nums' }}>
+              <span
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: DEV.cream,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
                 {accuracyPct}%
               </span>
             </div>

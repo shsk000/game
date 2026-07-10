@@ -10,7 +10,10 @@ const emp: Employee = {
   id: 'e-test-1',
   name: 'テスト 太郎',
   role: 'programmer',
-  power: 1,
+  power: 0.5,
+  basePower: 0.5,
+  level: 1,
+  exp: 0,
   wage: 500_000,
   specialties: [],
 };

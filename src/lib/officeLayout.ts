@@ -7,7 +7,7 @@
  * - 確定したら、ツール出力の値を下の DEFAULT_* に転記してコードに焼き込む。
  */
 
-import { type Placement } from './officeGeometry';
+import type { Placement } from './officeGeometry';
 
 /** ドアもセル基準＋セル内オフセット（ox,oy）で置く。机と同じ「セル＋セル内位置」方式。 */
 export type DoorCfg = { img: string; i: number; j: number; w: number; ox: number; oy: number };
@@ -47,13 +47,17 @@ export const decorImg = (imgBase: string, dir: DecorDir) => `${imgBase}_${dir.to
  * 壁掛けデコ（onWall）を壁の大面へ載せる skew 角度(deg)。壁面は 2:1 dimetric の slope 0.5 = atan(0.5)=26.57°。
  * SE壁（奥左辺=NW辺）は右上がり→ skewY 負、SW壁（奥右辺=NE辺）は左上がり→ skewY 正。
  */
-export const wallSkewDeg = (dir: DecorDir): number => (dir === 'SW' ? 26.565 : dir === 'SE' ? -26.565 : 0);
+export const wallSkewDeg = (dir: DecorDir): number =>
+  dir === 'SW' ? 26.565 : dir === 'SE' ? -26.565 : 0;
 
 /**
  * 配置時の実効ジオメトリ。ox はカタログ基準(SE)で、左向き(SW/NW)は符号反転（鏡面）。
  * footprint(cw/ch): SW は反射で i↔j を入れ替え。NW は SE の180°なので入れ替えない（SE と同じ）。oy は常に同じ。
  */
-export function decorGeom(item: DecorItem, dir: DecorDir): { ox: number; oy: number; cw: number; ch: number } {
+export function decorGeom(
+  item: DecorItem,
+  dir: DecorDir,
+): { ox: number; oy: number; cw: number; ch: number } {
   const cw = item.cw ?? 1;
   const ch = item.ch ?? 1;
   if (dir === 'SW') return { ox: -item.ox, oy: item.oy, cw: ch, ch: cw };
@@ -70,9 +74,25 @@ export function decorGeom(item: DecorItem, dir: DecorDir): { ox: number; oy: num
  */
 export type WallDir = 'SE' | 'SW';
 /** rot = 表示時のCSS回転角(度, 既定0)。stackDy = 縦積み1段ごとの上方向オフセット(px)。 */
-export type WallItem = { id: string; name: string; imgBase: string; w: number; h: number; ox: number; oy: number; rot?: number; stackDy?: number };
+export type WallItem = {
+  id: string;
+  name: string;
+  imgBase: string;
+  w: number;
+  h: number;
+  ox: number;
+  oy: number;
+  rot?: number;
+  stackDy?: number;
+};
 /** stack = 縦に何段積むか（1〜3, 既定1）。上方向に stackDy ずつリピート。 */
-export type WallPlacement = { catalogId: string; i: number; j: number; dir: WallDir; stack: number };
+export type WallPlacement = {
+  catalogId: string;
+  i: number;
+  j: number;
+  dir: WallDir;
+  stack: number;
+};
 
 /** 向き別の壁スプライト名。 */
 export const wallImg = (imgBase: string, dir: WallDir) => `${imgBase}_${dir.toLowerCase()}.png`;
@@ -132,15 +152,52 @@ export const MAX_EMPLOYEES = DEFAULT_WORKSTATIONS.length;
 export const DEFAULT_DECOR_CATALOG: DecorItem[] = [
   { id: 'plant', name: '観葉植物', imgBase: 'plant', w: 110, ox: -1, oy: 21, cw: 1, ch: 1 },
   { id: 'bookshelf', name: '本棚', imgBase: 'bookshelf', w: 120, ox: -4, oy: 16, cw: 1, ch: 1 },
-  { id: 'water_cooler', name: 'ウォーターサーバー', imgBase: 'water_cooler', w: 67, ox: -12, oy: 6, cw: 1, ch: 1 },
-  { id: 'whiteboard', name: 'ホワイトボード', imgBase: 'whiteboard', w: 130, ox: -9, oy: 23, cw: 1, ch: 2 },
+  {
+    id: 'water_cooler',
+    name: 'ウォーターサーバー',
+    imgBase: 'water_cooler',
+    w: 67,
+    ox: -12,
+    oy: 6,
+    cw: 1,
+    ch: 1,
+  },
+  {
+    id: 'whiteboard',
+    name: 'ホワイトボード',
+    imgBase: 'whiteboard',
+    w: 130,
+    ox: -9,
+    oy: 23,
+    cw: 1,
+    ch: 2,
+  },
   { id: 'sofa', name: 'ソファ', imgBase: 'sofa', w: 120, ox: 4, oy: 42, cw: 1, ch: 2 },
-  { id: 'coffee_table', name: 'コーヒーテーブル', imgBase: 'coffee_table', w: 90, ox: -9, oy: 38, cw: 1, ch: 2 },
+  {
+    id: 'coffee_table',
+    name: 'コーヒーテーブル',
+    imgBase: 'coffee_table',
+    w: 90,
+    ox: -9,
+    oy: 38,
+    cw: 1,
+    ch: 2,
+  },
   { id: 'vending', name: '自販機', imgBase: 'vending', w: 110, ox: 6, oy: 15, cw: 1, ch: 1 },
   { id: 'fridge', name: '冷蔵庫', imgBase: 'fridge', w: 100, ox: -7, oy: 24, cw: 1, ch: 1 },
   { id: 'trash', name: 'ゴミ箱', imgBase: 'trash', w: 50, ox: 1, oy: 6, cw: 1, ch: 1 },
   { id: 'clock', name: '時計', imgBase: 'clock', w: 60, ox: -22, oy: -82, cw: 1, ch: 1 },
-  { id: 'window', name: '窓', imgBase: 'window_sky', w: 79, ox: -22, oy: -40, cw: 1, ch: 1, onWall: true },
+  {
+    id: 'window',
+    name: '窓',
+    imgBase: 'window_sky',
+    w: 79,
+    ox: -22,
+    oy: -40,
+    cw: 1,
+    ch: 1,
+    onWall: true,
+  },
 ];
 
 /** 出荷時の家具配置（どの種類をどのセルに）。?layout で調整 → ここに転記。 */
@@ -196,9 +253,11 @@ export const loadDoor = (): DoorCfg => read(DOOR_KEY, DEFAULT_DOOR);
 export const saveDoor = (d: DoorCfg) => write(DOOR_KEY, d);
 export const loadDecorCatalog = (): DecorItem[] => read(DECOR_CATALOG_KEY, DEFAULT_DECOR_CATALOG);
 export const saveDecorCatalog = (c: DecorItem[]) => write(DECOR_CATALOG_KEY, c);
-export const loadDecorPlacements = (): DecorPlacement[] => read(DECOR_PLACE_KEY, DEFAULT_DECOR_PLACEMENTS);
+export const loadDecorPlacements = (): DecorPlacement[] =>
+  read(DECOR_PLACE_KEY, DEFAULT_DECOR_PLACEMENTS);
 export const saveDecorPlacements = (p: DecorPlacement[]) => write(DECOR_PLACE_KEY, p);
 export const loadWallCatalog = (): WallItem[] => read(WALL_CATALOG_KEY, DEFAULT_WALL_CATALOG);
 export const saveWallCatalog = (c: WallItem[]) => write(WALL_CATALOG_KEY, c);
-export const loadWallPlacements = (): WallPlacement[] => read(WALL_PLACE_KEY, DEFAULT_WALL_PLACEMENTS);
+export const loadWallPlacements = (): WallPlacement[] =>
+  read(WALL_PLACE_KEY, DEFAULT_WALL_PLACEMENTS);
 export const saveWallPlacements = (p: WallPlacement[]) => write(WALL_PLACE_KEY, p);

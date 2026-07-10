@@ -55,7 +55,10 @@ export function makeGeometry(cols: number, rows: number): Geometry {
     dH,
     originX,
     originY,
-    tileTopLeft: (i, j) => ({ left: originX + (i - j) * (dW / 2), top: originY + (i + j) * (dH / 2) }),
+    tileTopLeft: (i, j) => ({
+      left: originX + (i - j) * (dW / 2),
+      top: originY + (i + j) * (dH / 2),
+    }),
     cellAnchor: (i, j) => ({
       x: originX + (i - j) * (dW / 2) + cellPx / 2,
       y: originY + (i + j) * (dH / 2) + cellPx * 0.6,

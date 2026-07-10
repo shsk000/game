@@ -10,7 +10,7 @@ import {
   SegGauge,
 } from '../../components/ui';
 import { ACHIEVEMENTS } from '../../data/achievements';
-import { DEBT_CONFIG, computeBorrowingLimit } from '../../data/balance';
+import { computeBorrowingLimit, DEBT_CONFIG, ROLE_EFFECT } from '../../data/balance';
 import { REFRESH_COST, roleLabel, sumMonthlySalaries } from '../../data/employees';
 import { GENRE_BY_ID } from '../../data/genres';
 import { nextLockedScale, SCALE_BY_ID, SCALES } from '../../data/scales';
@@ -35,10 +35,13 @@ const ICON_BASE = '/sprites/ui';
 
 type ModalKind = 'hire' | 'scale' | 'achievements' | 'settings' | 'debt' | null;
 
+// v0.16：power は 0..1 正規化。表示は ROLE_EFFECT で実効値に換算する
 const formatPower = (role: string, power: number) => {
-  if (role === 'programmer') return `+${power.toFixed(1)} LoC/秒`;
-  if (role === 'designer') return `品質基礎 +${power}`;
-  return `売上 +${power}%`;
+  if (role === 'programmer')
+    return `+${(power * ROLE_EFFECT.programmerLocPerSec).toFixed(2)} LoC/秒`;
+  if (role === 'designer')
+    return `品質基礎 +${(power * ROLE_EFFECT.designerQualityBonus).toFixed(1)}`;
+  return `売上 +${Math.round(power * ROLE_EFFECT.prSalesBonus * 100)}%`;
 };
 
 /** 役職ごとの絵文字とラベル色（リファレンスの社員リスト準拠） */
@@ -200,9 +203,7 @@ export const OfficeScreen = () => {
       </div>
 
       {/* ── HUD（世界の上に浮く、40px 薄バー） ── */}
-      <PixelStatusBar
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}
-      />
+      <PixelStatusBar style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }} />
 
       {/* ── 左側：お知らせ + 社員リスト（リファレンス準拠） ── */}
       <div
@@ -301,7 +302,7 @@ export const OfficeScreen = () => {
                       {e.name}
                     </span>
                     <span style={{ color: v.color, fontSize: 10 }}>{roleLabel(e.role)}</span>
-                    <span style={{ color: '#6b7684', fontSize: 10 }}>P{e.power}</span>
+                    <span style={{ color: '#6b7684', fontSize: 10 }}>Lv{e.level}</span>
                   </li>
                 );
               })}
@@ -371,9 +372,7 @@ export const OfficeScreen = () => {
                 );
               })}
               {sellingWorks.length > 3 && (
-                <li style={{ fontSize: 10, color: '#6b7684' }}>
-                  他 {sellingWorks.length - 3} 本
-                </li>
+                <li style={{ fontSize: 10, color: '#6b7684' }}>他 {sellingWorks.length - 3} 本</li>
               )}
             </ul>
           </PixelWindow>
@@ -406,17 +405,11 @@ export const OfficeScreen = () => {
             </li>
             <li>
               借金{' '}
-              <strong style={{ color: debt > 0 ? '#cc2f2f' : '#222a35' }}>
-                {formatYen(debt)}
-              </strong>
+              <strong style={{ color: debt > 0 ? '#cc2f2f' : '#222a35' }}>{formatYen(debt)}</strong>
               <span style={{ marginLeft: 6, color: '#6b7684' }}>
                 / 借入可 {formatYen(borrowingAvailable)}
               </span>
-              <PixelButton
-                size="small"
-                onClick={() => setModal('debt')}
-                style={{ marginLeft: 8 }}
-              >
+              <PixelButton size="small" onClick={() => setModal('debt')} style={{ marginLeft: 8 }}>
                 借入/返済
               </PixelButton>
             </li>
@@ -798,7 +791,12 @@ export const OfficeScreen = () => {
       </PixelModal>
 
       {/* ── 借入 / 返済モーダル（T-24） ── */}
-      <PixelModal open={modal === 'debt'} onClose={closeModal} title="🏦 借入 / 返済" maxWidth={460}>
+      <PixelModal
+        open={modal === 'debt'}
+        onClose={closeModal}
+        title="🏦 借入 / 返済"
+        maxWidth={460}
+      >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 13 }}>
           <ul
             style={{
@@ -811,10 +809,18 @@ export const OfficeScreen = () => {
               fontVariantNumeric: 'tabular-nums',
             }}
           >
-            <li>残債: <strong>{formatYen(debt)}</strong></li>
-            <li>所持金: <strong>{formatYen(funds)}</strong></li>
-            <li>借入上限: <strong>{formatYen(borrowingLimit)}</strong>（月固定費 × 12）</li>
-            <li>残り借入可能: <strong>{formatYen(borrowingAvailable)}</strong></li>
+            <li>
+              残債: <strong>{formatYen(debt)}</strong>
+            </li>
+            <li>
+              所持金: <strong>{formatYen(funds)}</strong>
+            </li>
+            <li>
+              借入上限: <strong>{formatYen(borrowingLimit)}</strong>（月固定費 × 12）
+            </li>
+            <li>
+              残り借入可能: <strong>{formatYen(borrowingAvailable)}</strong>
+            </li>
             <li style={{ fontSize: 11, color: '#6b7684' }}>
               月利 {Math.round(DEBT_CONFIG.monthlyInterestRate * 100)}%（残債に対し毎月発生）
             </li>
@@ -852,12 +858,7 @@ export const OfficeScreen = () => {
             </PixelButton>
             <PixelButton
               variant="secondary"
-              disabled={
-                !debtAmountInput ||
-                Number(debtAmountInput) <= 0 ||
-                debt <= 0 ||
-                funds <= 0
-              }
+              disabled={!debtAmountInput || Number(debtAmountInput) <= 0 || debt <= 0 || funds <= 0}
               onClick={() => {
                 const n = Number(debtAmountInput);
                 if (repayDebt(n)) setDebtAmountInput('');

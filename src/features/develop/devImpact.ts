@@ -43,8 +43,7 @@ export const computeDevImpact = (args: {
   // 開発速度：wpm 100 を基準に ±、-30〜+40% にクランプ
   const speedPct = clamp(Math.round(((wpm - 100) / 100) * 100), -30, 40);
   const st = DEV_IMPACT_THRESHOLDS.speed;
-  const speedRank: ImpactRank =
-    wpm >= st.S ? 'S' : wpm >= st.A ? 'A' : wpm >= st.B ? 'B' : 'C';
+  const speedRank: ImpactRank = wpm >= st.S ? 'S' : wpm >= st.A ? 'A' : wpm >= st.B ? 'B' : 'C';
 
   // 品質：精度 0.90→0, 0.98→+4, 1.0→+5
   const qualityDelta = clamp(Math.round((accuracy - 0.9) * 50), 0, 5);

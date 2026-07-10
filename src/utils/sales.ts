@@ -16,7 +16,7 @@ import type { Work } from '../state/types';
 export const decayRateFor = (metascore: number): number => {
   const m = Math.max(0, Math.min(100, metascore));
   const raw = 0.038 - (m / 100) * 0.028;
-  return Math.max(0.010, raw);
+  return Math.max(0.01, raw);
 };
 
 /** 初動売上の割合（残りは販売プールに入って時間で減衰しつつ流れる） */

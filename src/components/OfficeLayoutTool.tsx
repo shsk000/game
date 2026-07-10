@@ -14,9 +14,9 @@ import {
   DEFAULT_WORKSTATIONS,
   type DecorDir,
   type DecorPlacement,
+  type DoorCfg,
   decorGeom,
   decorImg,
-  type DoorCfg,
   loadDecorCatalog,
   loadDecorPlacements,
   loadDoor,
@@ -79,7 +79,8 @@ export function OfficeLayoutTool() {
   const toggleWall = (i: number, j: number) => {
     const idx = wallPlace.findIndex((d) => d.i === i && d.j === j && d.dir === selWallDir);
     if (idx >= 0) saveWallP(wallPlace.filter((_, k) => k !== idx));
-    else saveWallP([...wallPlace, { catalogId: selWall, i, j, dir: selWallDir, stack: selWallStack }]);
+    else
+      saveWallP([...wallPlace, { catalogId: selWall, i, j, dir: selWallDir, stack: selWallStack }]);
   };
 
   const { cols, rows } = ROOM[scale];
@@ -120,8 +121,20 @@ export function OfficeLayoutTool() {
   ) => (
     <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginTop: 4 }}>
       <span style={{ width: 52 }}>{label}</span>
-      <input type="range" min={min} max={max} value={val} onChange={(e) => on(Number(e.target.value))} style={{ flex: 1 }} />
-      <input type="number" value={val} onChange={(e) => on(Number(e.target.value))} style={{ width: 52 }} />
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={val}
+        onChange={(e) => on(Number(e.target.value))}
+        style={{ flex: 1 }}
+      />
+      <input
+        type="number"
+        value={val}
+        onChange={(e) => on(Number(e.target.value))}
+        style={{ width: 52 }}
+      />
     </label>
   );
 
@@ -287,7 +300,13 @@ export function OfficeLayoutTool() {
               <button
                 type="button"
                 key={`c-${i}-${j}`}
-                onClick={() => (mode === 'ws' ? cycle(i, j) : mode === 'decor' ? toggleDecor(i, j) : toggleWall(i, j))}
+                onClick={() =>
+                  mode === 'ws'
+                    ? cycle(i, j)
+                    : mode === 'decor'
+                      ? toggleDecor(i, j)
+                      : toggleWall(i, j)
+                }
                 title={`(${i},${j})`}
                 style={{
                   position: 'absolute',
@@ -367,21 +386,42 @@ export function OfficeLayoutTool() {
           <button
             type="button"
             onClick={() => setMode('ws')}
-            style={{ flex: 1, padding: '6px 0', background: mode === 'ws' ? '#3a5a9a' : '#222', color: '#fff', border: '1px solid #444', cursor: 'pointer' }}
+            style={{
+              flex: 1,
+              padding: '6px 0',
+              background: mode === 'ws' ? '#3a5a9a' : '#222',
+              color: '#fff',
+              border: '1px solid #444',
+              cursor: 'pointer',
+            }}
           >
             机（社員）
           </button>
           <button
             type="button"
             onClick={() => setMode('decor')}
-            style={{ flex: 1, padding: '6px 0', background: mode === 'decor' ? '#3a5a9a' : '#222', color: '#fff', border: '1px solid #444', cursor: 'pointer' }}
+            style={{
+              flex: 1,
+              padding: '6px 0',
+              background: mode === 'decor' ? '#3a5a9a' : '#222',
+              color: '#fff',
+              border: '1px solid #444',
+              cursor: 'pointer',
+            }}
           >
             家具
           </button>
           <button
             type="button"
             onClick={() => setMode('wall')}
-            style={{ flex: 1, padding: '6px 0', background: mode === 'wall' ? '#3a5a9a' : '#222', color: '#fff', border: '1px solid #444', cursor: 'pointer' }}
+            style={{
+              flex: 1,
+              padding: '6px 0',
+              background: mode === 'wall' ? '#3a5a9a' : '#222',
+              color: '#fff',
+              border: '1px solid #444',
+              cursor: 'pointer',
+            }}
           >
             壁
           </button>
@@ -390,8 +430,7 @@ export function OfficeLayoutTool() {
         {mode === 'ws' && (
           <p style={{ fontSize: 12, opacity: 0.8, lineHeight: 1.6 }}>
             床のマスをクリックで切替：
-            <br />
-            空 → <strong>SE</strong>(顔こちら) → <strong>NW</strong>(背中) → 空
+            <br />空 → <strong>SE</strong>(顔こちら) → <strong>NW</strong>(背中) → 空
           </p>
         )}
         {mode === 'decor' && (
@@ -411,7 +450,15 @@ export function OfficeLayoutTool() {
 
         {mode === 'decor' && (
           <>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 6 }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                fontSize: 12,
+                marginBottom: 6,
+              }}
+            >
               置く向き
               <label>
                 <input type="radio" checked={selDir === 'SE'} onChange={() => setSelDir('SE')} /> SE
@@ -447,20 +494,51 @@ export function OfficeLayoutTool() {
 
         {mode === 'wall' && (
           <>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 6 }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                fontSize: 12,
+                marginBottom: 6,
+              }}
+            >
               置く向き
               <label>
-                <input type="radio" checked={selWallDir === 'SE'} onChange={() => setSelWallDir('SE')} /> SE
+                <input
+                  type="radio"
+                  checked={selWallDir === 'SE'}
+                  onChange={() => setSelWallDir('SE')}
+                />{' '}
+                SE
               </label>
               <label>
-                <input type="radio" checked={selWallDir === 'SW'} onChange={() => setSelWallDir('SW')} /> SW
+                <input
+                  type="radio"
+                  checked={selWallDir === 'SW'}
+                  onChange={() => setSelWallDir('SW')}
+                />{' '}
+                SW
               </label>
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 6 }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                fontSize: 12,
+                marginBottom: 6,
+              }}
+            >
               縦積み
               {[1, 2, 3].map((n) => (
                 <label key={n}>
-                  <input type="radio" checked={selWallStack === n} onChange={() => setSelWallStack(n)} /> {n}
+                  <input
+                    type="radio"
+                    checked={selWallStack === n}
+                    onChange={() => setSelWallStack(n)}
+                  />{' '}
+                  {n}
                 </label>
               ))}
             </div>
@@ -486,7 +564,9 @@ export function OfficeLayoutTool() {
           </>
         )}
 
-        <label style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
+        <label
+          style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}
+        >
           規模
           <select value={scale} onChange={(e) => setScale(e.target.value as Scale)}>
             {(Object.keys(ROOM) as Scale[]).map((s) => (
@@ -509,7 +589,9 @@ export function OfficeLayoutTool() {
         </div>
 
         <div style={{ border: '1px solid #66c', borderRadius: 4, padding: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>出入口ドア（どのセルか）</div>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>
+            出入口ドア（どのセルか）
+          </div>
           {numField('i (列)', door.i, 0, cols - 1, (v) => updDoor({ i: v }))}
           {numField('j (行)', door.j, 0, rows - 1, (v) => updDoor({ j: v }))}
           <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
@@ -534,7 +616,10 @@ export function OfficeLayoutTool() {
             .join('\n')}\n];\n\nDEFAULT_WALL_PLACEMENTS = [\n${wallPlace
             .slice()
             .sort((a, b) => a.i + a.j - (b.i + b.j))
-            .map((d) => `  { catalogId: '${d.catalogId}', i: ${d.i}, j: ${d.j}, dir: '${d.dir}', stack: ${d.stack ?? 1} },`)
+            .map(
+              (d) =>
+                `  { catalogId: '${d.catalogId}', i: ${d.i}, j: ${d.j}, dir: '${d.dir}', stack: ${d.stack ?? 1} },`,
+            )
             .join('\n')}\n];`}
         </pre>
       </div>
