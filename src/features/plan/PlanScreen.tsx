@@ -7,6 +7,7 @@ import { bugSuppression } from '../../core/bugs';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
 import { planWeeksAllowance, ROLE_EFFECT } from '../../data/balance';
 import { compatLabel, getCompat } from '../../data/compatibility';
+import { sumMonthlySalaries } from '../../data/employees';
 import type { GenreId } from '../../data/genres';
 import { GENRE_BY_ID, GENRES } from '../../data/genres';
 import type { Scale } from '../../data/scales';
@@ -17,7 +18,7 @@ import { generateTitle } from '../../data/titleGenerator';
 import { trendLabel } from '../../data/trend';
 import { useGameStore } from '../../state/gameStore';
 import { estimateRevenueRange, formatWeeks, formatYen } from '../../utils/format';
-import { computeProfitForScale } from '../../utils/profit';
+import { computeProfit } from '../../utils/profit';
 
 /**
  * 企画会議画面：ピクセルアート UI 版。
@@ -281,13 +282,21 @@ export const PlanScreen = () => {
               const totalWeeks = def.neededWeeks + planWeeksAllowance(def.neededWeeks);
               const monthCount = Math.round(totalWeeks / 4);
               // E-4: 中央値売上で見込み利益。赤字なら赤色で警告
-              const profitMid = computeProfitForScale({
+              // v0.17.1：月固定費に給与を含める（賃料だけだと実際の月次徴収と食い違う）
+              const salaries = sumMonthlySalaries(employees);
+              const monthlyFixed = salaries + def.monthlyRent;
+              const estMonths = Math.max(1, Math.round(totalWeeks / 4));
+              const profitMid = computeProfit({
                 totalRevenue: range.mid,
-                scale,
+                devCost: def.baseCost,
+                monthlyFixedCost: monthlyFixed,
+                developMonths: estMonths,
               });
-              const profitHigh = computeProfitForScale({
+              const profitHigh = computeProfit({
                 totalRevenue: range.high,
-                scale,
+                devCost: def.baseCost,
+                monthlyFixedCost: monthlyFixed,
+                developMonths: estMonths,
               });
               const profitColor = profitMid.profit >= 0 ? COLORS.pioneer : COLORS.accentRed;
               return (
@@ -321,8 +330,9 @@ export const PlanScreen = () => {
                     accent={COLORS.pioneer}
                   />
                   <EstimateBox
-                    label="月固定費（賃料）"
-                    value={`${formatYen(def.monthlyRent)}/月`}
+                    label="月固定費（給与＋賃料）"
+                    value={`${formatYen(monthlyFixed)}/月`}
+                    sub={`給与 ${formatYen(salaries)} + 賃料 ${formatYen(def.monthlyRent)}`}
                     accent={COLORS.warn}
                   />
                   <EstimateBox

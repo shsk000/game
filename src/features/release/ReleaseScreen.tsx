@@ -5,6 +5,7 @@ import { PixelWindow } from '../../components/ui';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
 import { QUALITY_WEIGHTS } from '../../data/balance';
 import { compatLabel, getCompat } from '../../data/compatibility';
+import { sumMonthlySalaries } from '../../data/employees';
 import { GENRE_BY_ID } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
@@ -12,7 +13,7 @@ import { useGameStore } from '../../state/gameStore';
 import type { Achievement } from '../../state/types';
 import { formatRoi, formatWeeks, formatYen } from '../../utils/format';
 import { scoreFlavor } from '../../utils/metascore';
-import { computeProfitForScale } from '../../utils/profit';
+import { computeProfit } from '../../utils/profit';
 
 type RevealStage =
   | 'pre-ads'
@@ -72,6 +73,7 @@ export const ReleaseScreen = () => {
   const work = useGameStore((s) => s.lastReleased);
   const current = useGameStore((s) => s.current);
   const lastLevelUps = useGameStore((s) => s.lastLevelUps);
+  const employees = useGameStore((s) => s.employees);
   const releaseWork = useGameStore((s) => s.releaseWork);
   const goTo = useGameStore((s) => s.goTo);
   const clearNewlyAchieved = useGameStore((s) => s.clearNewlyAchieved);
@@ -510,22 +512,25 @@ export const ReleaseScreen = () => {
                     </li>
                   </ul>
 
-                  {/* v0.10：利益ブレイクダウン */}
+                  {/* v0.10：利益ブレイクダウン
+                      v0.17.1：月固定費に給与を含める（賃料だけだと実際の月次徴収と食い違う。オーナー指摘） */}
                   {(() => {
                     const scaleDef = SCALE_BY_ID[work.scale];
                     const projectedTotal = work.initialRevenue + bonusRevenue + work.salesPool;
-                    const result = computeProfitForScale({
-                      totalRevenue: projectedTotal,
-                      scale: work.scale,
-                      developWeeks: work.developWeeks,
-                    });
-                    const devCost = result.devCost;
-                    const fixedCostTotal = result.fixedCostTotal;
+                    const salaries = sumMonthlySalaries(employees);
+                    const monthlyFixed = salaries + scaleDef.monthlyRent;
                     const devMonths = Math.max(
                       1,
                       Math.round((work.developWeeks ?? scaleDef.neededWeeks) / 4),
                     );
-                    const monthlyRent = scaleDef.monthlyRent;
+                    const result = computeProfit({
+                      totalRevenue: projectedTotal,
+                      devCost: scaleDef.baseCost,
+                      monthlyFixedCost: monthlyFixed,
+                      developMonths: devMonths,
+                    });
+                    const devCost = result.devCost;
+                    const fixedCostTotal = result.fixedCostTotal;
                     const profit = result.profit;
                     const roi = formatRoi(profit, devCost + fixedCostTotal);
                     const positive = profit >= 0;
@@ -549,7 +554,8 @@ export const ReleaseScreen = () => {
                           <span>− 開発費（{scaleDef.name}）</span>
                           <strong style={{ color: '#ff6b6b' }}>-{formatYen(devCost)}</strong>
                           <span>
-                            − 月固定費 × {devMonths} ヶ月（{formatYen(monthlyRent)}/月）
+                            − 月固定費 × {devMonths} ヶ月（給与 {formatYen(salaries)} + 賃料{' '}
+                            {formatYen(scaleDef.monthlyRent)} /月）
                           </span>
                           <strong style={{ color: '#ff6b6b' }}>-{formatYen(fixedCostTotal)}</strong>
                           <span
