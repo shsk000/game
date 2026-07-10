@@ -1,0 +1,267 @@
+import type { CategoryId } from '../data/categories';
+import { sumPrBonus } from '../data/employees';
+import type { GenreId } from '../data/genres';
+import type { Scale } from '../data/scales';
+import { SCALE_BY_ID } from '../data/scales';
+import type { ThemeId } from '../data/themes';
+import { type Trend, trendMultiplier } from '../data/trend';
+import type {
+  Achievement,
+  CurrentProject,
+  Employee,
+  GameDate,
+  Work,
+  WorkBreakdown,
+} from '../state/types';
+import { ZERO_AXES } from '../state/types';
+import { computeGenreAffinityScore } from '../utils/affinity';
+import { computeCharacterScore } from '../utils/character';
+import {
+  computeMetascore,
+  computePerformanceScore,
+  computeQualityV10,
+  computeRevenue,
+  fanDelta,
+} from '../utils/metascore';
+import { decayRateFor, INITIAL_SHARE } from '../utils/sales';
+import type { Records } from '../utils/storage';
+import type { Deps } from './ports';
+import {
+  computeNewlyUnlockedCategories,
+  computeStageUnlocks,
+  evaluateAchievements,
+} from './progression';
+
+/**
+ * リリースパイプライン（品質→メタスコア→売上→ファン→解放→実績）。
+ * gameStore.releaseWork から抽出（P3c。ロジックは無変更の切り出し）。
+ * 乱数（評価ブレ・運倍率・Work id）と時刻は deps 経由（logic-architecture §2）。
+ */
+
+export type ReleaseOpts = {
+  launchAd?: boolean;
+  marketingAd?: boolean;
+  debugAd?: boolean;
+};
+
+/** リリース計算が読む状態のスナップショット */
+export type ReleaseCtx = {
+  current: CurrentProject;
+  employees: Employee[];
+  trend: Trend;
+  library: Work[];
+  fans: number;
+  funds: number;
+  lifetimeRevenue: number;
+  ghosts: Record<Scale, number | null>;
+  records: Records;
+  achievements: Achievement[];
+  newlyAchieved: Achievement[];
+  unlockedGenres: GenreId[];
+  unlockedThemes: ThemeId[];
+  unlockedCategories: CategoryId[];
+  currentDate: GameDate;
+};
+
+/** リリースが書き換える状態（store は set(patch) するだけ） */
+export type ReleasePatch = {
+  library: Work[];
+  funds: number;
+  lifetimeRevenue: number;
+  fans: number;
+  records: Records;
+  achievements: Achievement[];
+  newlyAchieved: Achievement[];
+  unlockedGenres: GenreId[];
+  unlockedThemes: ThemeId[];
+  unlockedCategories: CategoryId[];
+  lastReleased: Work;
+  current: null;
+  screen: 'release';
+};
+
+export const computeRelease = (
+  ctx: ReleaseCtx,
+  opts: ReleaseOpts | undefined,
+  deps: Deps,
+): { work: Work; patch: ReleasePatch } => {
+  const cur = ctx.current;
+  const employees = ctx.employees;
+  const prBonus = sumPrBonus(employees);
+  const assignedEmployees = employees.filter((e) => cur.assignedEmployeeIds.includes(e.id));
+
+  // === 4 要素品質（v0.14：カテゴリ選択廃止に伴い category 依存を撤去）===
+  // 1) キャラ能力スコア（0..100）
+  const charResult = computeCharacterScore({
+    assignedEmployees,
+    scale: cur.scale,
+  });
+  // 2) ジャンル相性スコア（0..100）＝ compat 連続マッピング
+  const affResult = computeGenreAffinityScore({
+    genreId: cur.genreId,
+    themeId: cur.themeId,
+  });
+  // 3) タイピング演技スコア（0..100）— spec §2-2
+  // 広告ボーナス（既存仕様）はパフォーマンス側に +5 ずつ寄せる
+  const adPerfBoost = (opts?.marketingAd ? 5 : 0) + (opts?.debugAd ? 5 : 0);
+  const performance = Math.min(
+    100,
+    computePerformanceScore({ ...cur.perf, noBugs: !cur.bugPhrase }) + adPerfBoost,
+  );
+
+  // 4) computeQualityV10 で合成（運の基底 50 ± 揺らぎ）。神ゲーガチャは v0.10 で廃止。
+  const { Q: quality0, breakdown: qBreakdown } = computeQualityV10(
+    {
+      charPower: charResult.score,
+      genreAffinity: affResult.score,
+      typingScore: performance,
+    },
+    deps.rng,
+  );
+
+  // v0.14：イベント新軸の合流（品質系 + バグ罰）。既存 4 要素は不変、加点/減点として上乗せ。
+  const axes = cur.axes ?? ZERO_AXES;
+  // v0.15：ビルドアップ・タイピングの開発パラメータ（文を打って積んだ 4 属性）も品質へ合流。
+  // 「打った文がどこに効いたか」の因果をリリース結果まで一本で繋ぐ（重みは叩き台 🔧）
+  const stats = cur.devStats ?? { program: 0, graphics: 0, sound: 0, design: 0 };
+  const statQualityBonus =
+    stats.program * 0.12 + stats.graphics * 0.08 + stats.sound * 0.08 + stats.design * 0.05;
+  const axisQualityBonus =
+    (axes.funFactor + axes.usability + axes.balance) * 0.3 - axes.bugRate * 0.2 + statQualityBonus;
+  const quality = Math.max(0, Math.min(100, Math.round(quality0 + axisQualityBonus)));
+
+  const trend = ctx.trend;
+  const meta = computeMetascore(quality, cur.genreId, cur.themeId, trend, deps.rng);
+  const launchAdActive = !!opts?.launchAd;
+  const pioneer = !ctx.library.some((w) => w.genreId === cur.genreId && w.themeId === cur.themeId);
+  const pioneerBonus = pioneer ? 0.3 : 0;
+  const baseTotalRevenue = computeRevenue(
+    meta.metascore,
+    cur.genreId,
+    cur.themeId,
+    cur.scale,
+    trend,
+    ctx.fans,
+    launchAdActive,
+    prBonus,
+    pioneerBonus,
+  );
+  // v0.14：市場系新軸（売上予測・話題性 − 炎上リスク）で売上を補正（0.5〜2.0 倍にクランプ）。
+  const axisSalesMul = Math.max(
+    0.5,
+    Math.min(2, 1 + (axes.salesForecast + axes.buzz) / 100 - axes.reputationRisk / 100),
+  );
+  const totalRevenue = Math.round(baseTotalRevenue * axisSalesMul);
+  const initialRevenue = Math.round(totalRevenue * INITIAL_SHARE);
+  const salesPool = totalRevenue - initialRevenue;
+  const decayPerSec = decayRateFor(meta.metascore);
+  // v0.14：期待/話題/信頼でファン上乗せ、炎上リスクで減（spec §5-6）。
+  const axisFans = Math.round(axes.hype + axes.buzz * 0.5 + axes.trust - axes.reputationRisk);
+  const gainedFans = Math.max(0, fanDelta(meta.metascore, prBonus) + axisFans);
+  const newFans = Math.max(0, ctx.fans + gainedFans);
+  const developSec = cur.finishedAt !== null ? (cur.finishedAt - cur.startedAt) / 1000 : 0;
+  const prevGhost = ctx.ghosts[cur.scale];
+  const ghostBeaten = prevGhost !== null && developSec <= prevGhost;
+
+  // ゲーム内週数：開始日 → 現在日 の差 ＋ イベントのスケジュール効果（devWeeksDelta）
+  const startDate = cur.startDate ?? ctx.currentDate;
+  const developWeeks = Math.max(
+    0,
+    (ctx.currentDate.year - startDate.year) * 48 +
+      (ctx.currentDate.month - startDate.month) * 4 +
+      (ctx.currentDate.week - startDate.week) +
+      Math.round(axes.devWeeksDelta),
+  );
+
+  // イベントのコスト効果（costMod%）：開発費に対する追加徴収/返金をリリース時に精算
+  const costAdjust = Math.round(SCALE_BY_ID[cur.scale].baseCost * (axes.costMod / 100));
+
+  const trendMul = trendMultiplier(trend, cur.genreId, cur.themeId);
+  const workBreakdown: WorkBreakdown = {
+    ...qBreakdown,
+    // v0.14 修正：Work.breakdown のフィールド名は performance。
+    // 旧実装は typingScore のままスプレッドしていたため、開封演出の
+    // 「タイピング演技」寄与が常に 0 表示になっていた（v0.10 からの潜在バグ）。
+    performance: qBreakdown.typingScore,
+    axisBonus: Math.round(axisQualityBonus),
+    trendMul,
+    pioneer,
+  };
+
+  const nowMs = deps.now();
+  const work: Work = {
+    id: `${nowMs}-${deps.rng().toString(36).slice(2, 8)}`,
+    title: cur.title,
+    genreId: cur.genreId,
+    themeId: cur.themeId,
+    scale: cur.scale,
+    quality,
+    metascore: meta.metascore,
+    isMasterpiece: meta.isMasterpiece,
+    developSec,
+    initialRevenue,
+    salesPool,
+    initialSalesPool: salesPool,
+    decayPerSec,
+    totalRevenue: initialRevenue, // 初動はすでに加算した分のみ。販売で積み上がる
+    selling: salesPool > 0,
+    fansGained: gainedFans,
+    ghostBeaten,
+    launchAdUsed: launchAdActive,
+    pioneer,
+    releasedAt: nowMs,
+    createdAt: nowMs,
+    breakdown: workBreakdown,
+    selectedCategories: [...cur.selectedCategories],
+    developWeeks,
+  };
+
+  const newLibrary = [work, ...ctx.library];
+  // v0.10 仕上げ §6-8：累計売上 + ヒット作のハイブリッドで解放判定
+  const projectedLifetimeRevenue = ctx.lifetimeRevenue + initialRevenue;
+  const stageUnlock = computeStageUnlocks(
+    ctx.unlockedGenres,
+    ctx.unlockedThemes,
+    newLibrary,
+    projectedLifetimeRevenue,
+  );
+  const newCategoryUnlocks = computeNewlyUnlockedCategories(
+    ctx.unlockedCategories,
+    newLibrary,
+    projectedLifetimeRevenue,
+  );
+
+  const rec = ctx.records;
+  const newRec: Records = {
+    bestMetascore: Math.max(rec.bestMetascore, meta.metascore),
+    bestRevenue: Math.max(rec.bestRevenue, totalRevenue),
+    bestCombo: rec.bestCombo,
+    bestWPM: rec.bestWPM,
+  };
+
+  const newAch = evaluateAchievements(ctx.achievements, {
+    library: newLibrary,
+    fans: newFans,
+    lifetimeRevenue: ctx.lifetimeRevenue + initialRevenue,
+    bestCombo: rec.bestCombo,
+    lastWork: work,
+  });
+
+  const patch: ReleasePatch = {
+    library: newLibrary,
+    funds: ctx.funds + initialRevenue - costAdjust,
+    lifetimeRevenue: ctx.lifetimeRevenue + initialRevenue,
+    fans: newFans,
+    records: newRec,
+    achievements: newAch.unlocked,
+    newlyAchieved: [...ctx.newlyAchieved, ...newAch.newly],
+    unlockedGenres: [...ctx.unlockedGenres, ...stageUnlock.newGenres],
+    unlockedThemes: [...ctx.unlockedThemes, ...stageUnlock.newThemes],
+    unlockedCategories: [...ctx.unlockedCategories, ...newCategoryUnlocks],
+    lastReleased: work,
+    current: null,
+    screen: 'release',
+  };
+
+  return { work, patch };
+};

@@ -1,3 +1,4 @@
+import type { Rng } from '../core/ports';
 import {
   LUCK_DEFAULT,
   QUALITY_WEIGHTS,
@@ -23,12 +24,13 @@ export const computeMetascore = (
   genreId: GenreId,
   themeId: ThemeId,
   trend: Trend | null,
+  rng: Rng = Math.random,
 ): MetascoreResult => {
   // v0.10 仕上げ：compat / trend ブーストは quality（4 要素）と revenue 側に
   // 既に組み込み済み。ここでは ±5 の評価家ブレのみ加える。
   // 旧仕様の「3% 確率で名作 +25」は廃止。名作タイル（90-94）は SCORE_TIERS の自然分布で実現。
   const trendBoost = (trendMultiplier(trend, genreId, themeId) - 1) * 5;
-  const variance = (Math.random() - 0.5) * 10;
+  const variance = (rng() - 0.5) * 10;
   const metascore = Math.round(clamp(quality + trendBoost + variance, 0, 100));
   // isMasterpiece は metascore 90+ の自然到達で判定（後方互換のため残す）
   const isMasterpiece = metascore >= 90;
@@ -41,8 +43,7 @@ export const computeMetascore = (
  *
  * 旧 4 段階（1 / 4 / 10 / 30）の hitTierMultiplier は廃止し、salesMultiplierForScore に統一。
  */
-export const hitTierMultiplier = (metascore: number): number =>
-  salesMultiplierForScore(metascore);
+export const hitTierMultiplier = (metascore: number): number => salesMultiplierForScore(metascore);
 
 /**
  * v0.10 仕上げ §5-1, §5-2：売上計算。
@@ -107,19 +108,22 @@ export type QualityBreakdown = {
  * 4レバー方式の品質計算。
  *   Q = 30 + cap(20, cat) + cap(25, emp) + cap(20, perf) + cap(15, ad) + variance(±5)
  */
-export const computeQuality = (args: {
-  scaleBase: number;
-  categoryHit: number;
-  employeeHit: number;
-  performance: number;
-  adBonus: number;
-}): { Q: number; breakdown: QualityBreakdown } => {
+export const computeQuality = (
+  args: {
+    scaleBase: number;
+    categoryHit: number;
+    employeeHit: number;
+    performance: number;
+    adBonus: number;
+  },
+  rng: Rng = Math.random,
+): { Q: number; breakdown: QualityBreakdown } => {
   const base = 30;
   const categories = Math.max(0, Math.min(20, args.categoryHit));
   const employees = Math.max(0, Math.min(25, args.employeeHit));
   const performance = Math.max(0, Math.min(20, args.performance));
   const ads = Math.max(0, Math.min(15, args.adBonus));
-  const variance = Math.round((Math.random() - 0.5) * 10); // ±5
+  const variance = Math.round((rng() - 0.5) * 10); // ±5
   const sum = base + categories + employees + performance + ads + variance;
   const Q = clamp(sum, 0, 100);
   return {
@@ -201,12 +205,15 @@ export type QualityV10Breakdown = {
   luckMultiplier: number;
 };
 
-export const computeQualityV10 = (args: {
-  charPower: number;
-  genreAffinity: number;
-  typingScore: number;
-  luck?: number;
-}): { Q: number; breakdown: QualityV10Breakdown } => {
+export const computeQualityV10 = (
+  args: {
+    charPower: number;
+    genreAffinity: number;
+    typingScore: number;
+    luck?: number;
+  },
+  rng: Rng = Math.random,
+): { Q: number; breakdown: QualityV10Breakdown } => {
   const charPower = clamp(args.charPower, 0, 100);
   const genreAffinity = clamp(args.genreAffinity, 0, 100);
   const typingScore = clamp(args.typingScore, 0, 100);
@@ -220,7 +227,7 @@ export const computeQualityV10 = (args: {
     luck * QUALITY_WEIGHTS.luck;
 
   // ±3% の運乱数（v0.14：±10%→±3%。運は味付けに留め、壁は腕で越えさせる）
-  const luckMultiplier = 0.97 + Math.random() * 0.06;
+  const luckMultiplier = 0.97 + rng() * 0.06;
 
   // 神ゲーガチャは v0.10 で廃止：4 要素の合算とタイピング演技で正面突破する設計
   const Q = clamp(Math.round(base * luckMultiplier), 0, 100);

@@ -1,3 +1,4 @@
+import type { Rng } from '../core/ports';
 import type { GenreId } from './genres';
 
 /**
@@ -352,16 +353,19 @@ export const getTicketAt = (
   genreId: GenreId,
   ticketIndex: number,
 ): { category: TicketCategory; flavor: TicketFlavor } => {
-  const category = CATEGORY_ORDER[((ticketIndex % CATEGORY_ORDER.length) + CATEGORY_ORDER.length) % CATEGORY_ORDER.length];
+  const category =
+    CATEGORY_ORDER[
+      ((ticketIndex % CATEGORY_ORDER.length) + CATEGORY_ORDER.length) % CATEGORY_ORDER.length
+    ];
   const flavors = getGenreTickets(genreId)[category];
   const round = Math.floor(ticketIndex / CATEGORY_ORDER.length);
   const flavor = flavors[((round % flavors.length) + flavors.length) % flavors.length];
   return { category, flavor };
 };
 
-export const pickPhrase = (category: TicketCategory): string => {
+export const pickPhrase = (category: TicketCategory, rng: Rng = Math.random): string => {
   const pool = CATEGORY_PHRASE_POOLS[category];
-  return pool[Math.floor(Math.random() * pool.length)];
+  return pool[Math.floor(rng() * pool.length)];
 };
 
 /** コンボ倍率（数字インフレ）：10 で×1.5、30 で×2、100 で×3（叩き台 🔧） */

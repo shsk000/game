@@ -1,16 +1,14 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { computeBorrow, computeMonthlyTick, computeRepay } from '../core/economy';
+import { type Deps, defaultDeps } from '../core/ports';
+import { evaluateAchievements } from '../core/progression';
+import { computeRelease, type ReleaseOpts } from '../core/release';
 import { ACHIEVEMENTS } from '../data/achievements';
-import { DEBT_CONFIG, DEV_PHRASES_PER_WEEK, computeBorrowingLimit } from '../data/balance';
+import { DEV_PHRASES_PER_WEEK } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
-import {
-  newCandidate,
-  REFRESH_COST,
-  sumMonthlySalaries,
-  sumPrBonus,
-  sumProgrammerSpeed,
-} from '../data/employees';
+import { newCandidate, REFRESH_COST, sumProgrammerSpeed } from '../data/employees';
 import type { GenreId } from '../data/genres';
 import { GENRES } from '../data/genres';
 import type { Scale } from '../data/scales';
@@ -18,36 +16,25 @@ import { nextLockedScale, SCALE_BY_ID, SCALES } from '../data/scales';
 import type { ThemeId } from '../data/themes';
 import { THEMES } from '../data/themes';
 import { generateTitle } from '../data/titleGenerator';
-import { ensureTrend, type Trend, trendMultiplier } from '../data/trend';
+import { ensureTrend, type Trend } from '../data/trend';
 import { MAX_EMPLOYEES } from '../lib/officeLayout';
-import { computeGenreAffinityScore } from '../utils/affinity';
-import { computeCharacterScore } from '../utils/character';
-import {
-  computeMetascore,
-  computePerformanceScore,
-  computeQualityV10,
-  computeRevenue,
-  fanDelta,
-} from '../utils/metascore';
-import { decayRateFor, INITIAL_SHARE, settleAllWorks, settlePool } from '../utils/sales';
+import { settlePool } from '../utils/sales';
 import type { Records } from '../utils/storage';
 import * as storage from '../utils/storage';
 import type {
   Achievement,
   Candidate,
   CurrentProject,
+  DevAxis,
   DevPhase,
   Employee,
   GameDate,
   MonthlyFixedCost,
+  OfflineReport,
   Screen,
   Work,
-  WorkBreakdown,
 } from './types';
-import type { DevAxis } from './types';
 import { addWeeks, DEV_PHASE_ORDER, INITIAL_GAME_DATE, ZERO_AXES } from './types';
-
-const persisted = storage.load() ?? storage.defaults();
 
 /**
  * v0.11：開発フェーズの「MISSION 名・見出し」を生成（演出専用）。
@@ -71,159 +58,23 @@ let missionCounter = 3;
 const buildMissionFlavor = (genreId: GenreId): { missionName: string; missionDesc: string } => {
   const pool = MISSION_FLAVORS[genreId] ?? MISSION_FLAVORS.action;
   missionCounter += 1;
-  const desc = pool[Math.floor(Math.random() * pool.length)];
+  const desc = pool[Math.floor(deps.rng() * pool.length)];
   return {
     missionName: `MISSION_${String(missionCounter).padStart(2, '0')}`,
     missionDesc: desc,
   };
 };
 
-type StageUnlock = {
-  unlocked: number;
-  newGenres: GenreId[];
-  newThemes: ThemeId[];
-};
-
 /**
- * v0.10 仕上げ §6-8：解放テンポ（ハイブリッド）。
- *   - 基本軸：累計売上（駄作量産では解放されない）
- *   - 加速軸：ヒット作（メタ 70+）の本数
- *   - 段階的に：stage 2/3/4 へ進める
- *
- * stage しきい値（balance-design §6-8 解放テーブル準拠）：
- *   - stage 2：累計売上 ¥1000 万 OR ヒット作 1 本
- *   - stage 3：累計売上 ¥5000 万 OR ヒット作 3 本
- *   - stage 4：累計売上 ¥1 億 OR ヒット作 5 本
- *
- * 「累計売上だけ」「ヒット作だけ」のどちらでも解放できる二段構え。
+ * アクションが使う乱数・時刻の供給元。既定は本番実装（Math.random / Date.now）。
+ * boot が `?seed=NN` を検出したとき setGameDeps で seed 固定乱数に差し替える（e2e 決定化）。
  */
-const HIT_METASCORE_THRESHOLD = 70;
-
-const computeStageUnlocks = (
-  currentGenres: GenreId[],
-  currentThemes: ThemeId[],
-  library: Work[],
-  lifetimeRevenue: number,
-): StageUnlock => {
-  const hitCount = library.filter((w) => w.metascore >= HIT_METASCORE_THRESHOLD).length;
-  let stage: 1 | 2 | 3 | 4 = 1;
-  if (lifetimeRevenue >= 10_000_000 || hitCount >= 1) stage = 2;
-  if (lifetimeRevenue >= 50_000_000 || hitCount >= 3) stage = 3;
-  if (lifetimeRevenue >= 100_000_000 || hitCount >= 5) stage = 4;
-  const newGenres = GENRES.filter(
-    (g) => g.unlockStage <= stage && !currentGenres.includes(g.id),
-  ).map((g) => g.id);
-  const newThemes = THEMES.filter(
-    (t) => t.unlockStage <= stage && !currentThemes.includes(t.id),
-  ).map((t) => t.id);
-  return { unlocked: newGenres.length + newThemes.length, newGenres, newThemes };
+let deps: Deps = defaultDeps;
+export const setGameDeps = (d: Deps): void => {
+  deps = d;
 };
 
-/**
- * v0.10 仕上げ §6-8：カテゴリ解放（ハイブリッド条件）。
- *  - story: 初期 3 カテゴリ（graphics, sound, gameplay）全てで作品リリース
- *  - presentation: ヒット作 5 本（メタ 70+）
- *  - innovation: 累計売上 ¥1 億
- */
-const computeNewlyUnlockedCategories = (
-  current: CategoryId[],
-  library: Work[],
-  lifetimeRevenue: number,
-): CategoryId[] => {
-  const set = new Set(current);
-  const added: CategoryId[] = [];
-
-  // story: 初期 3 カテゴリで作品リリース済み
-  if (!set.has('story')) {
-    const used = new Set<CategoryId>();
-    for (const w of library) {
-      for (const cid of w.selectedCategories ?? []) used.add(cid as CategoryId);
-    }
-    if (used.has('graphics') && used.has('sound') && used.has('gameplay')) {
-      set.add('story');
-      added.push('story');
-    }
-  }
-
-  // presentation: ヒット作 5 本
-  if (!set.has('presentation')) {
-    const hits = library.filter((w) => w.metascore >= HIT_METASCORE_THRESHOLD).length;
-    if (hits >= 5) {
-      set.add('presentation');
-      added.push('presentation');
-    }
-  }
-
-  // innovation: 累計売上 ¥1 億
-  if (!set.has('innovation')) {
-    if (lifetimeRevenue >= 100_000_000) {
-      set.add('innovation');
-      added.push('innovation');
-    }
-  }
-
-  return added;
-};
-
-const evaluateAchievements = (
-  current: Achievement[],
-  ctx: {
-    library: Work[];
-    fans: number;
-    lifetimeRevenue: number;
-    bestCombo: number;
-    lastWork?: Work;
-  },
-): { unlocked: Achievement[]; newly: Achievement[] } => {
-  const set = new Set(current);
-  const candidates: Achievement[] = [];
-  if (ctx.library.length >= 1) candidates.push('first-release');
-  if (ctx.lastWork?.isMasterpiece || ctx.library.some((w) => w.isMasterpiece)) {
-    candidates.push('first-masterpiece');
-  }
-  if (ctx.lastWork?.ghostBeaten || ctx.library.some((w) => w.ghostBeaten)) {
-    candidates.push('ghost-killer');
-  }
-  if (ctx.bestCombo >= 100) candidates.push('combo-100');
-  if (ctx.fans >= 1000) candidates.push('fan-1k');
-  if (ctx.lifetimeRevenue >= 1_000_000) candidates.push('million-yen');
-  const discovered = new Set(ctx.library.map((w) => `${w.genreId}|${w.themeId}`));
-  if (discovered.size >= 90) candidates.push('collector-half');
-  if (ctx.library.some((w) => w.scale === 'aaa')) candidates.push('aaa-released');
-  const newly: Achievement[] = [];
-  for (const a of candidates) {
-    if (!set.has(a)) {
-      set.add(a);
-      newly.push(a);
-    }
-  }
-  return { unlocked: Array.from(set), newly };
-};
-
-type OfflineReport = {
-  earned: number;
-  awaySec: number;
-};
-
-const now = () => Date.now();
-
-const computeOfflineEarnings = (
-  lastSeenAt: number,
-  library: Work[],
-): { report: OfflineReport | null; library: Work[] } => {
-  if (!lastSeenAt) return { report: null, library };
-  const awaySec = Math.max(0, (now() - lastSeenAt) / 1000);
-  if (awaySec < 60) return { report: null, library };
-  const { earned, library: updated } = settleAllWorks(library, awaySec);
-  if (earned <= 0) return { report: null, library: updated };
-  return { report: { earned, awaySec }, library: updated };
-};
-
-type ReleaseOpts = {
-  launchAd?: boolean;
-  marketingAd?: boolean;
-  debugAd?: boolean;
-};
+const now = () => deps.now();
 
 type Actions = {
   goTo: (screen: Screen) => void;
@@ -321,35 +172,37 @@ export type GameState = {
   debt: number;
 } & Actions;
 
-const offlineCalc = computeOfflineEarnings(persisted.lastSeenAt, persisted.library);
-const initialTrend = ensureTrend(persisted.trend, now());
+/**
+ * import 時副作用ゼロの初期状態（logic-architecture §3）。
+ * セーブ読込・オフライン収益・採用候補・トレンド補充は boot.ts の bootGameStore() が
+ * アプリ起動時に上書きする。テストは boot を呼ばず、この決定的な初期状態から始められる。
+ * トレンドは expiresAt: 0（期限切れ）のプレースホルダ。boot / tick 側の ensureTrend が差し替える。
+ */
+const pureDefaults = storage.defaults();
 
 export const useGameStore = create<GameState>()(
   subscribeWithSelector((set, get) => ({
     screen: 'office',
-    funds: persisted.funds + (offlineCalc.report?.earned ?? 0),
-    lifetimeRevenue: persisted.lifetimeRevenue + (offlineCalc.report?.earned ?? 0),
-    fans: persisted.fans,
-    employees: persisted.employees,
-    candidate: newCandidate(),
-    unlockedScales: persisted.unlockedScales,
-    unlockedGenres: persisted.unlockedGenres,
-    unlockedThemes: persisted.unlockedThemes,
-    unlockedCategories:
-      persisted.unlockedCategories && persisted.unlockedCategories.length > 0
-        ? persisted.unlockedCategories
-        : [...INITIAL_CATEGORY_IDS],
-    ghosts: persisted.ghosts,
-    library: offlineCalc.library,
-    trend: initialTrend,
-    records: persisted.records,
-    achievements: persisted.achievements,
+    funds: pureDefaults.funds,
+    lifetimeRevenue: 0,
+    fans: 0,
+    employees: [],
+    candidate: null,
+    unlockedScales: pureDefaults.unlockedScales,
+    unlockedGenres: pureDefaults.unlockedGenres,
+    unlockedThemes: pureDefaults.unlockedThemes,
+    unlockedCategories: [...INITIAL_CATEGORY_IDS],
+    ghosts: pureDefaults.ghosts,
+    library: [],
+    trend: { genreId: GENRES[0].id, themeId: THEMES[0].id, expiresAt: 0 },
+    records: pureDefaults.records,
+    achievements: [],
     newlyAchieved: [],
-    tutorialDone: persisted.tutorialDone,
+    tutorialDone: false,
     current: null,
     lastReleased: null,
-    offlineReport: offlineCalc.report,
-    currentDate: persisted.currentDate ?? INITIAL_GAME_DATE,
+    offlineReport: null,
+    currentDate: pureDefaults.currentDate ?? INITIAL_GAME_DATE,
     lastFixedCost: null,
     gameOver: false,
     debt: 0,
@@ -358,7 +211,7 @@ export const useGameStore = create<GameState>()(
 
     startProject: (genreId, themeId, scale, assignedEmployeeIds) => {
       const def = SCALE_BY_ID[scale];
-      const title = generateTitle(genreId, themeId);
+      const title = generateTitle(genreId, themeId, deps.rng);
       // v0.11 後期：締切（残り時間）を廃止し進捗オンリーに。
       // 作業量目標 workTarget（完走フレーズ数）まで打って初めて完了する（AFK では終わらない）。
       // 例：mini neededWeeks 8 × 3 = 24 フレーズ。速く打つほど少ない本数で到達＝早期完了。
@@ -392,7 +245,7 @@ export const useGameStore = create<GameState>()(
       set({
         current: project,
         screen: 'develop',
-        trend: ensureTrend(get().trend, now()),
+        trend: ensureTrend(get().trend, now(), deps.rng),
       });
     },
 
@@ -427,38 +280,10 @@ export const useGameStore = create<GameState>()(
     },
 
     monthlyTick: () => {
-      const s = get();
-      const salaries = sumMonthlySalaries(s.employees);
-      const currentScale: Scale = s.unlockedScales[s.unlockedScales.length - 1] ?? 'mini';
-      const rent = SCALE_BY_ID[currentScale]?.monthlyRent ?? 0;
-      // v0.10 仕上げ §6-7：借金月利
-      const interest = Math.round(s.debt * DEBT_CONFIG.monthlyInterestRate);
-      const total = salaries + rent + interest;
-      const cost: MonthlyFixedCost = { salaries, rent, total };
-
-      // funds から固定費を引く → マイナスになったら借金に振替
-      const rawFunds = s.funds - total;
-      let newFunds = rawFunds;
-      let newDebt = s.debt;
-      if (rawFunds < 0) {
-        newDebt = s.debt + -rawFunds;
-        newFunds = 0;
-      }
-
-      // 借入上限：月固定費 × 12 ヶ月
-      const borrowingLimit = computeBorrowingLimit(salaries + rent);
-
-      set({
-        funds: newFunds,
-        debt: newDebt,
-        lastFixedCost: cost,
-      });
-
-      // 借入上限超 + 資金 0 でゲームオーバー
-      if (newDebt > borrowingLimit && newFunds <= 0) {
-        get().triggerGameOver();
-      }
-      return cost;
+      const r = computeMonthlyTick(get());
+      set({ funds: r.funds, debt: r.debt, lastFixedCost: r.cost });
+      if (r.gameOver) get().triggerGameOver();
+      return r.cost;
     },
 
     triggerGameOver: () => {
@@ -630,184 +455,11 @@ export const useGameStore = create<GameState>()(
     },
 
     releaseWork: (opts) => {
-      const cur = get().current;
+      const s = get();
+      const cur = s.current;
       if (!cur) throw new Error('no current project');
-      const employees = get().employees;
-      const prBonus = sumPrBonus(employees);
-      const assignedEmployees = employees.filter((e) => cur.assignedEmployeeIds.includes(e.id));
-
-      // === 4 要素品質（v0.14：カテゴリ選択廃止に伴い category 依存を撤去）===
-      // 1) キャラ能力スコア（0..100）
-      const charResult = computeCharacterScore({
-        assignedEmployees,
-        scale: cur.scale,
-      });
-      // 2) ジャンル相性スコア（0..100）＝ compat 連続マッピング
-      const affResult = computeGenreAffinityScore({
-        genreId: cur.genreId,
-        themeId: cur.themeId,
-      });
-      // 3) タイピング演技スコア（0..100）— spec §2-2
-      // 広告ボーナス（既存仕様）はパフォーマンス側に +5 ずつ寄せる
-      const adPerfBoost = (opts?.marketingAd ? 5 : 0) + (opts?.debugAd ? 5 : 0);
-      const performance = Math.min(
-        100,
-        computePerformanceScore({ ...cur.perf, noBugs: !cur.bugPhrase }) + adPerfBoost,
-      );
-
-      // 4) computeQualityV10 で合成（運の基底 50 ± 揺らぎ）。神ゲーガチャは v0.10 で廃止。
-      const { Q: quality0, breakdown: qBreakdown } = computeQualityV10({
-        charPower: charResult.score,
-        genreAffinity: affResult.score,
-        typingScore: performance,
-      });
-
-      // v0.14：イベント新軸の合流（品質系 + バグ罰）。既存 4 要素は不変、加点/減点として上乗せ。
-      const axes = cur.axes ?? ZERO_AXES;
-      // v0.15：ビルドアップ・タイピングの開発パラメータ（文を打って積んだ 4 属性）も品質へ合流。
-      // 「打った文がどこに効いたか」の因果をリリース結果まで一本で繋ぐ（重みは叩き台 🔧）
-      const stats = cur.devStats ?? { program: 0, graphics: 0, sound: 0, design: 0 };
-      const statQualityBonus =
-        stats.program * 0.12 + stats.graphics * 0.08 + stats.sound * 0.08 + stats.design * 0.05;
-      const axisQualityBonus =
-        (axes.funFactor + axes.usability + axes.balance) * 0.3 -
-        axes.bugRate * 0.2 +
-        statQualityBonus;
-      const quality = Math.max(0, Math.min(100, Math.round(quality0 + axisQualityBonus)));
-
-      const trend = get().trend;
-      const meta = computeMetascore(quality, cur.genreId, cur.themeId, trend);
-      const launchAdActive = !!opts?.launchAd;
-      const pioneer = !get().library.some(
-        (w) => w.genreId === cur.genreId && w.themeId === cur.themeId,
-      );
-      const pioneerBonus = pioneer ? 0.3 : 0;
-      const baseTotalRevenue = computeRevenue(
-        meta.metascore,
-        cur.genreId,
-        cur.themeId,
-        cur.scale,
-        trend,
-        get().fans,
-        launchAdActive,
-        prBonus,
-        pioneerBonus,
-      );
-      // v0.14：市場系新軸（売上予測・話題性 − 炎上リスク）で売上を補正（0.5〜2.0 倍にクランプ）。
-      const axisSalesMul = Math.max(
-        0.5,
-        Math.min(2, 1 + (axes.salesForecast + axes.buzz) / 100 - axes.reputationRisk / 100),
-      );
-      const totalRevenue = Math.round(baseTotalRevenue * axisSalesMul);
-      const initialRevenue = Math.round(totalRevenue * INITIAL_SHARE);
-      const salesPool = totalRevenue - initialRevenue;
-      const decayPerSec = decayRateFor(meta.metascore);
-      // v0.14：期待/話題/信頼でファン上乗せ、炎上リスクで減（spec §5-6）。
-      const axisFans = Math.round(axes.hype + axes.buzz * 0.5 + axes.trust - axes.reputationRisk);
-      const gainedFans = Math.max(0, fanDelta(meta.metascore, prBonus) + axisFans);
-      const newFans = Math.max(0, get().fans + gainedFans);
-      const developSec = cur.finishedAt !== null ? (cur.finishedAt - cur.startedAt) / 1000 : 0;
-      const prevGhost = get().ghosts[cur.scale];
-      const ghostBeaten = prevGhost !== null && developSec <= prevGhost;
-
-      // ゲーム内週数：開始日 → 現在日 の差 ＋ イベントのスケジュール効果（devWeeksDelta）
-      const startDate = cur.startDate ?? get().currentDate;
-      const developWeeks = Math.max(
-        0,
-        (get().currentDate.year - startDate.year) * 48 +
-          (get().currentDate.month - startDate.month) * 4 +
-          (get().currentDate.week - startDate.week) +
-          Math.round(axes.devWeeksDelta),
-      );
-
-      // イベントのコスト効果（costMod%）：開発費に対する追加徴収/返金をリリース時に精算
-      const costAdjust = Math.round(SCALE_BY_ID[cur.scale].baseCost * (axes.costMod / 100));
-
-      const trendMul = trendMultiplier(trend, cur.genreId, cur.themeId);
-      const workBreakdown: WorkBreakdown = {
-        ...qBreakdown,
-        // v0.14 修正：Work.breakdown のフィールド名は performance。
-        // 旧実装は typingScore のままスプレッドしていたため、開封演出の
-        // 「タイピング演技」寄与が常に 0 表示になっていた（v0.10 からの潜在バグ）。
-        performance: qBreakdown.typingScore,
-        axisBonus: Math.round(axisQualityBonus),
-        trendMul,
-        pioneer,
-      };
-
-      const work: Work = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        title: cur.title,
-        genreId: cur.genreId,
-        themeId: cur.themeId,
-        scale: cur.scale,
-        quality,
-        metascore: meta.metascore,
-        isMasterpiece: meta.isMasterpiece,
-        developSec,
-        initialRevenue,
-        salesPool,
-        initialSalesPool: salesPool,
-        decayPerSec,
-        totalRevenue: initialRevenue, // 初動はすでに加算した分のみ。販売で積み上がる
-        selling: salesPool > 0,
-        fansGained: gainedFans,
-        ghostBeaten,
-        launchAdUsed: launchAdActive,
-        pioneer,
-        releasedAt: Date.now(),
-        createdAt: Date.now(),
-        breakdown: workBreakdown,
-        selectedCategories: [...cur.selectedCategories],
-        developWeeks,
-      };
-
-      const newLibrary = [work, ...get().library];
-      // v0.10 仕上げ §6-8：累計売上 + ヒット作のハイブリッドで解放判定
-      const projectedLifetimeRevenue = get().lifetimeRevenue + initialRevenue;
-      const stageUnlock = computeStageUnlocks(
-        get().unlockedGenres,
-        get().unlockedThemes,
-        newLibrary,
-        projectedLifetimeRevenue,
-      );
-      const newCategoryUnlocks = computeNewlyUnlockedCategories(
-        get().unlockedCategories,
-        newLibrary,
-        projectedLifetimeRevenue,
-      );
-
-      const rec = get().records;
-      const newRec: Records = {
-        bestMetascore: Math.max(rec.bestMetascore, meta.metascore),
-        bestRevenue: Math.max(rec.bestRevenue, totalRevenue),
-        bestCombo: rec.bestCombo,
-        bestWPM: rec.bestWPM,
-      };
-
-      const newAch = evaluateAchievements(get().achievements, {
-        library: newLibrary,
-        fans: newFans,
-        lifetimeRevenue: get().lifetimeRevenue + initialRevenue,
-        bestCombo: rec.bestCombo,
-        lastWork: work,
-      });
-
-      set({
-        library: newLibrary,
-        funds: get().funds + initialRevenue - costAdjust,
-        lifetimeRevenue: get().lifetimeRevenue + initialRevenue,
-        fans: newFans,
-        records: newRec,
-        achievements: newAch.unlocked,
-        newlyAchieved: [...get().newlyAchieved, ...newAch.newly],
-        unlockedGenres: [...get().unlockedGenres, ...stageUnlock.newGenres],
-        unlockedThemes: [...get().unlockedThemes, ...stageUnlock.newThemes],
-        unlockedCategories: [...get().unlockedCategories, ...newCategoryUnlocks],
-        lastReleased: work,
-        current: null,
-        screen: 'release',
-      });
+      const { work, patch } = computeRelease({ ...s, current: cur }, opts, deps);
+      set(patch);
       return work;
     },
 
@@ -832,9 +484,9 @@ export const useGameStore = create<GameState>()(
       const cur = get().current;
       if (!cur || cur.finishedAt !== null || cur.bugPhrase) return;
       // 15% で発生（呼び出し側で間引き）
-      if (Math.random() < 0.15) {
+      if (deps.rng() < 0.15) {
         const candidates = ['ばぐしゅうせい', 'くらっしゅかいひ', 'ふぐあいたいおう', 'えらーろぐ'];
-        const phrase = candidates[Math.floor(Math.random() * candidates.length)];
+        const phrase = candidates[Math.floor(deps.rng() * candidates.length)];
         set({ current: { ...cur, bugPhrase: phrase } });
       }
     },
@@ -852,19 +504,19 @@ export const useGameStore = create<GameState>()(
       if (get().funds < cand.wage) return false;
       const emp: Employee = {
         ...cand,
-        id: `e-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: `e-${now()}-${deps.rng().toString(36).slice(2, 6)}`,
       };
       set({
         funds: get().funds - cand.wage,
         employees: [...get().employees, emp],
-        candidate: newCandidate(),
+        candidate: newCandidate(deps),
       });
       return true;
     },
 
     refreshCandidate: () => {
       if (get().funds < REFRESH_COST) return false;
-      set({ funds: get().funds - REFRESH_COST, candidate: newCandidate() });
+      set({ funds: get().funds - REFRESH_COST, candidate: newCandidate(deps) });
       return true;
     },
 
@@ -888,23 +540,16 @@ export const useGameStore = create<GameState>()(
     clearNewlyAchieved: () => set({ newlyAchieved: [] }),
 
     borrowMoney: (amount) => {
-      if (amount <= 0) return false;
-      const s = get();
-      const salaries = sumMonthlySalaries(s.employees);
-      const currentScale: Scale = s.unlockedScales[s.unlockedScales.length - 1] ?? 'mini';
-      const rent = SCALE_BY_ID[currentScale]?.monthlyRent ?? 0;
-      const limit = computeBorrowingLimit(salaries + rent);
-      if (s.debt + amount > limit) return false;
-      set({ funds: s.funds + amount, debt: s.debt + amount });
+      const patch = computeBorrow(get(), amount);
+      if (!patch) return false;
+      set(patch);
       return true;
     },
 
     repayDebt: (amount) => {
-      if (amount <= 0) return false;
-      const s = get();
-      const pay = Math.min(amount, s.funds, s.debt);
-      if (pay <= 0) return false;
-      set({ funds: s.funds - pay, debt: s.debt - pay });
+      const patch = computeRepay(get(), amount);
+      if (!patch) return false;
+      set(patch);
       return true;
     },
 
@@ -917,14 +562,14 @@ export const useGameStore = create<GameState>()(
         lifetimeRevenue: d.lifetimeRevenue,
         fans: d.fans,
         employees: d.employees,
-        candidate: newCandidate(),
+        candidate: newCandidate(deps),
         unlockedScales: d.unlockedScales,
         unlockedGenres: d.unlockedGenres,
         unlockedThemes: d.unlockedThemes,
         unlockedCategories: d.unlockedCategories,
         ghosts: d.ghosts,
         library: d.library,
-        trend: ensureTrend(null, now()),
+        trend: ensureTrend(null, now(), deps.rng),
         records: d.records,
         achievements: [],
         newlyAchieved: [],
@@ -941,65 +586,8 @@ export const useGameStore = create<GameState>()(
   })),
 );
 
-// セーブ
-useGameStore.subscribe(
-  (s) => ({
-    funds: s.funds,
-    lifetimeRevenue: s.lifetimeRevenue,
-    fans: s.fans,
-    employees: s.employees,
-    unlockedScales: s.unlockedScales,
-    unlockedGenres: s.unlockedGenres,
-    unlockedThemes: s.unlockedThemes,
-    unlockedCategories: s.unlockedCategories,
-    ghosts: s.ghosts,
-    library: s.library,
-    trend: s.trend,
-    records: s.records,
-    achievements: s.achievements,
-    tutorialDone: s.tutorialDone,
-    currentDate: s.currentDate,
-  }),
-  (snap) => {
-    storage.save({
-      version: 5,
-      ...snap,
-      lastSeenAt: now(),
-    });
-  },
-  { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
-);
-
-// テスト用：window.__gs() で現在のストア state を取得（dev / e2e のみで使用）
-if (typeof window !== 'undefined' && import.meta.env.DEV) {
-  (window as unknown as { __gs: () => GameState }).__gs = () => useGameStore.getState();
-}
-
-// 離席時刻更新
-if (typeof window !== 'undefined') {
-  setInterval(() => {
-    const s = useGameStore.getState();
-    storage.save({
-      version: 5,
-      funds: s.funds,
-      lifetimeRevenue: s.lifetimeRevenue,
-      fans: s.fans,
-      employees: s.employees,
-      unlockedScales: s.unlockedScales,
-      unlockedGenres: s.unlockedGenres,
-      unlockedThemes: s.unlockedThemes,
-      unlockedCategories: s.unlockedCategories,
-      ghosts: s.ghosts,
-      library: s.library,
-      trend: s.trend,
-      records: s.records,
-      achievements: s.achievements,
-      tutorialDone: s.tutorialDone,
-      currentDate: s.currentDate,
-      lastSeenAt: now(),
-    });
-  }, 5000);
-}
+// 自動保存・window.__gs 等の起動時副作用は state/boot.ts の bootGameStore() に集約
+// （logic-architecture §3。main.tsx が render 前に1回だけ呼ぶ）
 
 // 内部利用：相性の安全な取得（循環依存回避のため lazy require）
 import { getCompat } from '../data/compatibility';
