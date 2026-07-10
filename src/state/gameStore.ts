@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { computeBorrow, computeMonthlyTick, computeRepay } from '../core/economy';
-import { defaultDeps } from '../core/ports';
+import { type Deps, defaultDeps } from '../core/ports';
 import { evaluateAchievements } from '../core/progression';
 import { computeRelease, type ReleaseOpts } from '../core/release';
 import { ACHIEVEMENTS } from '../data/achievements';
@@ -58,14 +58,23 @@ let missionCounter = 3;
 const buildMissionFlavor = (genreId: GenreId): { missionName: string; missionDesc: string } => {
   const pool = MISSION_FLAVORS[genreId] ?? MISSION_FLAVORS.action;
   missionCounter += 1;
-  const desc = pool[Math.floor(Math.random() * pool.length)];
+  const desc = pool[Math.floor(deps.rng() * pool.length)];
   return {
     missionName: `MISSION_${String(missionCounter).padStart(2, '0')}`,
     missionDesc: desc,
   };
 };
 
-const now = () => Date.now();
+/**
+ * アクションが使う乱数・時刻の供給元。既定は本番実装（Math.random / Date.now）。
+ * boot が `?seed=NN` を検出したとき setGameDeps で seed 固定乱数に差し替える（e2e 決定化）。
+ */
+let deps: Deps = defaultDeps;
+export const setGameDeps = (d: Deps): void => {
+  deps = d;
+};
+
+const now = () => deps.now();
 
 type Actions = {
   goTo: (screen: Screen) => void;
@@ -202,7 +211,7 @@ export const useGameStore = create<GameState>()(
 
     startProject: (genreId, themeId, scale, assignedEmployeeIds) => {
       const def = SCALE_BY_ID[scale];
-      const title = generateTitle(genreId, themeId);
+      const title = generateTitle(genreId, themeId, deps.rng);
       // v0.11 後期：締切（残り時間）を廃止し進捗オンリーに。
       // 作業量目標 workTarget（完走フレーズ数）まで打って初めて完了する（AFK では終わらない）。
       // 例：mini neededWeeks 8 × 3 = 24 フレーズ。速く打つほど少ない本数で到達＝早期完了。
@@ -236,7 +245,7 @@ export const useGameStore = create<GameState>()(
       set({
         current: project,
         screen: 'develop',
-        trend: ensureTrend(get().trend, now()),
+        trend: ensureTrend(get().trend, now(), deps.rng),
       });
     },
 
@@ -449,7 +458,7 @@ export const useGameStore = create<GameState>()(
       const s = get();
       const cur = s.current;
       if (!cur) throw new Error('no current project');
-      const { work, patch } = computeRelease({ ...s, current: cur }, opts, defaultDeps);
+      const { work, patch } = computeRelease({ ...s, current: cur }, opts, deps);
       set(patch);
       return work;
     },
@@ -475,9 +484,9 @@ export const useGameStore = create<GameState>()(
       const cur = get().current;
       if (!cur || cur.finishedAt !== null || cur.bugPhrase) return;
       // 15% で発生（呼び出し側で間引き）
-      if (Math.random() < 0.15) {
+      if (deps.rng() < 0.15) {
         const candidates = ['ばぐしゅうせい', 'くらっしゅかいひ', 'ふぐあいたいおう', 'えらーろぐ'];
-        const phrase = candidates[Math.floor(Math.random() * candidates.length)];
+        const phrase = candidates[Math.floor(deps.rng() * candidates.length)];
         set({ current: { ...cur, bugPhrase: phrase } });
       }
     },
@@ -495,19 +504,19 @@ export const useGameStore = create<GameState>()(
       if (get().funds < cand.wage) return false;
       const emp: Employee = {
         ...cand,
-        id: `e-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: `e-${now()}-${deps.rng().toString(36).slice(2, 6)}`,
       };
       set({
         funds: get().funds - cand.wage,
         employees: [...get().employees, emp],
-        candidate: newCandidate(),
+        candidate: newCandidate(deps),
       });
       return true;
     },
 
     refreshCandidate: () => {
       if (get().funds < REFRESH_COST) return false;
-      set({ funds: get().funds - REFRESH_COST, candidate: newCandidate() });
+      set({ funds: get().funds - REFRESH_COST, candidate: newCandidate(deps) });
       return true;
     },
 
@@ -553,14 +562,14 @@ export const useGameStore = create<GameState>()(
         lifetimeRevenue: d.lifetimeRevenue,
         fans: d.fans,
         employees: d.employees,
-        candidate: newCandidate(),
+        candidate: newCandidate(deps),
         unlockedScales: d.unlockedScales,
         unlockedGenres: d.unlockedGenres,
         unlockedThemes: d.unlockedThemes,
         unlockedCategories: d.unlockedCategories,
         ghosts: d.ghosts,
         library: d.library,
-        trend: ensureTrend(null, now()),
+        trend: ensureTrend(null, now(), deps.rng),
         records: d.records,
         achievements: [],
         newlyAchieved: [],

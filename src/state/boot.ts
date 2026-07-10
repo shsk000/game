@@ -5,7 +5,7 @@ import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import { newCandidate } from '../data/employees';
 import { ensureTrend } from '../data/trend';
 import * as storage from '../utils/storage';
-import { type GameState, useGameStore } from './gameStore';
+import { type GameState, setGameDeps, useGameStore } from './gameStore';
 import { INITIAL_GAME_DATE } from './types';
 
 /**
@@ -90,6 +90,9 @@ const AUTOSAVE_INTERVAL_MS = 5_000;
 export const bootGameStore = (deps?: Deps): void => {
   const resolved =
     deps ?? (typeof window !== 'undefined' ? resolveBootDeps(window.location.search) : defaultDeps);
+
+  // store アクション（リリース計算・採用・バグ抽選など）にも同じ乱数源を配線する
+  setGameDeps(resolved);
 
   const persisted = storage.load() ?? storage.defaults();
   useGameStore.setState(buildBootPatch(persisted, resolved));
