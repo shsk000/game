@@ -1,5 +1,10 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import {
+  computeNewlyUnlockedCategories,
+  computeStageUnlocks,
+  evaluateAchievements,
+} from '../core/progression';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { computeBorrowingLimit, DEBT_CONFIG, DEV_PHRASES_PER_WEEK } from '../data/balance';
 import type { CategoryId } from '../data/categories';
@@ -75,128 +80,6 @@ const buildMissionFlavor = (genreId: GenreId): { missionName: string; missionDes
     missionName: `MISSION_${String(missionCounter).padStart(2, '0')}`,
     missionDesc: desc,
   };
-};
-
-type StageUnlock = {
-  unlocked: number;
-  newGenres: GenreId[];
-  newThemes: ThemeId[];
-};
-
-/**
- * v0.10 仕上げ §6-8：解放テンポ（ハイブリッド）。
- *   - 基本軸：累計売上（駄作量産では解放されない）
- *   - 加速軸：ヒット作（メタ 70+）の本数
- *   - 段階的に：stage 2/3/4 へ進める
- *
- * stage しきい値（balance-design §6-8 解放テーブル準拠）：
- *   - stage 2：累計売上 ¥1000 万 OR ヒット作 1 本
- *   - stage 3：累計売上 ¥5000 万 OR ヒット作 3 本
- *   - stage 4：累計売上 ¥1 億 OR ヒット作 5 本
- *
- * 「累計売上だけ」「ヒット作だけ」のどちらでも解放できる二段構え。
- */
-const HIT_METASCORE_THRESHOLD = 70;
-
-const computeStageUnlocks = (
-  currentGenres: GenreId[],
-  currentThemes: ThemeId[],
-  library: Work[],
-  lifetimeRevenue: number,
-): StageUnlock => {
-  const hitCount = library.filter((w) => w.metascore >= HIT_METASCORE_THRESHOLD).length;
-  let stage: 1 | 2 | 3 | 4 = 1;
-  if (lifetimeRevenue >= 10_000_000 || hitCount >= 1) stage = 2;
-  if (lifetimeRevenue >= 50_000_000 || hitCount >= 3) stage = 3;
-  if (lifetimeRevenue >= 100_000_000 || hitCount >= 5) stage = 4;
-  const newGenres = GENRES.filter(
-    (g) => g.unlockStage <= stage && !currentGenres.includes(g.id),
-  ).map((g) => g.id);
-  const newThemes = THEMES.filter(
-    (t) => t.unlockStage <= stage && !currentThemes.includes(t.id),
-  ).map((t) => t.id);
-  return { unlocked: newGenres.length + newThemes.length, newGenres, newThemes };
-};
-
-/**
- * v0.10 仕上げ §6-8：カテゴリ解放（ハイブリッド条件）。
- *  - story: 初期 3 カテゴリ（graphics, sound, gameplay）全てで作品リリース
- *  - presentation: ヒット作 5 本（メタ 70+）
- *  - innovation: 累計売上 ¥1 億
- */
-const computeNewlyUnlockedCategories = (
-  current: CategoryId[],
-  library: Work[],
-  lifetimeRevenue: number,
-): CategoryId[] => {
-  const set = new Set(current);
-  const added: CategoryId[] = [];
-
-  // story: 初期 3 カテゴリで作品リリース済み
-  if (!set.has('story')) {
-    const used = new Set<CategoryId>();
-    for (const w of library) {
-      for (const cid of w.selectedCategories ?? []) used.add(cid as CategoryId);
-    }
-    if (used.has('graphics') && used.has('sound') && used.has('gameplay')) {
-      set.add('story');
-      added.push('story');
-    }
-  }
-
-  // presentation: ヒット作 5 本
-  if (!set.has('presentation')) {
-    const hits = library.filter((w) => w.metascore >= HIT_METASCORE_THRESHOLD).length;
-    if (hits >= 5) {
-      set.add('presentation');
-      added.push('presentation');
-    }
-  }
-
-  // innovation: 累計売上 ¥1 億
-  if (!set.has('innovation')) {
-    if (lifetimeRevenue >= 100_000_000) {
-      set.add('innovation');
-      added.push('innovation');
-    }
-  }
-
-  return added;
-};
-
-const evaluateAchievements = (
-  current: Achievement[],
-  ctx: {
-    library: Work[];
-    fans: number;
-    lifetimeRevenue: number;
-    bestCombo: number;
-    lastWork?: Work;
-  },
-): { unlocked: Achievement[]; newly: Achievement[] } => {
-  const set = new Set(current);
-  const candidates: Achievement[] = [];
-  if (ctx.library.length >= 1) candidates.push('first-release');
-  if (ctx.lastWork?.isMasterpiece || ctx.library.some((w) => w.isMasterpiece)) {
-    candidates.push('first-masterpiece');
-  }
-  if (ctx.lastWork?.ghostBeaten || ctx.library.some((w) => w.ghostBeaten)) {
-    candidates.push('ghost-killer');
-  }
-  if (ctx.bestCombo >= 100) candidates.push('combo-100');
-  if (ctx.fans >= 1000) candidates.push('fan-1k');
-  if (ctx.lifetimeRevenue >= 1_000_000) candidates.push('million-yen');
-  const discovered = new Set(ctx.library.map((w) => `${w.genreId}|${w.themeId}`));
-  if (discovered.size >= 90) candidates.push('collector-half');
-  if (ctx.library.some((w) => w.scale === 'aaa')) candidates.push('aaa-released');
-  const newly: Achievement[] = [];
-  for (const a of candidates) {
-    if (!set.has(a)) {
-      set.add(a);
-      newly.push(a);
-    }
-  }
-  return { unlocked: Array.from(set), newly };
 };
 
 const now = () => Date.now();
