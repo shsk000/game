@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { ACHIEVEMENTS } from '../data/achievements';
-import { DEBT_CONFIG, DEV_PHRASES_PER_WEEK, computeBorrowingLimit } from '../data/balance';
+import { computeBorrowingLimit, DEBT_CONFIG, DEV_PHRASES_PER_WEEK } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import {
@@ -29,25 +29,24 @@ import {
   computeRevenue,
   fanDelta,
 } from '../utils/metascore';
-import { decayRateFor, INITIAL_SHARE, settleAllWorks, settlePool } from '../utils/sales';
+import { decayRateFor, INITIAL_SHARE, settlePool } from '../utils/sales';
 import type { Records } from '../utils/storage';
 import * as storage from '../utils/storage';
 import type {
   Achievement,
   Candidate,
   CurrentProject,
+  DevAxis,
   DevPhase,
   Employee,
   GameDate,
   MonthlyFixedCost,
+  OfflineReport,
   Screen,
   Work,
   WorkBreakdown,
 } from './types';
-import type { DevAxis } from './types';
 import { addWeeks, DEV_PHASE_ORDER, INITIAL_GAME_DATE, ZERO_AXES } from './types';
-
-const persisted = storage.load() ?? storage.defaults();
 
 /**
  * v0.11：開発フェーズの「MISSION 名・見出し」を生成（演出専用）。
@@ -200,24 +199,7 @@ const evaluateAchievements = (
   return { unlocked: Array.from(set), newly };
 };
 
-type OfflineReport = {
-  earned: number;
-  awaySec: number;
-};
-
 const now = () => Date.now();
-
-const computeOfflineEarnings = (
-  lastSeenAt: number,
-  library: Work[],
-): { report: OfflineReport | null; library: Work[] } => {
-  if (!lastSeenAt) return { report: null, library };
-  const awaySec = Math.max(0, (now() - lastSeenAt) / 1000);
-  if (awaySec < 60) return { report: null, library };
-  const { earned, library: updated } = settleAllWorks(library, awaySec);
-  if (earned <= 0) return { report: null, library: updated };
-  return { report: { earned, awaySec }, library: updated };
-};
 
 type ReleaseOpts = {
   launchAd?: boolean;
@@ -321,35 +303,37 @@ export type GameState = {
   debt: number;
 } & Actions;
 
-const offlineCalc = computeOfflineEarnings(persisted.lastSeenAt, persisted.library);
-const initialTrend = ensureTrend(persisted.trend, now());
+/**
+ * import 時副作用ゼロの初期状態（logic-architecture §3）。
+ * セーブ読込・オフライン収益・採用候補・トレンド補充は boot.ts の bootGameStore() が
+ * アプリ起動時に上書きする。テストは boot を呼ばず、この決定的な初期状態から始められる。
+ * トレンドは expiresAt: 0（期限切れ）のプレースホルダ。boot / tick 側の ensureTrend が差し替える。
+ */
+const pureDefaults = storage.defaults();
 
 export const useGameStore = create<GameState>()(
   subscribeWithSelector((set, get) => ({
     screen: 'office',
-    funds: persisted.funds + (offlineCalc.report?.earned ?? 0),
-    lifetimeRevenue: persisted.lifetimeRevenue + (offlineCalc.report?.earned ?? 0),
-    fans: persisted.fans,
-    employees: persisted.employees,
-    candidate: newCandidate(),
-    unlockedScales: persisted.unlockedScales,
-    unlockedGenres: persisted.unlockedGenres,
-    unlockedThemes: persisted.unlockedThemes,
-    unlockedCategories:
-      persisted.unlockedCategories && persisted.unlockedCategories.length > 0
-        ? persisted.unlockedCategories
-        : [...INITIAL_CATEGORY_IDS],
-    ghosts: persisted.ghosts,
-    library: offlineCalc.library,
-    trend: initialTrend,
-    records: persisted.records,
-    achievements: persisted.achievements,
+    funds: pureDefaults.funds,
+    lifetimeRevenue: 0,
+    fans: 0,
+    employees: [],
+    candidate: null,
+    unlockedScales: pureDefaults.unlockedScales,
+    unlockedGenres: pureDefaults.unlockedGenres,
+    unlockedThemes: pureDefaults.unlockedThemes,
+    unlockedCategories: [...INITIAL_CATEGORY_IDS],
+    ghosts: pureDefaults.ghosts,
+    library: [],
+    trend: { genreId: GENRES[0].id, themeId: THEMES[0].id, expiresAt: 0 },
+    records: pureDefaults.records,
+    achievements: [],
     newlyAchieved: [],
-    tutorialDone: persisted.tutorialDone,
+    tutorialDone: false,
     current: null,
     lastReleased: null,
-    offlineReport: offlineCalc.report,
-    currentDate: persisted.currentDate ?? INITIAL_GAME_DATE,
+    offlineReport: null,
+    currentDate: pureDefaults.currentDate ?? INITIAL_GAME_DATE,
     lastFixedCost: null,
     gameOver: false,
     debt: 0,
@@ -941,65 +925,8 @@ export const useGameStore = create<GameState>()(
   })),
 );
 
-// セーブ
-useGameStore.subscribe(
-  (s) => ({
-    funds: s.funds,
-    lifetimeRevenue: s.lifetimeRevenue,
-    fans: s.fans,
-    employees: s.employees,
-    unlockedScales: s.unlockedScales,
-    unlockedGenres: s.unlockedGenres,
-    unlockedThemes: s.unlockedThemes,
-    unlockedCategories: s.unlockedCategories,
-    ghosts: s.ghosts,
-    library: s.library,
-    trend: s.trend,
-    records: s.records,
-    achievements: s.achievements,
-    tutorialDone: s.tutorialDone,
-    currentDate: s.currentDate,
-  }),
-  (snap) => {
-    storage.save({
-      version: 5,
-      ...snap,
-      lastSeenAt: now(),
-    });
-  },
-  { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
-);
-
-// テスト用：window.__gs() で現在のストア state を取得（dev / e2e のみで使用）
-if (typeof window !== 'undefined' && import.meta.env.DEV) {
-  (window as unknown as { __gs: () => GameState }).__gs = () => useGameStore.getState();
-}
-
-// 離席時刻更新
-if (typeof window !== 'undefined') {
-  setInterval(() => {
-    const s = useGameStore.getState();
-    storage.save({
-      version: 5,
-      funds: s.funds,
-      lifetimeRevenue: s.lifetimeRevenue,
-      fans: s.fans,
-      employees: s.employees,
-      unlockedScales: s.unlockedScales,
-      unlockedGenres: s.unlockedGenres,
-      unlockedThemes: s.unlockedThemes,
-      unlockedCategories: s.unlockedCategories,
-      ghosts: s.ghosts,
-      library: s.library,
-      trend: s.trend,
-      records: s.records,
-      achievements: s.achievements,
-      tutorialDone: s.tutorialDone,
-      currentDate: s.currentDate,
-      lastSeenAt: now(),
-    });
-  }, 5000);
-}
+// 自動保存・window.__gs 等の起動時副作用は state/boot.ts の bootGameStore() に集約
+// （logic-architecture §3。main.tsx が render 前に1回だけ呼ぶ）
 
 // 内部利用：相性の安全な取得（循環依存回避のため lazy require）
 import { getCompat } from '../data/compatibility';

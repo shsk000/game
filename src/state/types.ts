@@ -55,6 +55,12 @@ export type MonthlyFixedCost = {
   total: number;
 };
 
+/** 離席中（オフライン）に稼いだ売上のレポート。復帰時にモーダル表示する */
+export type OfflineReport = {
+  earned: number;
+  awaySec: number;
+};
+
 export type Achievement =
   | 'first-release'
   | 'first-masterpiece'
