@@ -1,21 +1,19 @@
-import { SCORE_BASE } from '../data/balance';
 import type { Scale } from '../data/scales';
 import type { Employee } from '../state/types';
 
 /**
- * キャラ能力スコア（0..100、厳しめ加算方式）。
+ * キャラ能力スコア（0..100）。
  *
- * v0.14 改訂（開発カテゴリ選択の廃止に伴う）：
- * - 旧「役割マッチ（選択カテゴリ×role）」「specialty 一致」はカテゴリ前提だったため撤去
- * - 代わりに「役割の多様性」（異なる role が揃うほど加点）を採用
- *   ※ 社員の specialties（得意分野）はジャンル連動への転用を検討中（後続版 🔧）
+ * v0.16 再設計（spec v16 §2-1。オーナー確定「能力を一番考慮する」「序盤は厳しく」）：
+ * - 旧実装は SCORE_BASE(30) の下駄＋人数ボーナスで新人 3 人でも 85 に到達し、
+ *   初手でメタ 95 が出る難易度崩壊の主因だった
+ * - 新実装は power（正規化 0..1・成長込み）の充足率が支配項。頭数と下駄では稼げない
  *
- *   score = SCORE_BASE(30)
- *         + (power 合計 / 規模上限) × 35      // power 寄与（最大 +35）
- *         + 役割多様性（2 種 +8、3 種 +15）
- *         + アサイン人数（1 人 0、2 人 +5、3 人 +10）
- *         + 規模適合（人数不足 -10、十分 0、過剰 -5）
- *         = 0..100 クランプ
+ *   score = powerBonus（0..70）… power 合計 / 規模上限 × 70
+ *         + 役割多様性（2 種 +5、3 種 +10）
+ *         + 規模適合（推奨人数未満 -10、超過 -5、ぴったり 0）
+ *
+ * 新人 3 人（power 平均 0.4）で 30 前後 / Lv10 精鋭 3 人 + aaa で 85〜95。
  */
 
 /** 規模ごとの推奨アサイン人数（balance-design §6-4） */
@@ -27,13 +25,16 @@ const RECOMMENDED_HEADCOUNT: Record<Scale, number> = {
   aaa: 3,
 };
 
-/** 規模ごとの power 合計上限（balance-design §6-4 シミュレーション表） */
+/**
+ * 規模ごとの power 合計上限（v0.16 正規化 power 前提で再設定 🔧）。
+ * Lv10（成長率 ×2.35）の精鋭（basePower 0.5〜0.6）3 人 ≒ 3.5〜4.2 が aaa でカンストする水準。
+ */
 const POWER_CAP: Record<Scale, number> = {
-  mini: 6,
-  mobile: 9,
-  indie: 15,
-  hit: 21,
-  aaa: 24,
+  mini: 2.5,
+  mobile: 2.8,
+  indie: 3.0,
+  hit: 3.3,
+  aaa: 3.6,
 };
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -44,11 +45,9 @@ export type CharacterScoreInput = {
 };
 
 export type CharacterScoreBreakdown = {
-  base: number;
   powerSum: number;
   powerBonus: number;
   roleVarietyBonus: number;
-  headcountBonus: number;
   fitBonus: number;
 };
 
@@ -58,32 +57,28 @@ export const computeCharacterScore = (
   const { assignedEmployees, scale } = input;
   const headcount = assignedEmployees.length;
 
-  // 1) power 合計 → +0..35（規模上限に対する充足率）
+  // 1) power 合計 → +0..70（規模上限に対する充足率。支配項）
   const powerSum = assignedEmployees.reduce((sum, e) => sum + e.power, 0);
-  const powerBonus = clamp((powerSum / POWER_CAP[scale]) * 35, 0, 35);
+  const powerBonus = clamp((powerSum / POWER_CAP[scale]) * 70, 0, 70);
 
-  // 2) 役割多様性：異なる role の数（2 種 +8、3 種 +15）
+  // 2) 役割多様性：異なる role の数（2 種 +5、3 種 +10）
   const roleCount = new Set(assignedEmployees.map((e) => e.role)).size;
-  const roleVarietyBonus = roleCount >= 3 ? 15 : roleCount === 2 ? 8 : 0;
+  const roleVarietyBonus = roleCount >= 3 ? 10 : roleCount === 2 ? 5 : 0;
 
-  // 3) アサイン人数：1 人 0、2 人 +5、3 人以上 +10
-  const headcountBonus = headcount >= 3 ? 10 : headcount === 2 ? 5 : 0;
-
-  // 4) 規模適合：推奨人数より少ない -10、ぴったり 0、超過 -5
+  // 3) 規模適合：推奨人数より少ない -10（雇用の動機）。
+  // v0.17：超過ペナルティは廃止（全員参加制で人数はプレイヤーのレバーではなくなったため）
   const recommended = RECOMMENDED_HEADCOUNT[scale];
-  const fitBonus = headcount < recommended ? -10 : headcount === recommended ? 0 : -5;
+  const fitBonus = headcount < recommended ? -10 : 0;
 
-  const raw = SCORE_BASE + powerBonus + roleVarietyBonus + headcountBonus + fitBonus;
+  const raw = powerBonus + roleVarietyBonus + fitBonus;
   const score = clamp(raw, 0, 100);
 
   return {
     score: Math.round(score),
     breakdown: {
-      base: SCORE_BASE,
-      powerSum: Math.round(powerSum * 10) / 10,
+      powerSum: Math.round(powerSum * 100) / 100,
       powerBonus: Math.round(powerBonus),
       roleVarietyBonus,
-      headcountBonus,
       fitBonus,
     },
   };

@@ -3,19 +3,22 @@ import { ads } from '../../ads/AdProvider';
 import { JacketView } from '../../components/JacketView';
 import { Tutorial } from '../../components/Tutorial';
 import { PixelButton, PixelWindow } from '../../components/ui';
+import { bugSuppression } from '../../core/bugs';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
-import { planWeeksAllowance } from '../../data/balance';
+import { planWeeksAllowance, ROLE_EFFECT } from '../../data/balance';
 import { compatLabel, getCompat } from '../../data/compatibility';
+import { sumMonthlySalaries } from '../../data/employees';
 import type { GenreId } from '../../data/genres';
 import { GENRE_BY_ID, GENRES } from '../../data/genres';
 import type { Scale } from '../../data/scales';
 import { SCALE_BY_ID, SCALES } from '../../data/scales';
 import type { ThemeId } from '../../data/themes';
 import { THEME_BY_ID, THEMES } from '../../data/themes';
+import { generateTitle } from '../../data/titleGenerator';
 import { trendLabel } from '../../data/trend';
 import { useGameStore } from '../../state/gameStore';
 import { estimateRevenueRange, formatWeeks, formatYen } from '../../utils/format';
-import { computeProfitForScale } from '../../utils/profit';
+import { computeProfit } from '../../utils/profit';
 
 /**
  * 企画会議画面：ピクセルアート UI 版。
@@ -130,7 +133,7 @@ export const PlanScreen = () => {
   const [genreId, setGenreId] = useState<GenreId>(firstGenre);
   const [themeId, setThemeId] = useState<ThemeId>(firstTheme);
   const [scale, setScale] = useState<Scale>('mini');
-  const [assignedEmployeeIds, setAssignedEmployeeIds] = useState<string[]>([]);
+  const [title, setTitle] = useState(() => generateTitle(firstGenre, firstTheme));
   const [surveyedCompat, setSurveyedCompat] = useState<number | null>(null);
   const [adRunning, setAdRunning] = useState(false);
 
@@ -145,23 +148,10 @@ export const PlanScreen = () => {
     setSurveyedCompat(null);
   }, [genreId, themeId]);
 
-  // 退職などで存在しなくなった従業員が割当に残っていたら除去
-  useEffect(() => {
-    setAssignedEmployeeIds((prev) => prev.filter((id) => employees.some((e) => e.id === id)));
-  }, [employees]);
-
   const isTrendyGenre = trend && trend.genreId === genreId;
   const isTrendyTheme = trend && trend.themeId === themeId;
 
   const pioneer = !library.some((w) => w.genreId === genreId && w.themeId === themeId);
-
-  const toggleEmployee = (id: string) => {
-    setAssignedEmployeeIds((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
-      if (prev.length >= 3) return prev;
-      return [...prev, id];
-    });
-  };
 
   const handleSurvey = () => {
     if (adRunning) return;
@@ -176,12 +166,12 @@ export const PlanScreen = () => {
     });
   };
 
-  // v0.14：カテゴリ選択は廃止（オーナー決定）。従業員 1 人以上で開始できる
-  const canStart = assignedEmployeeIds.length >= 1;
+  // v0.17：従業員は常に全員参加（オーナー指示）。社員が 1 人でもいれば開始できる
+  const canStart = employees.length >= 1;
 
   const handleStart = () => {
     if (!canStart) return;
-    startProject(genreId, themeId, scale, assignedEmployeeIds);
+    startProject(genreId, themeId, scale, title);
   };
 
   // v0.11 G2：PlanScreen は ScreenOverlay の中身として描画される（ページ遷移しない）
@@ -199,18 +189,17 @@ export const PlanScreen = () => {
         background: COLORS.bgDark,
       }}
     >
-        {/* 左パネル：5 セクション（ジャンル/テーマ/規模/カテゴリ/従業員） */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-            height: '100%',
-            minHeight: 0,
-            overflow: 'auto',
-          }}
-        >
-
+      {/* 左パネル：5 セクション（ジャンル/テーマ/規模/カテゴリ/従業員） */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          height: '100%',
+          minHeight: 0,
+          overflow: 'auto',
+        }}
+      >
         {/* ジャンル — v0.10 仕上げ：未解放は何があるか見せない */}
         <PixelWindow title="ジャンルを選ぶ" variant="standard">
           <div style={chipRowStyle}>
@@ -293,13 +282,21 @@ export const PlanScreen = () => {
               const totalWeeks = def.neededWeeks + planWeeksAllowance(def.neededWeeks);
               const monthCount = Math.round(totalWeeks / 4);
               // E-4: 中央値売上で見込み利益。赤字なら赤色で警告
-              const profitMid = computeProfitForScale({
+              // v0.17.1：月固定費に給与を含める（賃料だけだと実際の月次徴収と食い違う）
+              const salaries = sumMonthlySalaries(employees);
+              const monthlyFixed = salaries + def.monthlyRent;
+              const estMonths = Math.max(1, Math.round(totalWeeks / 4));
+              const profitMid = computeProfit({
                 totalRevenue: range.mid,
-                scale,
+                devCost: def.baseCost,
+                monthlyFixedCost: monthlyFixed,
+                developMonths: estMonths,
               });
-              const profitHigh = computeProfitForScale({
+              const profitHigh = computeProfit({
                 totalRevenue: range.high,
-                scale,
+                devCost: def.baseCost,
+                monthlyFixedCost: monthlyFixed,
+                developMonths: estMonths,
               });
               const profitColor = profitMid.profit >= 0 ? COLORS.pioneer : COLORS.accentRed;
               return (
@@ -333,8 +330,9 @@ export const PlanScreen = () => {
                     accent={COLORS.pioneer}
                   />
                   <EstimateBox
-                    label="月固定費（賃料）"
-                    value={`${formatYen(def.monthlyRent)}/月`}
+                    label="月固定費（給与＋賃料）"
+                    value={`${formatYen(monthlyFixed)}/月`}
+                    sub={`給与 ${formatYen(salaries)} + 賃料 ${formatYen(def.monthlyRent)}`}
                     accent={COLORS.warn}
                   />
                   <EstimateBox
@@ -349,223 +347,239 @@ export const PlanScreen = () => {
           </div>
         </PixelWindow>
 
-        {/* 従業員アサイン */}
+        {/* v0.17：開発チーム（常に全員参加）＋チーム効果プレビュー */}
         <PixelWindow
           title={
             <span>
-              従業員アサイン
-              <span style={subMetaStyle}>アサイン {assignedEmployeeIds.length}/3</span>
+              👥 開発チーム<span style={subMetaStyle}>全員参加（{employees.length}人）</span>
             </span>
           }
           variant="standard"
         >
           {employees.length === 0 ? (
-            <p style={hintStyle}>オフィスで従業員を雇うとアサインできます。</p>
+            <p style={hintStyle}>オフィスで従業員を雇うと開発を始められます。</p>
           ) : (
-            <ul
-              style={{
-                listStyle: 'none',
-                margin: 0,
-                padding: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 6,
-              }}
-            >
-              {employees.map((e) => {
-                const isAssigned = assignedEmployeeIds.includes(e.id);
-                const reachedMax = assignedEmployeeIds.length >= 3 && !isAssigned;
-                const roleLabel =
-                  e.role === 'programmer'
-                    ? 'プログラマー'
-                    : e.role === 'designer'
-                      ? 'デザイナー'
-                      : '広報';
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <ul
+                style={{
+                  listStyle: 'none',
+                  margin: 0,
+                  padding: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}
+              >
+                {employees.map((e) => (
+                  <li key={e.id} style={{ fontSize: 12, color: COLORS.textDark }}>
+                    <strong>{e.name}</strong>
+                    <span style={{ fontSize: 11, color: COLORS.textSub, marginLeft: 6 }}>
+                      {e.role === 'programmer'
+                        ? '🧑‍💻 プログラマー'
+                        : e.role === 'designer'
+                          ? '🎨 デザイナー'
+                          : '📣 広報'}{' '}
+                      ／ Lv{e.level}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {(() => {
+                // このチームで作ると何が起きるか（効き先の可視化。値は balance.ts から生成）
+                const speed = employees
+                  .filter((e) => e.role === 'programmer')
+                  .reduce((a, b) => a + b.power * ROLE_EFFECT.programmerLocPerSec, 0);
+                const quality = employees
+                  .filter((e) => e.role === 'designer')
+                  .reduce((a, b) => a + b.power * ROLE_EFFECT.designerQualityBonus, 0);
+                const sales = employees
+                  .filter((e) => e.role === 'pr')
+                  .reduce((a, b) => a + b.power * ROLE_EFFECT.prSalesBonus, 0);
+                const suppress = Math.round(bugSuppression(employees) * 100);
                 return (
-                  <li key={e.id}>
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        padding: '6px 10px',
-                        background: isAssigned ? '#fff3cf' : '#eef0f3',
-                        border: `3px solid ${COLORS.borderHard}`,
-                        cursor: reachedMax ? 'not-allowed' : 'pointer',
-                        opacity: reachedMax ? 0.6 : 1,
-                        fontSize: 13,
-                        boxShadow: isAssigned
-                          ? 'inset 0 0 0 2px #d99114'
-                          : 'inset 0 0 0 2px rgba(0,0,0,0.1)',
-                        imageRendering: 'pixelated',
-                        userSelect: 'none',
-                      }}
-                    >
-                      {/* テスト互換性のため <input type="checkbox" data-employee-id> を維持 */}
-                      <input
-                        type="checkbox"
-                        data-employee-id={e.id}
-                        checked={isAssigned}
-                        disabled={reachedMax}
-                        onChange={() => toggleEmployee(e.id)}
-                        style={{
-                          width: 16,
-                          height: 16,
-                          accentColor: '#5aa84a',
-                          cursor: reachedMax ? 'not-allowed' : 'pointer',
-                        }}
-                      />
-                      <strong style={{ minWidth: 80 }}>{e.name}</strong>
-                      <span style={{ fontSize: 11, color: COLORS.textSub }}>
-                        {roleLabel} ／ power {e.power}
-                      </span>
-                      {/* v0.14：得意分野表示はカテゴリ廃止に伴い一旦撤去（ジャンル連動への転用を検討中） */}
-                    </label>
+                  <div
+                    style={{
+                      borderTop: `2px solid ${COLORS.borderHard}`,
+                      paddingTop: 6,
+                      fontSize: 11,
+                      color: COLORS.textDark,
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      rowGap: 2,
+                    }}
+                  >
+                    <span>⚡ 開発速度 +{speed.toFixed(2)} LoC/秒</span>
+                    <span>🎨 品質 +{quality.toFixed(1)}</span>
+                    <span>📣 売上 +{Math.round(sales * 100)}%</span>
+                    <span>🐛 バグ抑制 {suppress}%</span>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </PixelWindow>
+      </div>
+
+      {/* 右パネル：企画プレビュー + 予測 + 開発開始 */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          height: '100%',
+          minHeight: 0,
+          overflow: 'auto',
+        }}
+      >
+        {/* オフライン / 実績解除 通知（あれば） */}
+        {offlineReport && (
+          <PixelWindow title="📬 おかえりなさい" variant="emphasis" bodyStyle={{ padding: 8 }}>
+            <p style={{ margin: 0, fontSize: 12 }}>
+              離席中（{Math.round(offlineReport.awaySec / 60)}分）に ¥
+              {offlineReport.earned.toLocaleString()} 受領。
+            </p>
+            <div style={{ marginTop: 6 }}>
+              <PixelButton size="small" variant="secondary" onClick={clearOfflineReport}>
+                閉じる
+              </PixelButton>
+            </div>
+          </PixelWindow>
+        )}
+        {newlyAchieved.length > 0 && (
+          <PixelWindow title="🏆 実績解除！" variant="emphasis" bodyStyle={{ padding: 8 }}>
+            <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, lineHeight: 1.4 }}>
+              {newlyAchieved.map((id) => {
+                const def = ACHIEVEMENT_BY_ID[id];
+                return (
+                  <li key={id}>
+                    {def.emoji} <strong>{def.name}</strong>
                   </li>
                 );
               })}
             </ul>
-          )}
+            <div style={{ marginTop: 6 }}>
+              <PixelButton size="small" variant="secondary" onClick={clearNewlyAchieved}>
+                閉じる
+              </PixelButton>
+            </div>
+          </PixelWindow>
+        )}
+
+        {/* トレンド */}
+        <PixelWindow title="📈 トレンド" variant="standard" bodyStyle={{ padding: 8 }}>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 13,
+              fontWeight: 700,
+              color: COLORS.trendHot,
+            }}
+          >
+            {trend ? trendLabel(trend) : '—'}
+          </p>
+          <p style={{ ...hintStyle, marginTop: 2 }}>合致 ×1.3（片方）／ ×1.7（両方）</p>
         </PixelWindow>
-        </div>
 
-        {/* 右パネル：企画プレビュー + 予測 + 開発開始 */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-            height: '100%',
-            minHeight: 0,
-            overflow: 'auto',
-          }}
-        >
-          {/* オフライン / 実績解除 通知（あれば） */}
-          {offlineReport && (
-            <PixelWindow title="📬 おかえりなさい" variant="emphasis" bodyStyle={{ padding: 8 }}>
-              <p style={{ margin: 0, fontSize: 12 }}>
-                離席中（{Math.round(offlineReport.awaySec / 60)}分）に ¥
-                {offlineReport.earned.toLocaleString()} 受領。
-              </p>
-              <div style={{ marginTop: 6 }}>
-                <PixelButton size="small" variant="secondary" onClick={clearOfflineReport}>
-                  閉じる
-                </PixelButton>
-              </div>
-            </PixelWindow>
-          )}
-          {newlyAchieved.length > 0 && (
-            <PixelWindow title="🏆 実績解除！" variant="emphasis" bodyStyle={{ padding: 8 }}>
-              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, lineHeight: 1.4 }}>
-                {newlyAchieved.map((id) => {
-                  const def = ACHIEVEMENT_BY_ID[id];
-                  return (
-                    <li key={id}>
-                      {def.emoji} <strong>{def.name}</strong>
-                    </li>
-                  );
-                })}
-              </ul>
-              <div style={{ marginTop: 6 }}>
-                <PixelButton size="small" variant="secondary" onClick={clearNewlyAchieved}>
-                  閉じる
-                </PixelButton>
-              </div>
-            </PixelWindow>
-          )}
-
-          {/* トレンド */}
-          <PixelWindow title="📈 トレンド" variant="standard" bodyStyle={{ padding: 8 }}>
-            <p
+        {/* 企画プレビュー */}
+        <PixelWindow title="🎮 企画プレビュー" variant="emphasis" bodyStyle={{ padding: 8 }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+            <input
+              type="text"
+              value={title}
+              maxLength={16}
+              placeholder="ゲームタイトル"
+              onChange={(e) => setTitle(e.target.value)}
+              aria-label="ゲームタイトル"
               style={{
-                margin: 0,
+                flex: 1,
                 fontSize: 13,
                 fontWeight: 700,
-                color: COLORS.trendHot,
+                padding: '4px 6px',
+                border: `3px solid ${COLORS.borderHard}`,
+                background: '#fffef2',
+                color: COLORS.textDark,
+                fontFamily: 'inherit',
               }}
+            />
+            <PixelButton
+              size="small"
+              variant="secondary"
+              onClick={() => setTitle(generateTitle(genreId, themeId))}
+              ariaLabel="タイトルをランダム生成"
             >
-              {trend ? trendLabel(trend) : '—'}
-            </p>
-            <p style={{ ...hintStyle, marginTop: 2 }}>合致 ×1.3（片方）／ ×1.7（両方）</p>
-          </PixelWindow>
-
-          {/* 企画プレビュー */}
-          <PixelWindow title="🎮 企画プレビュー" variant="emphasis" bodyStyle={{ padding: 8 }}>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-              <JacketView genreId={genreId} themeId={themeId} size="sm" />
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              🎲
+            </PixelButton>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <JacketView genreId={genreId} themeId={themeId} size="sm" />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: COLORS.textDark,
+                }}
+              >
+                {GENRE_BY_ID[genreId].name} × {THEME_BY_ID[themeId].name}
+                {(isTrendyGenre || isTrendyTheme) && (
+                  <span style={{ color: COLORS.trendHot, marginLeft: 4 }}>🔥</span>
+                )}
+              </p>
+              {pioneer && (
+                <span
+                  style={{
+                    padding: '1px 6px',
+                    background: COLORS.pioneer,
+                    color: '#ffffff',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    width: 'fit-content',
+                  }}
+                >
+                  🌱 新規開拓 +30%
+                </span>
+              )}
+              {surveyedCompat !== null ? (
                 <p
                   style={{
                     margin: 0,
-                    fontSize: 13,
+                    color: COLORS.warn,
+                    fontSize: 12,
                     fontWeight: 700,
-                    color: COLORS.textDark,
                   }}
                 >
-                  {GENRE_BY_ID[genreId].name} × {THEME_BY_ID[themeId].name}
-                  {(isTrendyGenre || isTrendyTheme) && (
-                    <span style={{ color: COLORS.trendHot, marginLeft: 4 }}>🔥</span>
-                  )}
+                  相性: {compatLabel(surveyedCompat)} ({surveyedCompat.toFixed(2)}x)
                 </p>
-                {pioneer && (
-                  <span
-                    style={{
-                      padding: '1px 6px',
-                      background: COLORS.pioneer,
-                      color: '#ffffff',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      width: 'fit-content',
-                    }}
-                  >
-                    🌱 新規開拓 +30%
-                  </span>
-                )}
-                {surveyedCompat !== null ? (
-                  <p
-                    style={{
-                      margin: 0,
-                      color: COLORS.warn,
-                      fontSize: 12,
-                      fontWeight: 700,
-                    }}
-                  >
-                    相性: {compatLabel(surveyedCompat)} ({surveyedCompat.toFixed(2)}x)
-                  </p>
-                ) : (
-                  <PixelButton
-                    size="small"
-                    variant="secondary"
-                    onClick={handleSurvey}
-                    disabled={adRunning}
-                  >
-                    {adRunning ? '広告中…' : '📺 市場調査'}
-                  </PixelButton>
-                )}
-              </div>
-            </div>
-          </PixelWindow>
-
-          {/* 開発開始ボタン（常時固定） */}
-          <PixelWindow variant="emphasis" bodyStyle={{ padding: 10 }}>
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch' }}
-            >
-              <PixelButton
-                size="large"
-                variant="primary"
-                onClick={handleStart}
-                disabled={!canStart}
-              >
-                ▶ 開発開始
-              </PixelButton>
-              {!canStart && (
-                <p style={{ ...hintStyle, fontSize: 10 }}>※従業員 1 人以上のアサインが必要</p>
+              ) : (
+                <PixelButton
+                  size="small"
+                  variant="secondary"
+                  onClick={handleSurvey}
+                  disabled={adRunning}
+                >
+                  {adRunning ? '広告中…' : '📺 市場調査'}
+                </PixelButton>
               )}
-              <p style={{ ...hintStyle, fontSize: 11 }}>資金: {formatYen(funds)}</p>
             </div>
-          </PixelWindow>
-        </div>
+          </div>
+        </PixelWindow>
+
+        {/* 開発開始ボタン（常時固定） */}
+        <PixelWindow variant="emphasis" bodyStyle={{ padding: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch' }}>
+            <PixelButton size="large" variant="primary" onClick={handleStart} disabled={!canStart}>
+              ▶ 開発開始
+            </PixelButton>
+            {!canStart && (
+              <p style={{ ...hintStyle, fontSize: 10 }}>
+                ※従業員がいません（オフィスで採用すると開始できます）
+              </p>
+            )}
+            <p style={{ ...hintStyle, fontSize: 11 }}>資金: {formatYen(funds)}</p>
+          </div>
+        </PixelWindow>
+      </div>
 
       {!tutorialDone && <Tutorial />}
     </div>

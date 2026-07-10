@@ -13,9 +13,9 @@ import {
   DEFAULT_WALL_CATALOG,
   type DecorDir,
   type DecorItem,
+  type DoorCfg,
   decorGeom,
   decorImg,
-  type DoorCfg,
   loadDecorCatalog,
   loadDoor,
   loadWallCatalog,
@@ -116,7 +116,8 @@ export function WorkstationTuner() {
   };
   const updLayer = (i: number, patch: Partial<WsLayer>) =>
     setCfg({ ...cfg, layers: cfg.layers.map((l, idx) => (idx === i ? { ...l, ...patch } : l)) });
-  const updChair = (patch: Partial<WsChair>) => setCfg({ ...cfg, chair: { ...cfg.chair, ...patch } });
+  const updChair = (patch: Partial<WsChair>) =>
+    setCfg({ ...cfg, chair: { ...cfg.chair, ...patch } });
   const reset = () => {
     setNw(WS_NW);
     setSe(WS_SE);
@@ -339,8 +340,15 @@ export function WorkstationTuner() {
           }}
         >
           {tiles}
-          {target === 'ws' && pair &&
-            renderWs(partnerCfg, ax + partnerDx + partnerG.x, ay + partnerDy + partnerG.y, partnerBase, 'partner')}
+          {target === 'ws' &&
+            pair &&
+            renderWs(
+              partnerCfg,
+              ax + partnerDx + partnerG.x,
+              ay + partnerDy + partnerG.y,
+              partnerBase,
+              'partner',
+            )}
           {target === 'ws' && renderWs(cfg, ax + gg.x, ay + gg.y, 50, 'edit')}
           {target === 'door' && (
             <img
@@ -357,40 +365,42 @@ export function WorkstationTuner() {
               }}
             />
           )}
-          {target === 'decor' && wallItem && (() => {
-            // 家具設置の参考に、背後の壁を2段プレビュー表示（SE家具→NW辺の壁, それ以外→NE辺の壁）
-            const wdir = decorDir === 'SE' ? 'SE' : 'SW';
-            const edx = wdir === 'SW' ? dW / 4 : -dW / 4;
-            const edy = -dH / 4;
-            const wox = wdir === 'SW' ? -wallItem.ox : wallItem.ox;
-            const sdy = wallItem.stackDy ?? 90;
-            const step = wdir === 'SW' ? iStep : jStep;
-            const n = wdir === 'SW' ? fcw : fch;
-            const panels: ReactNode[] = [];
-            for (let l = 0; l < n; l++) {
-              const lx = ax + l * step.x;
-              const ly = ay + l * step.y;
-              for (let k = 0; k < 2; k++) {
-                panels.push(
-                  <img
-                    key={`dwall-${l}-${k}`}
-                    src={`${SPRITE_BASE}/${wallItem.imgBase}_${wdir.toLowerCase()}.png`}
-                    width={wallItem.w}
-                    height={wallItem.h}
-                    alt=""
-                    style={{
-                      position: 'absolute',
-                      left: lx + edx + wox - wallItem.w / 2,
-                      top: ly + edy + wallItem.oy - wallItem.h - k * sdy,
-                      imageRendering: 'pixelated',
-                      zIndex: 1 + k,
-                    }}
-                  />,
-                );
+          {target === 'decor' &&
+            wallItem &&
+            (() => {
+              // 家具設置の参考に、背後の壁を2段プレビュー表示（SE家具→NW辺の壁, それ以外→NE辺の壁）
+              const wdir = decorDir === 'SE' ? 'SE' : 'SW';
+              const edx = wdir === 'SW' ? dW / 4 : -dW / 4;
+              const edy = -dH / 4;
+              const wox = wdir === 'SW' ? -wallItem.ox : wallItem.ox;
+              const sdy = wallItem.stackDy ?? 90;
+              const step = wdir === 'SW' ? iStep : jStep;
+              const n = wdir === 'SW' ? fcw : fch;
+              const panels: ReactNode[] = [];
+              for (let l = 0; l < n; l++) {
+                const lx = ax + l * step.x;
+                const ly = ay + l * step.y;
+                for (let k = 0; k < 2; k++) {
+                  panels.push(
+                    <img
+                      key={`dwall-${l}-${k}`}
+                      src={`${SPRITE_BASE}/${wallItem.imgBase}_${wdir.toLowerCase()}.png`}
+                      width={wallItem.w}
+                      height={wallItem.h}
+                      alt=""
+                      style={{
+                        position: 'absolute',
+                        left: lx + edx + wox - wallItem.w / 2,
+                        top: ly + edy + wallItem.oy - wallItem.h - k * sdy,
+                        imageRendering: 'pixelated',
+                        zIndex: 1 + k,
+                      }}
+                    />,
+                  );
+                }
               }
-            }
-            return <>{panels}</>;
-          })()}
+              return <>{panels}</>;
+            })()}
           {target === 'decor' && decorItem && decorG && (
             <img
               src={`${SPRITE_BASE}/${decorImg(decorItem.imgBase, decorDir)}`}
@@ -407,44 +417,62 @@ export function WorkstationTuner() {
               }}
             />
           )}
-          {target === 'wall' && wallItem && (() => {
-            // 向き SW/SE（鏡面）。SW=奥右辺(+i方向にループ), SE=奥左辺(+j方向にループ)。
-            const edx = wallDir === 'SW' ? dW / 4 : -dW / 4;
-            const edy = -dH / 4;
-            const ox = wallDir === 'SW' ? -wallItem.ox : wallItem.ox;
-            const sdy = wallItem.stackDy ?? 90;
-            const step = wallDir === 'SW' ? iStep : jStep;
-            const panels: ReactNode[] = [];
-            for (let l = 0; l < wallLoop; l++) {
-              const lx = ax + l * step.x;
-              const ly = ay + l * step.y;
-              for (let k = 0; k < wallStack; k++) {
-                panels.push(
-                  <img
-                    key={`wall-${l}-${k}`}
-                    src={`${SPRITE_BASE}/${wallItem.imgBase}_${wallDir.toLowerCase()}.png`}
-                    width={wallItem.w}
-                    height={wallItem.h}
-                    alt=""
-                    style={{
-                      position: 'absolute',
-                      left: lx + edx + ox - wallItem.w / 2,
-                      top: ly + edy + wallItem.oy - wallItem.h - k * sdy,
-                      imageRendering: 'pixelated',
-                      transform: wallItem.rot ? `rotate(${wallItem.rot}deg)` : undefined,
-                      zIndex: 50 + l * 4 + k,
-                    }}
-                  />,
-                );
+          {target === 'wall' &&
+            wallItem &&
+            (() => {
+              // 向き SW/SE（鏡面）。SW=奥右辺(+i方向にループ), SE=奥左辺(+j方向にループ)。
+              const edx = wallDir === 'SW' ? dW / 4 : -dW / 4;
+              const edy = -dH / 4;
+              const ox = wallDir === 'SW' ? -wallItem.ox : wallItem.ox;
+              const sdy = wallItem.stackDy ?? 90;
+              const step = wallDir === 'SW' ? iStep : jStep;
+              const panels: ReactNode[] = [];
+              for (let l = 0; l < wallLoop; l++) {
+                const lx = ax + l * step.x;
+                const ly = ay + l * step.y;
+                for (let k = 0; k < wallStack; k++) {
+                  panels.push(
+                    <img
+                      key={`wall-${l}-${k}`}
+                      src={`${SPRITE_BASE}/${wallItem.imgBase}_${wallDir.toLowerCase()}.png`}
+                      width={wallItem.w}
+                      height={wallItem.h}
+                      alt=""
+                      style={{
+                        position: 'absolute',
+                        left: lx + edx + ox - wallItem.w / 2,
+                        top: ly + edy + wallItem.oy - wallItem.h - k * sdy,
+                        imageRendering: 'pixelated',
+                        transform: wallItem.rot ? `rotate(${wallItem.rot}deg)` : undefined,
+                        zIndex: 50 + l * 4 + k,
+                      }}
+                    />,
+                  );
+                }
               }
-            }
-            return <>{panels}</>;
-          })()}
+              return <>{panels}</>;
+            })()}
           <div
-            style={{ position: 'absolute', left: cx0 - 1, top: cy0 - 10, width: 2, height: 20, background: 'lime', zIndex: 99 }}
+            style={{
+              position: 'absolute',
+              left: cx0 - 1,
+              top: cy0 - 10,
+              width: 2,
+              height: 20,
+              background: 'lime',
+              zIndex: 99,
+            }}
           />
           <div
-            style={{ position: 'absolute', left: cx0 - 10, top: cy0 - 1, width: 20, height: 2, background: 'lime', zIndex: 99 }}
+            style={{
+              position: 'absolute',
+              left: cx0 - 10,
+              top: cy0 - 1,
+              width: 20,
+              height: 2,
+              background: 'lime',
+              zIndex: 99,
+            }}
           />
         </div>
       </div>
@@ -460,9 +488,21 @@ export function WorkstationTuner() {
 
         {target === 'decor' && decorItem && (
           <>
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
+            <label
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                fontSize: 12,
+                marginBottom: 8,
+              }}
+            >
               家具
-              <select value={decorId} onChange={(e) => setDecorId(e.target.value)} style={{ flex: 1 }}>
+              <select
+                value={decorId}
+                onChange={(e) => setDecorId(e.target.value)}
+                style={{ flex: 1 }}
+              >
                 {catalog.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -470,16 +510,39 @@ export function WorkstationTuner() {
                 ))}
               </select>
             </label>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                fontSize: 12,
+                marginBottom: 8,
+              }}
+            >
               向き(プレビュー)
               <label>
-                <input type="radio" checked={decorDir === 'SE'} onChange={() => setDecorDir('SE')} /> SE
+                <input
+                  type="radio"
+                  checked={decorDir === 'SE'}
+                  onChange={() => setDecorDir('SE')}
+                />{' '}
+                SE
               </label>
               <label>
-                <input type="radio" checked={decorDir === 'SW'} onChange={() => setDecorDir('SW')} /> SW
+                <input
+                  type="radio"
+                  checked={decorDir === 'SW'}
+                  onChange={() => setDecorDir('SW')}
+                />{' '}
+                SW
               </label>
               <label>
-                <input type="radio" checked={decorDir === 'NW'} onChange={() => setDecorDir('NW')} /> NW
+                <input
+                  type="radio"
+                  checked={decorDir === 'NW'}
+                  onChange={() => setDecorDir('NW')}
+                />{' '}
+                NW
               </label>
             </div>
             {numField('iマス(↘)', decorItem.cw ?? 1, 1, 4, (v) => updDecor({ cw: v }))}
@@ -507,9 +570,21 @@ export function WorkstationTuner() {
 
         {target === 'wall' && wallItem && (
           <>
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
+            <label
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                fontSize: 12,
+                marginBottom: 8,
+              }}
+            >
               壁
-              <select value={wallId} onChange={(e) => setWallId(e.target.value)} style={{ flex: 1 }}>
+              <select
+                value={wallId}
+                onChange={(e) => setWallId(e.target.value)}
+                style={{ flex: 1 }}
+              >
                 {wallCat.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -517,33 +592,62 @@ export function WorkstationTuner() {
                 ))}
               </select>
             </label>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                fontSize: 12,
+                marginBottom: 8,
+              }}
+            >
               向き(プレビュー)
               <label>
-                <input type="radio" checked={wallDir === 'SE'} onChange={() => setWallDir('SE')} /> SE
+                <input type="radio" checked={wallDir === 'SE'} onChange={() => setWallDir('SE')} />{' '}
+                SE
               </label>
               <label>
-                <input type="radio" checked={wallDir === 'SW'} onChange={() => setWallDir('SW')} /> SW
+                <input type="radio" checked={wallDir === 'SW'} onChange={() => setWallDir('SW')} />{' '}
+                SW
               </label>
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                fontSize: 12,
+                marginBottom: 8,
+              }}
+            >
               縦積み(プレビュー)
               {[1, 2, 3].map((n) => (
                 <label key={n}>
-                  <input type="radio" checked={wallStack === n} onChange={() => setWallStack(n)} /> {n}
+                  <input type="radio" checked={wallStack === n} onChange={() => setWallStack(n)} />{' '}
+                  {n}
                 </label>
               ))}
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                fontSize: 12,
+                marginBottom: 8,
+              }}
+            >
               辺ループ(プレビュー)
               {[1, 2, 3, 4].map((n) => (
                 <label key={n}>
-                  <input type="radio" checked={wallLoop === n} onChange={() => setWallLoop(n)} /> {n}
+                  <input type="radio" checked={wallLoop === n} onChange={() => setWallLoop(n)} />{' '}
+                  {n}
                 </label>
               ))}
             </div>
             <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 6 }}>
-              1セル基準。SE=基準/SW=鏡面。縦積みは段数の見え方を確認する<b>プレビュー専用</b>（実際の段数は layout で壁ごとに指定。カタログ出力には入りません）。
+              1セル基準。SE=基準/SW=鏡面。縦積みは段数の見え方を確認する<b>プレビュー専用</b>
+              （実際の段数は layout で壁ごとに指定。カタログ出力には入りません）。
             </div>
             {numField('幅', wallItem.w, 24, 200, (v) => updWall({ w: v }))}
             {numField('高さ', wallItem.h, 48, 320, (v) => updWall({ h: v }))}
@@ -599,133 +703,154 @@ export function WorkstationTuner() {
         )}
 
         {target === 'ws' && (
-        <>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-          {btn('NW（背中）', editing === 'NW', () => setEditing('NW'))}
-          {btn('SE（向かい/顔）', editing === 'SE', () => setEditing('SE'))}
-        </div>
-        <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, marginBottom: 6 }}>
-          <input type="checkbox" checked={pair} onChange={(e) => setPair(e.target.checked)} />
-          ペア表示（向かい側を隣に出して机の隙間・端を合わせる）
-        </label>
-        <div style={{ border: '1px solid #66c', borderRadius: 4, padding: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
-            <span>セル内位置（全体移動：机・椅子・人・PC 一括）</span>
-            <button type="button" style={{ fontSize: 11 }} onClick={() => updG({ x: 0, y: 0 })}>
-              0に戻す
-            </button>
-          </div>
-          {numField('全体X', gg.x, -120, 120, (v) => updG({ x: v }))}
-          {numField('全体Y', gg.y, -120, 120, (v) => updG({ y: v }))}
-        </div>
-
-        {cfg.layers.map((l, i) => (
-          <div
-            key={l.img}
-            style={{ marginBottom: 10, border: '1px solid #333', padding: 8, borderRadius: 4 }}
-          >
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input
-                type="text"
-                value={l.img}
-                onChange={(e) => updLayer(i, { img: e.target.value })}
-                style={{ flex: 1, width: 0 }}
-              />
-              <label style={{ fontSize: 11, display: 'flex', gap: 2, alignItems: 'center' }}>
-                <input
-                  type="checkbox"
-                  checked={!!l.flip}
-                  onChange={(e) => updLayer(i, { flip: e.target.checked })}
-                />
-                反転
-              </label>
+          <>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              {btn('NW（背中）', editing === 'NW', () => setEditing('NW'))}
+              {btn('SE（向かい/顔）', editing === 'SE', () => setEditing('SE'))}
             </div>
-            {numField('w', l.w, 16, 320, (v) => updLayer(i, { w: v }))}
-            {numField('x', l.ox, -160, 160, (v) => updLayer(i, { ox: v }))}
-            {numField('y', l.oy, -160, 160, (v) => updLayer(i, { oy: v }))}
-            {numField('z', l.z, 0, 10, (v) => updLayer(i, { z: v }))}
-            {l.clipTop !== undefined && (
-              <>
-                <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4, display: 'flex', gap: 8 }}>
-                  クリップ（隠す）
-                  <label>
+            <label
+              style={{
+                display: 'flex',
+                gap: 6,
+                alignItems: 'center',
+                fontSize: 12,
+                marginBottom: 6,
+              }}
+            >
+              <input type="checkbox" checked={pair} onChange={(e) => setPair(e.target.checked)} />
+              ペア表示（向かい側を隣に出して机の隙間・端を合わせる）
+            </label>
+            <div
+              style={{ border: '1px solid #66c', borderRadius: 4, padding: 8, marginBottom: 10 }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span>セル内位置（全体移動：机・椅子・人・PC 一括）</span>
+                <button type="button" style={{ fontSize: 11 }} onClick={() => updG({ x: 0, y: 0 })}>
+                  0に戻す
+                </button>
+              </div>
+              {numField('全体X', gg.x, -120, 120, (v) => updG({ x: v }))}
+              {numField('全体Y', gg.y, -120, 120, (v) => updG({ y: v }))}
+            </div>
+
+            {cfg.layers.map((l, i) => (
+              <div
+                key={l.img}
+                style={{ marginBottom: 10, border: '1px solid #333', padding: 8, borderRadius: 4 }}
+              >
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    value={l.img}
+                    onChange={(e) => updLayer(i, { img: e.target.value })}
+                    style={{ flex: 1, width: 0 }}
+                  />
+                  <label style={{ fontSize: 11, display: 'flex', gap: 2, alignItems: 'center' }}>
                     <input
-                      type="radio"
-                      checked={(l.clipSide ?? 'left') === 'left'}
-                      onChange={() => updLayer(i, { clipSide: 'left' })}
+                      type="checkbox"
+                      checked={!!l.flip}
+                      onChange={(e) => updLayer(i, { flip: e.target.checked })}
                     />
-                    左残
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      checked={l.clipSide === 'right'}
-                      onChange={() => updLayer(i, { clipSide: 'right' })}
-                    />
-                    右残
+                    反転
                   </label>
                 </div>
-                {numField('隠上', l.clipTop, 0, 100, (v) => updLayer(i, { clipTop: v }))}
-                {numField('隠下', l.clipBot ?? 100, 0, 100, (v) => updLayer(i, { clipBot: v }))}
-              </>
-            )}
-          </div>
-        ))}
+                {numField('w', l.w, 16, 320, (v) => updLayer(i, { w: v }))}
+                {numField('x', l.ox, -160, 160, (v) => updLayer(i, { ox: v }))}
+                {numField('y', l.oy, -160, 160, (v) => updLayer(i, { oy: v }))}
+                {numField('z', l.z, 0, 10, (v) => updLayer(i, { z: v }))}
+                {l.clipTop !== undefined && (
+                  <>
+                    <div
+                      style={{ fontSize: 11, opacity: 0.6, marginTop: 4, display: 'flex', gap: 8 }}
+                    >
+                      クリップ（隠す）
+                      <label>
+                        <input
+                          type="radio"
+                          checked={(l.clipSide ?? 'left') === 'left'}
+                          onChange={() => updLayer(i, { clipSide: 'left' })}
+                        />
+                        左残
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          checked={l.clipSide === 'right'}
+                          onChange={() => updLayer(i, { clipSide: 'right' })}
+                        />
+                        右残
+                      </label>
+                    </div>
+                    {numField('隠上', l.clipTop, 0, 100, (v) => updLayer(i, { clipTop: v }))}
+                    {numField('隠下', l.clipBot ?? 100, 0, 100, (v) => updLayer(i, { clipBot: v }))}
+                  </>
+                )}
+              </div>
+            ))}
 
-        <div style={{ marginBottom: 10, border: '1px solid #5a4', padding: 8, borderRadius: 4 }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <strong style={{ width: 40 }}>椅子</strong>
-            <input
-              type="text"
-              value={cfg.chair.img}
-              onChange={(e) => updChair({ img: e.target.value })}
-              style={{ flex: 1, width: 0 }}
-            />
-            <span style={{ fontSize: 11, display: 'flex', gap: 6, alignItems: 'center' }}>
-              背もたれ
-              <label>
+            <div
+              style={{ marginBottom: 10, border: '1px solid #5a4', padding: 8, borderRadius: 4 }}
+            >
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <strong style={{ width: 40 }}>椅子</strong>
                 <input
-                  type="radio"
-                  checked={(cfg.chair.backSide ?? 'right') === 'right'}
-                  onChange={() => updChair({ backSide: 'right' })}
+                  type="text"
+                  value={cfg.chair.img}
+                  onChange={(e) => updChair({ img: e.target.value })}
+                  style={{ flex: 1, width: 0 }}
                 />
-                右
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  checked={cfg.chair.backSide === 'left'}
-                  onChange={() => updChair({ backSide: 'left' })}
-                />
-                左
-              </label>
-            </span>
-          </div>
-          {numField('w', cfg.chair.w, 16, 320, (v) => updChair({ w: v }))}
-          {numField('x', cfg.chair.ox, -160, 160, (v) => updChair({ ox: v }))}
-          {numField('y', cfg.chair.oy, -160, 160, (v) => updChair({ oy: v }))}
-          {numField('z背', cfg.chair.zBack, 0, 10, (v) => updChair({ zBack: v }))}
-          {numField('z座', cfg.chair.zFront, 0, 10, (v) => updChair({ zFront: v }))}
-          {numField('分割上', cfg.chair.top, 0, 100, (v) => updChair({ top: v }))}
-          {numField('分割下', cfg.chair.bot, 0, 100, (v) => updChair({ bot: v }))}
-        </div>
+                <span style={{ fontSize: 11, display: 'flex', gap: 6, alignItems: 'center' }}>
+                  背もたれ
+                  <label>
+                    <input
+                      type="radio"
+                      checked={(cfg.chair.backSide ?? 'right') === 'right'}
+                      onChange={() => updChair({ backSide: 'right' })}
+                    />
+                    右
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      checked={cfg.chair.backSide === 'left'}
+                      onChange={() => updChair({ backSide: 'left' })}
+                    />
+                    左
+                  </label>
+                </span>
+              </div>
+              {numField('w', cfg.chair.w, 16, 320, (v) => updChair({ w: v }))}
+              {numField('x', cfg.chair.ox, -160, 160, (v) => updChair({ ox: v }))}
+              {numField('y', cfg.chair.oy, -160, 160, (v) => updChair({ oy: v }))}
+              {numField('z背', cfg.chair.zBack, 0, 10, (v) => updChair({ zBack: v }))}
+              {numField('z座', cfg.chair.zFront, 0, 10, (v) => updChair({ zFront: v }))}
+              {numField('分割上', cfg.chair.top, 0, 100, (v) => updChair({ top: v }))}
+              {numField('分割下', cfg.chair.bot, 0, 100, (v) => updChair({ bot: v }))}
+            </div>
 
-        <button type="button" onClick={reset}>
-          リセット
-        </button>
-        <pre
-          style={{
-            whiteSpace: 'pre-wrap',
-            fontSize: 11,
-            marginTop: 10,
-            background: '#000',
-            padding: 8,
-            borderRadius: 4,
-          }}
-        >
-          {output}
-        </pre>
-        </>
+            <button type="button" onClick={reset}>
+              リセット
+            </button>
+            <pre
+              style={{
+                whiteSpace: 'pre-wrap',
+                fontSize: 11,
+                marginTop: 10,
+                background: '#000',
+                padding: 8,
+                borderRadius: 4,
+              }}
+            >
+              {output}
+            </pre>
+          </>
         )}
       </div>
     </div>

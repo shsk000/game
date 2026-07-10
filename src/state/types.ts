@@ -82,8 +82,17 @@ export type Employee = {
   id: string;
   name: string;
   role: EmployeeRole;
-  /** 役職パラメータ：プログラマーはLoC/秒、デザイナーは品質基礎+、広報は売上%加算 */
+  /**
+   * v0.16：全役割共通の 0..1 正規化スケール（成長込みの現在値）。
+   * 実効果は使用側で ROLE_EFFECT 係数を掛ける（LoC/秒・品質+・売上%）。
+   */
   power: number;
+  /** v0.16：素質（採用時に決まる 0.2〜0.6）。power = basePower × レベル成長率 */
+  basePower: number;
+  /** v0.16：レベル（1〜GROWTH.levelCap）。リリース参加の exp で上がる */
+  level: number;
+  /** v0.16：現在の経験値（レベルアップで消費） */
+  exp: number;
   wage: number;
   specialties: EmployeeSpecialty[];
 };
@@ -239,8 +248,12 @@ export type CurrentProject = {
   maxCombo: number;
   /** 開発加速広告（生産速度2倍）の残り秒数 */
   devBoostRemainingSec: number;
-  /** バグイベント中のフレーズ（赤行）。クリアで品質ボーナス */
-  bugPhrase: string | null;
+  /**
+   * v0.17：残バグ数。開発中にミス打鍵/コード起因で増え、デバッグフェーズの修正で減る。
+   * リリース時に残っていると品質減点＋炎上リスク。0 なら「バグゼロ」ボーナス。
+   * （旧 bugPhrase（v0.14 の15%抽選）はこのシステムに一本化して廃止）
+   */
+  bugCount: number;
   startedAt: number;
   finishedAt: number | null;
   /** 旧フィールド（互換のため残置）：従業員モック広告 */

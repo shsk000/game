@@ -1,45 +1,46 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
-import {
-  type AxisDelta,
-  type DevEvent,
-  EVENT_CATEGORY_META,
-  PHASE_EVENTS,
-  formatAxisDelta,
-} from '../../data/events';
+import { pickBugFixPhrase } from '../../core/bugs';
+import { BUG_CONFIG, planWeeksAllowance } from '../../data/balance';
+import { buildLine } from '../../data/codeSnippets';
 import {
   ATTR_BASE_GAIN,
   CATEGORY_META,
   comboAttrMultiplier,
   getTicketAt,
-  pickPhrase,
   PHRASES_PER_TICKET,
-  speedRank,
+  pickPhrase,
   type SpeedRank,
+  speedRank,
   type TicketCategory,
 } from '../../data/devPhrases';
-import { buildLine } from '../../data/codeSnippets';
+import {
+  type AxisDelta,
+  type DevEvent,
+  EVENT_CATEGORY_META,
+  formatAxisDelta,
+  PHASE_EVENTS,
+} from '../../data/events';
+import { GENRE_BY_ID, type GenreId, genreBackgroundUrl, genreSpriteUrl } from '../../data/genres';
 import {
   GENRE_PLAN_CONTENT,
   getPlanTicketAt,
   IDEA_CARD_COLORS,
   PHRASES_PER_PLAN_TICKET,
-  pickPlanMemo,
-  pickPlanPhrase,
   PLAN_BASE_GAIN,
   PLAN_CATEGORY_META,
   PLAN_CATEGORY_ORDER,
   type PlanCategory,
+  pickPlanMemo,
+  pickPlanPhrase,
 } from '../../data/planTickets';
-import { GENRE_BY_ID, genreBackgroundUrl, genreSpriteUrl, type GenreId } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
 import { DEV_PHASE_META, DEV_PHASE_ORDER, type DevPhase, dateToWeekIndex } from '../../state/types';
-import { planWeeksAllowance } from '../../data/balance';
+import { sfx } from '../../utils/sfx';
 import { computeDevImpact, progressGain, toCharsPerMin } from './devImpact';
 import { useTyping } from './useTyping';
-import { sfx } from '../../utils/sfx';
 
 /** v0.15.2 フィーバー定数（叩き台 🔧）：正打 60 打で MAX、15 秒間 進捗×2 */
 const FEVER_MAX = 60;
@@ -58,7 +59,8 @@ type LastResult =
       speedPct: number;
       qualityDelta: number;
       bugPct: number;
-      exp: number;
+      /** この 1 文で実際に進んだ完成度（進捗ゲージに入る値そのもの） */
+      progress: number;
       ts: number;
     }
   | {
@@ -66,8 +68,9 @@ type LastResult =
       rank: SpeedRank;
       funGain: number;
       hypeGain: number;
-      driftPct: number;
-      exp: number;
+      /** 獲得量の実際の内訳（コンボ倍率・速度倍率） */
+      comboMult: number;
+      speedMult: number;
       ts: number;
     }
   | { kind: 'event'; event: DevEvent; ts: number };
@@ -93,6 +96,10 @@ export const DevelopScreen = () => {
   const addDevelopLoC = useGameStore((s) => s.addDevelopLoC);
   const addDevStat = useGameStore((s) => s.addDevStat);
   const advancePhase = useGameStore((s) => s.advancePhase);
+  const noteBugOnMiss = useGameStore((s) => s.noteBugOnMiss);
+  const noteBugOnKeystroke = useGameStore((s) => s.noteBugOnKeystroke);
+  const fixBug = useGameStore((s) => s.fixBug);
+  const bugCount = useGameStore((s) => s.current?.bugCount ?? 0);
   const applyAxisDelta = useGameStore((s) => s.applyAxisDelta);
   const reportCombo = useGameStore((s) => s.reportCombo);
   const reportWPM = useGameStore((s) => s.reportWPM);
@@ -113,9 +120,9 @@ export const DevelopScreen = () => {
   const ticketIndexRef = useRef(0);
   const [ticketPhraseCount, setTicketPhraseCount] = useState(0);
   const ticketPhraseCountRef = useRef(0);
-  const [completedTickets, setCompletedTickets] = useState<{ title: string; category: TicketCategory }[]>(
-    [],
-  );
+  const [completedTickets, setCompletedTickets] = useState<
+    { title: string; category: TicketCategory }[]
+  >([]);
   const currentTicket = useMemo(() => getTicketAt(genreId, ticketIndex), [genreId, ticketIndex]);
   const nextTicket = useMemo(() => getTicketAt(genreId, ticketIndex + 1), [genreId, ticketIndex]);
 
@@ -242,15 +249,14 @@ export const DevelopScreen = () => {
         const hypeGain = weights.hype * gain;
         applyAxisDelta({ funFactor: funGain, hype: hypeGain });
 
-        const impactNow = computeDevImpact({ wpm: wpmRef.current, accuracy: accuracyRef.current });
         sfx[rank === 'PERFECT' ? 'success' : 'complete']();
         setLastResult({
           kind: 'plan',
           rank,
           funGain,
           hypeGain,
-          driftPct: impactNow.bugPct,
-          exp: gain * 40,
+          comboMult,
+          speedMult,
           ts: Date.now(),
         });
 
@@ -294,6 +300,8 @@ export const DevelopScreen = () => {
         addDevStat(category, gain);
 
         const impactNow = computeDevImpact({ wpm: wpmRef.current, accuracy: accuracyRef.current });
+        const progressNow =
+          progressGain(wpmRef.current, false, comboRef.current) * (feverActiveRef.current ? 2 : 1);
         sfx[rank === 'PERFECT' ? 'success' : 'complete']();
         setLastResult({
           kind: 'ticket',
@@ -301,7 +309,7 @@ export const DevelopScreen = () => {
           speedPct: impactNow.speedPct,
           qualityDelta: impactNow.qualityDelta,
           bugPct: impactNow.bugPct,
-          exp: gain * 30,
+          progress: Math.round(progressNow * 10) / 10,
           ts: Date.now(),
         });
 
@@ -323,7 +331,9 @@ export const DevelopScreen = () => {
         }
 
         if (finishing) {
-          setCompletedTickets((l) => [...l, { title: currentTicket.flavor.title, category }].slice(-6));
+          setCompletedTickets((l) =>
+            [...l, { title: currentTicket.flavor.title, category }].slice(-6),
+          );
           ticketIndexRef.current += 1;
           setTicketIndex(ticketIndexRef.current);
           ticketPhraseCountRef.current = 0;
@@ -357,13 +367,27 @@ export const DevelopScreen = () => {
     onCorrect: (c) => {
       comboRef.current = c;
       sfx.key();
-      if (isDevelopment) addFever(1); // フィーバー（ノリ）は開発フェーズ専用
+      if (isDevelopment) {
+        addFever(1); // フィーバー（ノリ）は開発フェーズ専用
+        // v0.17.1：実装の打鍵のたびにバグ抽選（社員能力が高いほど発生率低下）
+        if (noteBugOnKeystroke()) {
+          sfx.alert();
+          setFlash((n) => n + 1);
+        }
+      }
       reportCombo(c);
     },
     onComboBreak: () => {
       comboRef.current = 0;
       sfx.miss();
       decayFever();
+    },
+    // v0.17.1：バグの種はコンボ切れではなく「毎ミス」で判定（連続ミスも漏らさない）
+    onFail: () => {
+      if (isDevelopment && noteBugOnMiss()) {
+        sfx.alert();
+        setFlash((n) => n + 1);
+      }
     },
     onWpm: (w) => {
       wpmRef.current = w;
@@ -396,7 +420,10 @@ export const DevelopScreen = () => {
   const charsPerMin = toCharsPerMin(wpm);
   const accuracyPct = Math.round(accuracy * 1000) / 10;
   const progressPct = Math.max(0, Math.min(100, (current.doneLoC / workTarget) * 100));
-  const litPhaseDots = Math.max(1, Math.min(TOTAL_PHASE_DOTS, Math.ceil((progressPct / 100) * TOTAL_PHASE_DOTS)));
+  const litPhaseDots = Math.max(
+    1,
+    Math.min(TOTAL_PHASE_DOTS, Math.ceil((progressPct / 100) * TOTAL_PHASE_DOTS)),
+  );
 
   // 企画の進捗（企画書完成度）：完了チケット＋現在チケット内のフレーズ消化
   const planProgressPct = Math.min(
@@ -409,10 +436,7 @@ export const DevelopScreen = () => {
   );
 
   // 予定週 = 開発ぶん（neededWeeks）＋企画・仕上げの猶予（v0.15.3）
-  const plannedWeeks = Math.max(
-    1,
-    scaleDef.neededWeeks + planWeeksAllowance(scaleDef.neededWeeks),
-  );
+  const plannedWeeks = Math.max(1, scaleDef.neededWeeks + planWeeksAllowance(scaleDef.neededWeeks));
   const elapsedWeeks = current.startDate
     ? Math.max(0, dateToWeekIndex(currentDate) - dateToWeekIndex(current.startDate))
     : 0;
@@ -450,7 +474,9 @@ export const DevelopScreen = () => {
         }}
       >
         {/* 左：フェーズ進行 ＋ チーム ＋ 開発全体の進捗 */}
-        <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, minWidth: 0 }}>
+        <aside
+          style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, minWidth: 0 }}
+        >
           <PhaseProgressList phase={phase} />
           <TeamStatus
             employeeIds={current.assignedEmployeeIds}
@@ -499,8 +525,8 @@ export const DevelopScreen = () => {
               ticketProgressPct={Math.min(
                 100,
                 ((ticketPhraseCount +
-                  (view.completed.length /
-                    Math.max(1, view.completed.length + view.remained.length))) /
+                  view.completed.length /
+                    Math.max(1, view.completed.length + view.remained.length)) /
                   PHRASES_PER_TICKET) *
                   100,
               )}
@@ -508,6 +534,7 @@ export const DevelopScreen = () => {
               view={view}
               failCount={failCount}
               charsPerMin={charsPerMin}
+              bugCount={bugCount}
               accuracyPct={accuracyPct}
               programLog={programLog}
               liveCodeLine={liveCodeLine}
@@ -526,8 +553,8 @@ export const DevelopScreen = () => {
               ticketProgressPct={Math.min(
                 100,
                 ((planPhraseCount +
-                  (view.completed.length /
-                    Math.max(1, view.completed.length + view.remained.length))) /
+                  view.completed.length /
+                    Math.max(1, view.completed.length + view.remained.length)) /
                   PHRASES_PER_PLAN_TICKET) *
                   100,
               )}
@@ -535,16 +562,20 @@ export const DevelopScreen = () => {
               view={view}
               failCount={failCount}
               charsPerMin={charsPerMin}
+              bugCount={bugCount}
               accuracyPct={accuracyPct}
               memos={planMemos}
               cards={planCards}
               lastResult={lastResult}
             />
+          ) : phase === 'debugging' ? (
+            <DebugFlow key={phase} bugCount={bugCount} onFix={fixBug} onAllDone={advancePhase} />
           ) : (
             <MissionFlow
               key={phase}
               phase={phase}
               label={phaseMeta.label}
+              bugCount={bugCount}
               onAllDone={advancePhase}
               applyDelta={applyAxisDelta}
             />
@@ -552,7 +583,9 @@ export const DevelopScreen = () => {
         </main>
 
         {/* 右：企画中は「現在の企画書」、開発中は「現在のプロジェクト＋開発内容」 */}
-        <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, minWidth: 0 }}>
+        <aside
+          style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, minWidth: 0 }}
+        >
           {isPlanning ? (
             <PlanDocPanel
               title={current.title}
@@ -577,7 +610,9 @@ export const DevelopScreen = () => {
               </div>
 
               <div style={{ ...devBox(), gap: 4, flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>現在の開発内容</span>
+                <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>
+                  現在の開発内容
+                </span>
                 {completedTickets.length === 0 ? (
                   <span style={{ fontSize: 11, color: '#5a6e3a' }}>まだ着手した作業がない…</span>
                 ) : (
@@ -694,7 +729,7 @@ const TeamStatus = ({
               <span style={{ marginLeft: 'auto', fontSize: 12 }}>{excited ? '😄' : '🙂'}</span>
             </div>
             <SegGauge
-              pct={Math.min(100, (e.power / 8) * 100)}
+              pct={Math.min(100, (e.power / 1.5) * 100)}
               color={roleColor[e.role] ?? DEV.green}
               track="#0c1207"
               height={5}
@@ -716,6 +751,7 @@ const DevelopCenter = ({
   view,
   failCount,
   charsPerMin,
+  bugCount,
   accuracyPct,
   programLog,
   liveCodeLine,
@@ -735,6 +771,7 @@ const DevelopCenter = ({
   view: { hiragana: string; completed: string; remained: string };
   failCount: number;
   charsPerMin: number;
+  bugCount: number;
   accuracyPct: number;
   programLog: string[];
   liveCodeLine: string;
@@ -778,13 +815,18 @@ const DevelopCenter = ({
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {feverActive && (
-            <span className="dev-fever-text" style={{ fontSize: 12, fontWeight: 700, color: '#ff5a3c' }}>
+            <span
+              className="dev-fever-text"
+              style={{ fontSize: 12, fontWeight: 700, color: '#ff5a3c' }}
+            >
               🔥FEVER 進捗×2
             </span>
           )}
           <span style={{ fontSize: 11, color: DEV.sub }}>
             PHASE {litPhaseDots} / 6
-            <span style={{ display: 'inline-flex', gap: 3, marginLeft: 6, verticalAlign: 'middle' }}>
+            <span
+              style={{ display: 'inline-flex', gap: 3, marginLeft: 6, verticalAlign: 'middle' }}
+            >
               {Array.from({ length: 6 }, (_, i) => (
                 <span
                   key={i}
@@ -862,8 +904,18 @@ const DevelopCenter = ({
             </span>
           </div>
           {!activeEvent && (
-            <div style={{ width: 84, display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-              <span style={{ fontSize: 10, color: DEV.sub, whiteSpace: 'nowrap' }}>チケット進捗</span>
+            <div
+              style={{
+                width: 84,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+                alignItems: 'flex-end',
+              }}
+            >
+              <span style={{ fontSize: 10, color: DEV.sub, whiteSpace: 'nowrap' }}>
+                チケット進捗
+              </span>
               <span
                 style={{
                   fontSize: 22,
@@ -910,16 +962,44 @@ const DevelopCenter = ({
           <div style={{ width: 96, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ ...devBox(), gap: 1, padding: 5 }}>
               <span style={{ fontSize: 9, color: DEV.sub }}>⏩入力速度</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: DEV.cream, fontVariantNumeric: 'tabular-nums' }}>
+              <span
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: DEV.cream,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
                 {charsPerMin}
               </span>
               <span style={{ fontSize: 8, color: DEV.sub }}>文字/分</span>
             </div>
             <div style={{ ...devBox(), gap: 1, padding: 5 }}>
               <span style={{ fontSize: 9, color: DEV.sub }}>🎯正確さ</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: DEV.cream, fontVariantNumeric: 'tabular-nums' }}>
+              <span
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: DEV.cream,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
                 {accuracyPct}%
               </span>
+            </div>
+            <div key={`bug-${bugCount}`} style={{ ...devBox(), gap: 1, padding: 5 }}>
+              <span style={{ fontSize: 9, color: DEV.sub }}>🐛バグ</span>
+              <span
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: bugCount > 0 ? DEV.orange : DEV.greenBright,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                ×{bugCount}
+              </span>
+              <span style={{ fontSize: 8, color: DEV.sub }}>デバッグで返済</span>
             </div>
           </div>
         </div>
@@ -996,7 +1076,8 @@ const WorkInProgressPanel = (props: {
         genre={props.genre}
       />
     );
-  if (category === 'sound') return <SoundMeterPanel beatKey={props.soundBeatKey} title={props.ticketTitle} />;
+  if (category === 'sound')
+    return <SoundMeterPanel beatKey={props.soundBeatKey} title={props.ticketTitle} />;
   return <DesignMemoPanel notes={props.designNotes} />;
 };
 
@@ -1004,8 +1085,25 @@ const WIP_HEIGHT = 74;
 
 /** 疑似シンタックスハイライト：IDE風に予約語/関数名/クラス名/文字列/数値/記号を色分け */
 const CODE_KEYWORDS = new Set([
-  'function', 'const', 'let', 'var', 'return', 'async', 'await', 'class',
-  'extends', 'interface', 'private', 'public', 'for', 'of', 'new', 'export', 'if', 'else', 'void',
+  'function',
+  'const',
+  'let',
+  'var',
+  'return',
+  'async',
+  'await',
+  'class',
+  'extends',
+  'interface',
+  'private',
+  'public',
+  'for',
+  'of',
+  'new',
+  'export',
+  'if',
+  'else',
+  'void',
 ]);
 
 const CODE_COLORS: Record<string, string> = {
@@ -1170,23 +1268,24 @@ const GraphicsCanvasPanel = ({
           />
         )}
         {/* ②装飾のキラキラ（チケット内2問目を打ち終えると登場） */}
-        {showSparkles && sparkleSpots.slice(0, litFrames).map((pos, i) => (
-          <img
-            key={`${frame}-${i}`}
-            src="/sprites/effects/sparkle.png"
-            alt=""
-            className="dev-sparkle-twinkle"
-            style={{
-              position: 'absolute',
-              width: 12,
-              height: 12,
-              imageRendering: 'pixelated',
-              top: pos.top,
-              left: pos.left,
-              animationDelay: pos.delay,
-            }}
-          />
-        ))}
+        {showSparkles &&
+          sparkleSpots.slice(0, litFrames).map((pos, i) => (
+            <img
+              key={`${frame}-${i}`}
+              src="/sprites/effects/sparkle.png"
+              alt=""
+              className="dev-sparkle-twinkle"
+              style={{
+                position: 'absolute',
+                width: 12,
+                height: 12,
+                imageRendering: 'pixelated',
+                top: pos.top,
+                left: pos.left,
+                animationDelay: pos.delay,
+              }}
+            />
+          ))}
         {genre ? (
           <span className="dev-sprite-idle" style={{ position: 'relative' }}>
             <img
@@ -1301,7 +1400,15 @@ const RANK_COLOR: Record<SpeedRank, string> = {
 const ResultCard = ({ result }: { result: LastResult | null }) => {
   if (!result) {
     return (
-      <div style={{ ...devBox(), gap: 4, minHeight: 58, alignItems: 'center', justifyContent: 'center' }}>
+      <div
+        style={{
+          ...devBox(),
+          gap: 4,
+          minHeight: 58,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         <span style={{ fontSize: 11, color: '#3f5226' }}>まだ入力していない…</span>
       </div>
     );
@@ -1309,11 +1416,17 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
   if (result.kind === 'event') {
     const color = '#5fe08a';
     return (
-      <div key={result.ts} className="dev-result-pop" style={{ ...devBox(), gap: 4, borderColor: color }}>
+      <div
+        key={result.ts}
+        className="dev-result-pop"
+        style={{ ...devBox(), gap: 4, borderColor: color }}
+      >
         <span style={{ fontSize: 13, fontWeight: 700, color }}>
           {EVENT_CATEGORY_META[result.event.category].icon} {result.event.name} 解決！
         </span>
-        <span style={{ fontSize: 11, color: DEV.cream }}>{formatAxisDelta(result.event.success)}</span>
+        <span style={{ fontSize: 11, color: DEV.cream }}>
+          {formatAxisDelta(result.event.success)}
+        </span>
       </div>
     );
   }
@@ -1326,13 +1439,8 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
           <ResultChip icon="💡" label="面白さ" value={`+${result.funGain}`} color="#ffd166" />
           <ResultChip icon="⭐" label="期待度" value={`+${result.hypeGain}`} color="#7adfff" />
-          <ResultChip
-            icon="🌀"
-            label="迷走リスク"
-            value={`${result.driftPct}%`}
-            color={result.driftPct <= 0 ? '#5fe08a' : '#ff6b6b'}
-          />
-          <ResultChip icon="✨" label="獲得EXP" value={`+${result.exp}`} color="#d8a5ff" />
+          <ResultChip icon="🔥" label="コンボ倍率" value={`×${result.comboMult}`} color="#ff9d4d" />
+          <ResultChip icon="⚡" label="速度倍率" value={`×${result.speedMult}`} color="#d8a5ff" />
         </div>
       </div>
     );
@@ -1356,7 +1464,7 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
           value={`${result.bugPct}%`}
           color={result.bugPct <= 0 ? '#5fe08a' : '#ff6b6b'}
         />
-        <ResultChip icon="✨" label="獲得EXP" value={`+${result.exp}`} color="#d8a5ff" />
+        <ResultChip icon="🏗" label="進捗" value={`+${result.progress}`} color="#d8a5ff" />
       </div>
     </div>
   );
@@ -1402,6 +1510,7 @@ const PlanningCenter = ({
   view,
   failCount,
   charsPerMin,
+  bugCount,
   accuracyPct,
   memos,
   cards,
@@ -1414,6 +1523,7 @@ const PlanningCenter = ({
   view: { hiragana: string; completed: string; remained: string };
   failCount: number;
   charsPerMin: number;
+  bugCount: number;
   accuracyPct: number;
   memos: string[];
   cards: string[];
@@ -1445,7 +1555,9 @@ const PlanningCenter = ({
           borderBottom: `2px solid ${DEV.panelBorder}`,
         }}
       >
-        <span style={{ color: PLAN.accent, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}>
+        <span
+          style={{ color: PLAN.accent, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}
+        >
           💡 企画フェーズ
         </span>
         <span style={{ fontSize: 11, color: DEV.sub }}>
@@ -1526,8 +1638,18 @@ const PlanningCenter = ({
             </span>
           </div>
           {!activeEvent && (
-            <div style={{ width: 84, display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-              <span style={{ fontSize: 10, color: DEV.sub, whiteSpace: 'nowrap' }}>チケット進捗</span>
+            <div
+              style={{
+                width: 84,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+                alignItems: 'flex-end',
+              }}
+            >
+              <span style={{ fontSize: 10, color: DEV.sub, whiteSpace: 'nowrap' }}>
+                チケット進捗
+              </span>
               <span
                 style={{
                   fontSize: 22,
@@ -1573,16 +1695,44 @@ const PlanningCenter = ({
           <div style={{ width: 96, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ ...devBox(), gap: 1, padding: 5 }}>
               <span style={{ fontSize: 9, color: DEV.sub }}>⏩入力速度</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: DEV.cream, fontVariantNumeric: 'tabular-nums' }}>
+              <span
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: DEV.cream,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
                 {charsPerMin}
               </span>
               <span style={{ fontSize: 8, color: DEV.sub }}>文字/分</span>
             </div>
             <div style={{ ...devBox(), gap: 1, padding: 5 }}>
               <span style={{ fontSize: 9, color: DEV.sub }}>🎯正確さ</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: DEV.cream, fontVariantNumeric: 'tabular-nums' }}>
+              <span
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: DEV.cream,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
                 {accuracyPct}%
               </span>
+            </div>
+            <div key={`bug-${bugCount}`} style={{ ...devBox(), gap: 1, padding: 5 }}>
+              <span style={{ fontSize: 9, color: DEV.sub }}>🐛バグ</span>
+              <span
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: bugCount > 0 ? DEV.orange : DEV.greenBright,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                ×{bugCount}
+              </span>
+              <span style={{ fontSize: 8, color: DEV.sub }}>デバッグで返済</span>
             </div>
           </div>
         </div>
@@ -1823,14 +1973,113 @@ const buildMissionQueue = (phase: DevPhase): DevEvent[] =>
  * 中央：開発以外のフェーズ。
  * イベントが発生していれば入力ミッションで対応、無ければ「✓ 完了」演出で自動進行。
  */
+/**
+ * v0.17 デバッグフェーズ：たまったバグを修正フレーズで返済する（spec v17 §4-3）。
+ * バグが多いほど打つ量が線形に増える。全部潰すと「バグゼロ」ボーナス（noBugs +5）、
+ * [このまま発売] で残バグ 1 匹につき 品質−2・炎上リスク+2 を背負って先へ進める。
+ */
+const DebugFlow = ({
+  bugCount,
+  onFix,
+  onAllDone,
+}: {
+  bugCount: number;
+  onFix: () => void;
+  onAllDone: () => void;
+}) => {
+  // バグ 1 匹 = PHRASES_PER_BUG 文。打ち切るごとに progress、満了で駆除
+  const [phraseInBug, setPhraseInBug] = useState(0);
+  const [fixedCount, setFixedCount] = useState(0);
+  const [phrase, setPhrase] = useState(() => pickBugFixPhrase());
+
+  useEffect(() => {
+    if (bugCount > 0) return;
+    sfx.phase();
+    const t = window.setTimeout(onAllDone, 1200);
+    return () => window.clearTimeout(t);
+  }, [bugCount]);
+
+  if (bugCount <= 0) {
+    return (
+      <PhaseShell label="デバッグ">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+          <span style={{ fontSize: 26, fontWeight: 700, color: DEV.greenBright }}>
+            ✓ バグゼロ！
+          </span>
+          <span style={{ fontSize: 13, color: DEV.cream }}>
+            {fixedCount > 0
+              ? `${fixedCount} 匹すべて駆除した。品質ボーナスを獲得（バグゼロ +5）`
+              : 'もともとバグが無かった。品質ボーナスを獲得（バグゼロ +5）'}
+          </span>
+        </div>
+      </PhaseShell>
+    );
+  }
+
+  return (
+    <PhaseShell label="デバッグ">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ fontSize: 12, color: DEV.sub }}>
+          残りバグ <span style={{ color: DEV.orange, fontWeight: 700 }}>🐛×{bugCount}</span>
+          <span style={{ marginLeft: 8 }}>
+            （修正 {phraseInBug}/{BUG_CONFIG.phrasesPerBug} 文）
+          </span>
+        </div>
+        <div style={{ fontSize: 20, color: DEV.cream, fontWeight: 700 }}>
+          🐛 バグを修正する（{fixedCount + 1} 匹目）
+        </div>
+
+        <MissionTyping
+          key={`${fixedCount}-${phraseInBug}`}
+          phrase={phrase}
+          onComplete={() => {
+            const next = phraseInBug + 1;
+            if (next >= BUG_CONFIG.phrasesPerBug) {
+              onFix();
+              sfx.success();
+              setFixedCount((n) => n + 1);
+              setPhraseInBug(0);
+            } else {
+              setPhraseInBug(next);
+            }
+            setPhrase(pickBugFixPhrase());
+          }}
+        />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            onClick={onAllDone}
+            style={{
+              fontFamily: 'inherit',
+              fontSize: 11,
+              padding: '4px 10px',
+              background: '#3a2a12',
+              color: DEV.orange,
+              border: `1px solid ${DEV.orange}`,
+              cursor: 'pointer',
+            }}
+          >
+            ⚠ このまま発売する（残バグ 1 匹につき 品質−{BUG_CONFIG.qualityPenaltyPerBug}・炎上+
+            {BUG_CONFIG.reputationRiskPerBug}）
+          </button>
+        </div>
+      </div>
+    </PhaseShell>
+  );
+};
+
 const MissionFlow = ({
   phase,
   label,
+  bugCount,
   onAllDone,
   applyDelta,
 }: {
   phase: DevPhase;
   label: string;
+  /** v0.17：テストフェーズ完了時に「発覚」させる残バグ数 */
+  bugCount: number;
   onAllDone: () => void;
   applyDelta: (delta: AxisDelta) => void;
 }) => {
@@ -1860,6 +2109,19 @@ const MissionFlow = ({
           <span style={{ fontSize: 26, fontWeight: 700, color: DEV.greenBright }}>
             ✓ {label}フェーズ 完了
           </span>
+          {phase === 'testing' && (
+            <span
+              style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: bugCount > 0 ? DEV.orange : DEV.greenBright,
+              }}
+            >
+              {bugCount > 0
+                ? `🐛 バグが ${bugCount} 匹みつかった！ デバッグで直そう`
+                : '🎉 バグは見つからなかった！'}
+            </span>
+          )}
           {log.length > 0 ? (
             <div style={{ ...devBox(), gap: 2, alignSelf: 'stretch' }}>
               {log.map((line, idx) => (

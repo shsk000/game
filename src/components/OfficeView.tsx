@@ -1,6 +1,12 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import type { Scale } from '../data/scales';
-import { cellPx, footprintCenterOffset, makeGeometry, ROOM, SPRITE_BASE } from '../lib/officeGeometry';
+import {
+  cellPx,
+  footprintCenterOffset,
+  makeGeometry,
+  ROOM,
+  SPRITE_BASE,
+} from '../lib/officeGeometry';
 import {
   DEFAULT_DECOR_CATALOG,
   DEFAULT_DECOR_PLACEMENTS,
@@ -64,7 +70,10 @@ export const OfficeView = ({ scale, employeeCount }: Props) => {
   const { w, h } = geo;
   // 配置（配信される確定レイアウト。officeLayout.ts のコード定数）
   // 在籍社員数だけ席を埋める（最大 = 席数）。employeeCount 未指定なら全席。
-  const seatCount = employeeCount == null ? DEFAULT_WORKSTATIONS.length : Math.min(employeeCount, DEFAULT_WORKSTATIONS.length);
+  const seatCount =
+    employeeCount == null
+      ? DEFAULT_WORKSTATIONS.length
+      : Math.min(employeeCount, DEFAULT_WORKSTATIONS.length);
   const workstations = DEFAULT_WORKSTATIONS.slice(0, seatCount);
   const door = DEFAULT_DOOR;
   const decorCatalog = DEFAULT_DECOR_CATALOG;
@@ -99,7 +108,13 @@ export const OfficeView = ({ scale, employeeCount }: Props) => {
             alt=""
             width={cellPx}
             height={cellPx}
-            style={{ position: 'absolute', left, top, imageRendering: 'pixelated', display: 'block' }}
+            style={{
+              position: 'absolute',
+              left,
+              top,
+              imageRendering: 'pixelated',
+              display: 'block',
+            }}
           />,
         );
       }
@@ -161,7 +176,13 @@ export const OfficeView = ({ scale, employeeCount }: Props) => {
       {workstations.map((c) => {
         const { x, y } = geo.cellAnchor(c.i, c.j);
         return (
-          <Workstation key={`ws-${c.i}-${c.j}`} x={x} y={y} baseZ={geo.baseZ(c.i, c.j)} dir={c.dir} />
+          <Workstation
+            key={`ws-${c.i}-${c.j}`}
+            x={x}
+            y={y}
+            baseZ={geo.baseZ(c.i, c.j)}
+            dir={c.dir}
+          />
         );
       })}
       {(() => {

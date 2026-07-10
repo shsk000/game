@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { INITIAL_FUNDS } from '../data/balance';
+import { computeMonthlyWage, INITIAL_FUNDS } from '../data/balance';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import * as storage from './storage';
 
@@ -37,7 +37,7 @@ describe('defaults', () => {
     expect(d.unlockedGenres).toEqual(['puzzle', 'adventure', 'simulation']);
     expect(d.unlockedThemes).toEqual(['sushi', 'onsen', 'farming']);
     expect(d.unlockedCategories).toEqual([...INITIAL_CATEGORY_IDS]);
-    expect(d.version).toBe(5);
+    expect(d.version).toBe(6);
   });
 });
 
@@ -99,6 +99,18 @@ describe('save / load（v5 往復）', () => {
     expect(loaded?.unlockedGenres).toContain('puzzle');
   });
 
+  it('ステージ解放したジャンル/テーマはリロードで巻き戻らない（v0.17.1 回帰）', () => {
+    const d = storage.defaults();
+    storage.save({
+      ...d,
+      unlockedGenres: [...d.unlockedGenres, 'action'],
+      unlockedThemes: [...d.unlockedThemes, 'ninja'],
+    });
+    const loaded = storage.load();
+    expect(loaded?.unlockedGenres).toContain('action');
+    expect(loaded?.unlockedThemes).toContain('ninja');
+  });
+
   it('reset で消える', () => {
     storage.save(storage.defaults());
     storage.reset();
@@ -106,7 +118,56 @@ describe('save / load（v5 往復）', () => {
   });
 });
 
-describe('v4 → v5 マイグレーション', () => {
+describe('v5 → v6 マイグレーション（v0.16 社員成長・power 正規化）', () => {
+  it('旧 power が役割別スケールから 0..1 に正規化され、成長フィールドが付く', () => {
+    mem.setItem(
+      'typing-factory:v5',
+      JSON.stringify({
+        ...storage.defaults(),
+        version: 5,
+        employees: [
+          { id: 'p', name: 'プログラマ', role: 'programmer', power: 1.2, wage: 0, specialties: [] },
+          { id: 'd', name: 'デザイナ', role: 'designer', power: 5, wage: 0, specialties: [] },
+          { id: 'r', name: '広報', role: 'pr', power: 20, wage: 0, specialties: [] },
+        ],
+      }),
+    );
+    const loaded = storage.load();
+    expect(loaded).not.toBeNull();
+    const [p, d, r] = loaded?.employees ?? [];
+    expect(p.power).toBe(1); // 1.2 / 1.2
+    expect(d.power).toBe(0.5); // 5 / 10
+    expect(r.power).toBe(1); // 20 / 20
+    for (const e of [p, d, r]) {
+      expect(e.level).toBe(1);
+      expect(e.exp).toBe(0);
+      expect(e.basePower).toBe(e.power);
+      expect(e.wage).toBe(Math.round(computeMonthlyWage(e.power)));
+    }
+    // v6 として保存し直され、旧キーは消える
+    expect(mem.getItem('typing-factory:v5')).toBeNull();
+    expect(mem.getItem('typing-factory:v6')).not.toBeNull();
+    expect(loaded?.version).toBe(6);
+  });
+
+  it('資金・ライブラリ等の進行は保持される', () => {
+    mem.setItem(
+      'typing-factory:v5',
+      JSON.stringify({
+        ...storage.defaults(),
+        version: 5,
+        funds: 123_456,
+        fans: 42,
+        employees: [],
+      }),
+    );
+    const loaded = storage.load();
+    expect(loaded?.funds).toBe(123_456);
+    expect(loaded?.fans).toBe(42);
+  });
+});
+
+describe('v4 → v6 マイグレーション', () => {
   it('金額が ×10,000 され、v4 キーは削除される', () => {
     mem.setItem(
       'typing-factory:v4',
@@ -126,13 +187,13 @@ describe('v4 → v5 マイグレーション', () => {
     expect(loaded?.lifetimeRevenue).toBe(10_000_000);
     expect(loaded?.records.bestRevenue).toBe(2_000_000);
     expect(loaded?.fans).toBe(10);
-    // v5 として保存し直され、旧キーは消える
+    // v6 として保存し直され、旧キーは消える
     expect(mem.getItem('typing-factory:v4')).toBeNull();
-    expect(mem.getItem('typing-factory:v5')).not.toBeNull();
+    expect(mem.getItem('typing-factory:v6')).not.toBeNull();
   });
 
   it('壊れた JSON は null（クラッシュしない）', () => {
-    mem.setItem('typing-factory:v5', '{broken json');
+    mem.setItem('typing-factory:v6', '{broken json');
     expect(storage.load()).toBeNull();
   });
 });

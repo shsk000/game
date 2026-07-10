@@ -20,7 +20,7 @@ const devProject: CurrentProject = {
   doneLoC: 0,
   maxCombo: 0,
   devBoostRemainingSec: 0,
-  bugPhrase: null,
+  bugCount: 0,
   startedAt: 0,
   finishedAt: null,
   adBoostActive: false,
@@ -65,5 +65,21 @@ describe('DevelopScreen（ユースケース：正しく打鍵すると開発が
     const cur = useGameStore.getState().current;
     expect(cur?.maxCombo).toBeGreaterThanOrEqual(5);
     expect(cur?.perf.accuracy).toBe(1);
+  });
+
+  it('間違ったキーを打つと、その数だけバグが積まれる（v0.17.1 ミス＝バグ確定）', async () => {
+    render(<DevelopScreen />);
+    await vi.waitFor(() => expect(nextKey()).toBeTruthy());
+
+    // 提示キーと必ず違うキーを 5 回打つ（実 CDP 入力＝本物の入力経路）
+    for (let i = 0; i < 5; i++) {
+      const k = nextKey();
+      if (!k) break;
+      await userEvent.keyboard(k === 'q' ? 'w' : 'q');
+    }
+
+    const cur = useGameStore.getState().current;
+    expect(cur?.bugCount).toBe(5);
+    expect(cur?.perf.accuracy).toBeLessThan(1);
   });
 });

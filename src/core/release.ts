@@ -1,3 +1,4 @@
+import { AXIS_QUALITY_BONUS_CAP, STAT_QUALITY_BONUS_CAP } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { sumPrBonus } from '../data/employees';
 import type { GenreId } from '../data/genres';
@@ -25,6 +26,8 @@ import {
 } from '../utils/metascore';
 import { decayRateFor, INITIAL_SHARE } from '../utils/sales';
 import type { Records } from '../utils/storage';
+import { remainingBugPenalty } from './bugs';
+import { applyReleaseGrowth, type LevelUp } from './growth';
 import type { Deps } from './ports';
 import {
   computeNewlyUnlockedCategories,
@@ -75,6 +78,10 @@ export type ReleasePatch = {
   unlockedGenres: GenreId[];
   unlockedThemes: ThemeId[];
   unlockedCategories: CategoryId[];
+  /** v0.16：成長反映後の社員（参加者は exp/level/power/wage が更新される） */
+  employees: Employee[];
+  /** v0.16：このリリースで発生したレベルアップ（開封演出用） */
+  lastLevelUps: LevelUp[];
   lastReleased: Work;
   current: null;
   screen: 'release';
@@ -104,9 +111,11 @@ export const computeRelease = (
   // 3) タイピング演技スコア（0..100）— spec §2-2
   // 広告ボーナス（既存仕様）はパフォーマンス側に +5 ずつ寄せる
   const adPerfBoost = (opts?.marketingAd ? 5 : 0) + (opts?.debugAd ? 5 : 0);
+  // v0.17：バグゼロ（開発〜デバッグで残バグ 0）でタイピング演技 +5（既存 noBugs 判定に接続）
+  const remainingBugs = cur.bugCount ?? 0;
   const performance = Math.min(
     100,
-    computePerformanceScore({ ...cur.perf, noBugs: !cur.bugPhrase }) + adPerfBoost,
+    computePerformanceScore({ ...cur.perf, noBugs: remainingBugs === 0 }) + adPerfBoost,
   );
 
   // 4) computeQualityV10 で合成（運の基底 50 ± 揺らぎ）。神ゲーガチャは v0.10 で廃止。
@@ -123,11 +132,21 @@ export const computeRelease = (
   const axes = cur.axes ?? ZERO_AXES;
   // v0.15：ビルドアップ・タイピングの開発パラメータ（文を打って積んだ 4 属性）も品質へ合流。
   // 「打った文がどこに効いたか」の因果をリリース結果まで一本で繋ぐ（重みは叩き台 🔧）
+  // v0.16：上限 STAT_QUALITY_BONUS_CAP を導入（旧実装は青天井で序盤の難易度崩壊要因）
   const stats = cur.devStats ?? { program: 0, graphics: 0, sound: 0, design: 0 };
-  const statQualityBonus =
-    stats.program * 0.12 + stats.graphics * 0.08 + stats.sound * 0.08 + stats.design * 0.05;
-  const axisQualityBonus =
-    (axes.funFactor + axes.usability + axes.balance) * 0.3 - axes.bugRate * 0.2 + statQualityBonus;
+  const statQualityBonus = Math.min(
+    STAT_QUALITY_BONUS_CAP,
+    stats.program * 0.12 + stats.graphics * 0.08 + stats.sound * 0.08 + stats.design * 0.05,
+  );
+  // v0.17：残バグを抱えたまま発売した場合のペナルティ（品質減点＋炎上リスク）
+  const bugPenalty = remainingBugPenalty(remainingBugs);
+  // v0.17.1：正のボーナス合計は AXIS_QUALITY_BONUS_CAP で頭打ち
+  // （企画・イベント・ビルドアップはタイピングの腕で増えるため、0.15 ウェイトの迂回路にしない）
+  const positiveAxisBonus = Math.min(
+    AXIS_QUALITY_BONUS_CAP,
+    (axes.funFactor + axes.usability + axes.balance) * 0.3 + statQualityBonus,
+  );
+  const axisQualityBonus = positiveAxisBonus - axes.bugRate * 0.2 - bugPenalty.qualityPenalty;
   const quality = Math.max(0, Math.min(100, Math.round(quality0 + axisQualityBonus)));
 
   const trend = ctx.trend;
@@ -147,16 +166,17 @@ export const computeRelease = (
     pioneerBonus,
   );
   // v0.14：市場系新軸（売上予測・話題性 − 炎上リスク）で売上を補正（0.5〜2.0 倍にクランプ）。
+  const effectiveReputationRisk = axes.reputationRisk + bugPenalty.reputationRisk;
   const axisSalesMul = Math.max(
     0.5,
-    Math.min(2, 1 + (axes.salesForecast + axes.buzz) / 100 - axes.reputationRisk / 100),
+    Math.min(2, 1 + (axes.salesForecast + axes.buzz) / 100 - effectiveReputationRisk / 100),
   );
   const totalRevenue = Math.round(baseTotalRevenue * axisSalesMul);
   const initialRevenue = Math.round(totalRevenue * INITIAL_SHARE);
   const salesPool = totalRevenue - initialRevenue;
   const decayPerSec = decayRateFor(meta.metascore);
   // v0.14：期待/話題/信頼でファン上乗せ、炎上リスクで減（spec §5-6）。
-  const axisFans = Math.round(axes.hype + axes.buzz * 0.5 + axes.trust - axes.reputationRisk);
+  const axisFans = Math.round(axes.hype + axes.buzz * 0.5 + axes.trust - effectiveReputationRisk);
   const gainedFans = Math.max(0, fanDelta(meta.metascore, prBonus) + axisFans);
   const newFans = Math.max(0, ctx.fans + gainedFans);
   const developSec = cur.finishedAt !== null ? (cur.finishedAt - cur.startedAt) / 1000 : 0;
@@ -247,6 +267,9 @@ export const computeRelease = (
     lastWork: work,
   });
 
+  // v0.16：社員成長。参加社員に exp を一括付与し、レベルアップを反映（spec v16 §1）
+  const growth = applyReleaseGrowth(ctx.employees, cur.assignedEmployeeIds, meta.metascore);
+
   const patch: ReleasePatch = {
     library: newLibrary,
     funds: ctx.funds + initialRevenue - costAdjust,
@@ -258,6 +281,8 @@ export const computeRelease = (
     unlockedGenres: [...ctx.unlockedGenres, ...stageUnlock.newGenres],
     unlockedThemes: [...ctx.unlockedThemes, ...stageUnlock.newThemes],
     unlockedCategories: [...ctx.unlockedCategories, ...newCategoryUnlocks],
+    employees: growth.employees,
+    lastLevelUps: growth.levelUps,
     lastReleased: work,
     current: null,
     screen: 'release',

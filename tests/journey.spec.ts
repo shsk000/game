@@ -63,8 +63,7 @@ test('ジャーニー: 企画 → 開発 → 発表 → 販売 の一本道が�
   await expect(page.locator('text=ジャンルを選ぶ').first()).toBeVisible();
   expect((await gs(page)).screen).toBe('plan');
 
-  // 2) 企画：従業員をアサインして開発開始
-  await page.locator('[data-employee-id="e1"]').check();
+  // 2) 企画：v0.17 から全員参加（アサイン操作なし）でそのまま開発開始
   const startBtn = page.locator('button', { hasText: '▶ 開発開始' }).first();
   await expect(startBtn).toBeEnabled();
   await startBtn.click({ force: true });
@@ -86,7 +85,11 @@ test('ジャーニー: 企画 → 開発 → 発表 → 販売 の一本道が�
   expect(afterRelease.lastReleased.metascore).toBeGreaterThanOrEqual(0);
   expect(afterRelease.lastReleased.metascore).toBeLessThanOrEqual(100);
 
-  // 5) オフィスへ戻る（開封演出が done になると「次へ（オフィス）」が出る）
+  // 5) v0.17：評価（STEP1）→ 売上（STEP2）→ オフィスへ戻る
+  await page
+    .locator('button', { hasText: '売上を見る' })
+    .first()
+    .click({ force: true, timeout: 10_000 });
   await page
     .locator('button', { hasText: '次へ（オフィス）' })
     .first()

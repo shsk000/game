@@ -1,4 +1,4 @@
-import { INITIAL_FUNDS } from '../data/balance';
+import { computeMonthlyWage, INITIAL_FUNDS } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import type { GenreId } from '../data/genres';
@@ -9,13 +9,16 @@ import type { Achievement, Employee, GameDate, Work, WorkBreakdown } from '../st
 import { INITIAL_GAME_DATE } from '../state/types';
 
 /**
+ * v6（v0.16）で導入：
+ *  - Employee の power を全役割共通の 0..1 正規化スケールに換算
+ *    （旧: プログラマー0.3〜1.2 / デザイナー2〜10 / 広報5〜20）
+ *  - Employee に basePower / level / exp を追加（社員成長システム）
  * v5 で導入：
  *  - currentDate（ゲーム内日付・週単位）
- *  - funds / lifetimeRevenue / library.totalRevenue / library.initialRevenue /
- *    library.salesPool / library.initialSalesPool を v0.10 の桁感に合わせて ×10,000
- *  - records.bestRevenue も ×10,000
+ *  - 金額を v0.10 の桁感に合わせて ×10,000（records.bestRevenue 含む）
  */
-const KEY = 'typing-factory:v5';
+const KEY = 'typing-factory:v6';
+const LEGACY_KEY_V5 = 'typing-factory:v5';
 const LEGACY_KEY_V4 = 'typing-factory:v4';
 const LEGACY_KEY_V3 = 'typing-factory:v3';
 const LEGACY_KEY_V2 = 'typing-factory:v2';
@@ -32,7 +35,7 @@ export type Records = {
 };
 
 export type Persisted = {
-  version: 5;
+  version: 6;
   funds: number;
   lifetimeRevenue: number;
   fans: number;
@@ -69,7 +72,7 @@ const defaultBreakdown = (): WorkBreakdown => ({
 });
 
 export const defaults = (): Persisted => ({
-  version: 5,
+  version: 6,
   // v0.10 仕上げ：初期資金は balance.ts INITIAL_FUNDS（¥500 万）に統一。
   // 失敗 2-3 本で詰む緊張感（balance-design §0、§5-4）。
   funds: INITIAL_FUNDS,
@@ -132,14 +135,44 @@ const migrateWorkV2 = (w: LegacyWork): Work => {
   };
 };
 
-type LegacyEmployeeV3 = Omit<Employee, 'specialties'> & {
+/** v5 以前の Employee（power が旧・役割別スケール。成長フィールドなし） */
+type LegacyEmployeeV5 = Omit<Employee, 'basePower' | 'level' | 'exp'> &
+  Partial<Pick<Employee, 'basePower' | 'level' | 'exp'>>;
+
+type LegacyEmployeeV3 = Omit<LegacyEmployeeV5, 'specialties'> & {
   specialties?: Employee['specialties'];
 };
 
-const migrateEmployeeFromV3 = (e: LegacyEmployeeV3): Employee => ({
+const migrateEmployeeFromV3 = (e: LegacyEmployeeV3): LegacyEmployeeV5 => ({
   ...e,
   specialties: e.specialties ?? [],
 });
+
+/**
+ * v5→v6（v0.16）：旧 power（役割別スケール）を 0..1 に正規化し、成長フィールドを付与。
+ * 既存社員は Lv1・素質＝正規化後の power として引き継ぐ。月給も新式で再計算。
+ */
+const OLD_POWER_MAX: Record<Employee['role'], number> = {
+  programmer: 1.2,
+  designer: 10,
+  pr: 20,
+};
+
+const normalizeEmployeeV6 = (e: LegacyEmployeeV5): Employee => {
+  if (e.basePower !== undefined && e.level !== undefined && e.exp !== undefined) {
+    return e as Employee; // すでに v6 形式
+  }
+  const raw = e.power / (OLD_POWER_MAX[e.role] ?? 1);
+  const power = Math.min(1, Math.max(0.05, Math.round(raw * 100) / 100));
+  return {
+    ...e,
+    power,
+    basePower: power,
+    level: 1,
+    exp: 0,
+    wage: Math.round(computeMonthlyWage(power)),
+  };
+};
 
 /** v0.9 → v0.10 用：work の金額を ×10,000 倍する */
 const rescaleWorkForV10 = (w: Work): Work => ({
@@ -160,7 +193,7 @@ const migrateFromV4 = (raw: string): Persisted | null => {
     };
     const base = defaults();
     const employees: Employee[] = Array.isArray(old.employees)
-      ? (old.employees as LegacyEmployeeV3[]).map(migrateEmployeeFromV3)
+      ? (old.employees as LegacyEmployeeV3[]).map(migrateEmployeeFromV3).map(normalizeEmployeeV6)
       : [];
     const library: Work[] = Array.isArray(old.library)
       ? (old.library as LegacyWork[])
@@ -208,7 +241,7 @@ const migrateFromV3 = (raw: string): Persisted | null => {
     };
     const base = defaults();
     const employees: Employee[] = Array.isArray(old.employees)
-      ? old.employees.map(migrateEmployeeFromV3)
+      ? old.employees.map(migrateEmployeeFromV3).map(normalizeEmployeeV6)
       : [];
     const library: Work[] = Array.isArray(old.library)
       ? old.library.map((w) => ensureWorkBreakdown(migrateWorkV2(w))).map(rescaleWorkForV10)
@@ -245,12 +278,14 @@ const migrateFromV3 = (raw: string): Persisted | null => {
 const migrateFromV2 = (raw: string): Persisted | null => {
   try {
     const old = JSON.parse(raw) as Partial<Persisted> & {
-      employees?: number | Employee[];
+      employees?: number | LegacyEmployeeV5[];
       library?: LegacyWork[];
     };
     const base = defaults();
     const employees: Employee[] = Array.isArray(old.employees)
-      ? (old.employees as Employee[]).map((e) => ({ ...e, specialties: e.specialties ?? [] }))
+      ? (old.employees as LegacyEmployeeV5[])
+          .map((e) => ({ ...e, specialties: e.specialties ?? [] }))
+          .map(normalizeEmployeeV6)
       : [];
     const library: Work[] = (old.library ?? []).map(migrateWorkV2).map(rescaleWorkForV10);
     const oldRecords = old.records ?? base.records;
@@ -303,39 +338,66 @@ const migrateFromV1 = (raw: string): Persisted | null => {
   }
 };
 
+/**
+ * 読込データの共通整形：defaults とのマージ・欠損フィールドの防御・
+ * v0.10 の人気ジャンル/テーマ再ロック（達成済みは維持）。
+ */
+const shapeLoaded = (parsed: Persisted): Persisted => {
+  const merged: Persisted = { ...defaults(), ...parsed };
+  merged.library = merged.library.map(ensureWorkBreakdown);
+  merged.employees = merged.employees.map((e) =>
+    normalizeEmployeeV6({ ...e, specialties: e.specialties ?? [] }),
+  );
+  merged.unlockedCategories =
+    parsed.unlockedCategories && parsed.unlockedCategories.length > 0
+      ? parsed.unlockedCategories
+      : [...INITIAL_CATEGORY_IDS];
+  merged.currentDate = parsed.currentDate ?? { ...INITIAL_GAME_DATE };
+
+  // v0.17.1 修正：保存済みの解放（ステージ解放含む）を尊重する。
+  // 旧実装は v0.10 時代の「人気ジャンル再ロック」を毎回適用しており、
+  // セッション中に解放したジャンル/テーマがリロードで巻き戻っていた（オーナー報告）。
+  // 初期解放 ∪ 保存済み解放 ∪ ライブラリ使用済み の和集合で防御だけ行う。
+  const usedGenres = merged.library.map((w) => w.genreId);
+  const usedThemes = merged.library.map((w) => w.themeId);
+  merged.unlockedGenres = Array.from(
+    new Set([...defaults().unlockedGenres, ...(parsed.unlockedGenres ?? []), ...usedGenres]),
+  );
+  merged.unlockedThemes = Array.from(
+    new Set([...defaults().unlockedThemes, ...(parsed.unlockedThemes ?? []), ...usedThemes]),
+  );
+  return merged;
+};
+
 export const load = (): Persisted | null => {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Persisted;
+      if (parsed && parsed.version === 6) {
+        return shapeLoaded(parsed);
+      }
+    }
+    // v5 → v6：employees の power 正規化＋成長フィールド付与（v0.16）
+    const v5 = localStorage.getItem(LEGACY_KEY_V5);
+    if (v5) {
+      const parsed = JSON.parse(v5) as Omit<Persisted, 'version' | 'employees'> & {
+        version: number;
+        employees: LegacyEmployeeV5[];
+      };
       if (parsed && parsed.version === 5) {
-        const merged: Persisted = { ...defaults(), ...parsed };
-        merged.library = merged.library.map(ensureWorkBreakdown);
-        merged.employees = merged.employees.map((e) => ({
-          ...e,
-          specialties: e.specialties ?? [],
-        }));
-        merged.unlockedCategories =
-          parsed.unlockedCategories && parsed.unlockedCategories.length > 0
-            ? parsed.unlockedCategories
-            : [...INITIAL_CATEGORY_IDS];
-        merged.currentDate = parsed.currentDate ?? { ...INITIAL_GAME_DATE };
-
-        // v0.10 仕上げマイグレーション：人気ジャンル / テーマを再ロック
-        // 旧版は action/puzzle/rpg や fantasy/sf 等が初期解放だったが、新版は人気のないものから。
-        // 達成（library に既出のもの）は維持しつつ、設計上 stage 1 のものだけに絞り込む。
-        const newInitialGenres = defaults().unlockedGenres;
-        const newInitialThemes = defaults().unlockedThemes;
-        const usedGenres = new Set(merged.library.map((w) => w.genreId));
-        const usedThemes = new Set(merged.library.map((w) => w.themeId));
-        merged.unlockedGenres = Array.from(
-          new Set([...newInitialGenres, ...Array.from(usedGenres)]),
-        );
-        merged.unlockedThemes = Array.from(
-          new Set([...newInitialThemes, ...Array.from(usedThemes)]),
-        );
-
-        return merged;
+        const migrated = shapeLoaded({
+          ...parsed,
+          version: 6,
+          employees: (parsed.employees ?? []).map(normalizeEmployeeV6),
+        });
+        save(migrated);
+        try {
+          localStorage.removeItem(LEGACY_KEY_V5);
+        } catch {
+          /* ignore */
+        }
+        return migrated;
       }
     }
     const v4 = localStorage.getItem(LEGACY_KEY_V4);
@@ -407,6 +469,7 @@ export const save = (p: Persisted): void => {
 export const reset = (): void => {
   try {
     localStorage.removeItem(KEY);
+    localStorage.removeItem(LEGACY_KEY_V5);
     localStorage.removeItem(LEGACY_KEY_V4);
     localStorage.removeItem(LEGACY_KEY_V3);
     localStorage.removeItem(LEGACY_KEY_V2);

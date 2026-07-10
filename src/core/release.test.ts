@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { AXIS_QUALITY_BONUS_CAP } from '../data/balance';
 import { SCALE_BY_ID } from '../data/scales';
 import type { CurrentProject, DevAxes, Work } from '../state/types';
 import { ZERO_AXES } from '../state/types';
@@ -21,7 +22,7 @@ const project = (over: Partial<CurrentProject> = {}): CurrentProject => ({
   doneLoC: 100,
   maxCombo: 50,
   devBoostRemainingSec: 0,
-  bugPhrase: null,
+  bugCount: 0,
   startedAt: 0,
   finishedAt: 60_000, // 60 秒開発
   adBoostActive: false,
@@ -179,6 +180,58 @@ describe('computeRelease', () => {
     expect(patch.lastReleased).toBe(work);
     expect(patch.current).toBeNull();
     expect(patch.screen).toBe('release');
+  });
+
+  it('参加社員はリリースで exp を得る（v0.16 成長システムの合流）', () => {
+    const worker = {
+      id: 'e1',
+      name: 'テスト 花子',
+      role: 'programmer' as const,
+      power: 0.4,
+      basePower: 0.4,
+      level: 1,
+      exp: 0,
+      wage: 540_000,
+      specialties: [],
+    };
+    const bystander = { ...worker, id: 'e2', name: 'テスト 次郎' };
+    const c = ctx({
+      employees: [worker, bystander],
+      current: project({ assignedEmployeeIds: ['e1'] }),
+    });
+    const { patch } = computeRelease(c, undefined, deps());
+    const [grown, idle] = patch.employees;
+    expect(grown.exp).toBeGreaterThan(0);
+    expect(idle.exp).toBe(0);
+    expect(Array.isArray(patch.lastLevelUps)).toBe(true);
+  });
+
+  it('企画・イベント由来の品質ボーナスは上限で頭打ち（v0.17.1 タイピング0.15の迂回防止）', () => {
+    const plain = computeRelease(ctx(), undefined, deps()).work;
+    // 面白さを極端に盛っても（×0.3 で +300 相当）、品質増は AXIS_QUALITY_BONUS_CAP まで
+    const boosted = computeRelease(
+      ctx({ current: project({ axes: axes({ funFactor: 1000 }) }) }),
+      undefined,
+      deps(),
+    ).work;
+    expect(boosted.quality - plain.quality).toBeLessThanOrEqual(AXIS_QUALITY_BONUS_CAP);
+    expect(boosted.quality).toBeGreaterThan(plain.quality);
+  });
+
+  it('残バグを抱えたまま発売すると品質が下がる（v0.17 バグシステム）', () => {
+    const clean = computeRelease(ctx({ current: project({ bugCount: 0 }) }), undefined, deps());
+    const buggy = computeRelease(ctx({ current: project({ bugCount: 5 }) }), undefined, deps());
+    // バグゼロは noBugs ボーナス（+5）も乗るため、差は品質減点(5×2)以上になる
+    expect(buggy.work.quality).toBeLessThan(clean.work.quality);
+    expect(clean.work.quality - buggy.work.quality).toBeGreaterThanOrEqual(10);
+  });
+
+  it('残バグは炎上リスクとして売上にも響く', () => {
+    const clean = computeRelease(ctx({ current: project({ bugCount: 0 }) }), undefined, deps());
+    const buggy = computeRelease(ctx({ current: project({ bugCount: 20 }) }), undefined, deps());
+    const total = (w: Work) => w.initialRevenue + w.salesPool;
+    // 炎上リスク 20×2=40 → 売上倍率が 1.0 → 0.6 に低下（品質減点の影響も乗る）
+    expect(total(buggy.work)).toBeLessThan(total(clean.work));
   });
 
   it('ゴースト（開発タイム記録）を上回ったら ghostBeaten', () => {

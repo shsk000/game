@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { ensureMinBugsOnDevComplete, rollBugOnKeystroke, rollBugOnMiss } from '../core/bugs';
 import { computeBorrow, computeMonthlyTick, computeRepay } from '../core/economy';
+import type { LevelUp } from '../core/growth';
 import { type Deps, defaultDeps } from '../core/ports';
 import { evaluateAchievements } from '../core/progression';
 import { computeRelease, type ReleaseOpts } from '../core/release';
@@ -78,12 +80,10 @@ const now = () => deps.now();
 
 type Actions = {
   goTo: (screen: Screen) => void;
-  startProject: (
-    genreId: GenreId,
-    themeId: ThemeId,
-    scale: Scale,
-    assignedEmployeeIds: string[],
-  ) => void;
+  /**
+   * v0.17：従業員は常に全員参加（オーナー指示）。title 省略時はランダム生成。
+   */
+  startProject: (genreId: GenreId, themeId: ThemeId, scale: Scale, title?: string) => void;
   tickAuto: (deltaSec: number) => void;
   tickSales: (deltaSec: number) => void;
   /**
@@ -116,8 +116,12 @@ type Actions = {
   releaseWork: (opts?: ReleaseOpts) => Work;
   buyAdDevBoost: () => void;
   buyAdSurvey: (g: GenreId, t: ThemeId) => void;
-  triggerBugIfDue: () => void;
-  clearBug: () => void;
+  /** v0.17.1：ミス打鍵はバグ確定（開発フェーズ中のみ。発生したら true） */
+  noteBugOnMiss: () => boolean;
+  /** v0.17.1：正打 1 打鍵ごとのバグ判定（発生したら true。社員能力で抑制） */
+  noteBugOnKeystroke: () => boolean;
+  /** v0.17：デバッグフェーズでバグを 1 匹修正 */
+  fixBug: () => void;
   hireCandidate: () => boolean;
   refreshCandidate: () => boolean;
   fireEmployee: (id: string) => void;
@@ -157,6 +161,8 @@ export type GameState = {
   tutorialDone: boolean;
   current: CurrentProject | null;
   lastReleased: Work | null;
+  /** v0.16：直近リリースで発生した社員レベルアップ（ReleaseScreen 開封演出用） */
+  lastLevelUps: LevelUp[];
   offlineReport: OfflineReport | null;
   /** v0.10：ゲーム内日付（週単位） */
   currentDate: GameDate;
@@ -201,6 +207,7 @@ export const useGameStore = create<GameState>()(
     tutorialDone: false,
     current: null,
     lastReleased: null,
+    lastLevelUps: [],
     offlineReport: null,
     currentDate: pureDefaults.currentDate ?? INITIAL_GAME_DATE,
     lastFixedCost: null,
@@ -209,9 +216,9 @@ export const useGameStore = create<GameState>()(
 
     goTo: (screen) => set({ screen }),
 
-    startProject: (genreId, themeId, scale, assignedEmployeeIds) => {
+    startProject: (genreId, themeId, scale, titleInput) => {
       const def = SCALE_BY_ID[scale];
-      const title = generateTitle(genreId, themeId, deps.rng);
+      const title = titleInput?.trim() || generateTitle(genreId, themeId, deps.rng);
       // v0.11 後期：締切（残り時間）を廃止し進捗オンリーに。
       // 作業量目標 workTarget（完走フレーズ数）まで打って初めて完了する（AFK では終わらない）。
       // 例：mini neededWeeks 8 × 3 = 24 フレーズ。速く打つほど少ない本数で到達＝早期完了。
@@ -228,14 +235,15 @@ export const useGameStore = create<GameState>()(
         doneLoC: 0,
         maxCombo: 0,
         devBoostRemainingSec: 0,
-        bugPhrase: null,
+        bugCount: 0,
         startedAt: performance.now(),
         finishedAt: null,
         adBoostActive: false,
         surveyedCompat: null,
         // v0.14：開発カテゴリ選択は廃止（オーナー決定）。型は後方互換のため残し空配列固定
         selectedCategories: [],
-        assignedEmployeeIds: [...assignedEmployeeIds],
+        // v0.17：常に全員参加
+        assignedEmployeeIds: get().employees.map((e) => e.id),
         perf: { wpm: 0, maxCombo: 0, accuracy: 1 },
         startDate: get().currentDate,
         timeShortcutsUnlocked: [],
@@ -441,7 +449,10 @@ export const useGameStore = create<GameState>()(
         get().finishDevelopment();
         return;
       }
-      set({ current: { ...cur, phase: next } });
+      // v0.17.1：開発完了時はバグの最低保証（どんなコードにもバグはいる）
+      const bugCount =
+        phase === 'development' ? ensureMinBugsOnDevComplete(cur.bugCount) : cur.bugCount;
+      set({ current: { ...cur, phase: next, bugCount } });
     },
 
     applyAxisDelta: (delta) => {
@@ -480,21 +491,26 @@ export const useGameStore = create<GameState>()(
       }
     },
 
-    triggerBugIfDue: () => {
+    noteBugOnMiss: () => {
       const cur = get().current;
-      if (!cur || cur.finishedAt !== null || cur.bugPhrase) return;
-      // 15% で発生（呼び出し側で間引き）
-      if (deps.rng() < 0.15) {
-        const candidates = ['ばぐしゅうせい', 'くらっしゅかいひ', 'ふぐあいたいおう', 'えらーろぐ'];
-        const phrase = candidates[Math.floor(deps.rng() * candidates.length)];
-        set({ current: { ...cur, bugPhrase: phrase } });
-      }
+      if (!cur || cur.finishedAt !== null) return false;
+      if (!rollBugOnMiss()) return false;
+      set({ current: { ...cur, bugCount: cur.bugCount + 1 } });
+      return true;
     },
 
-    clearBug: () => {
+    noteBugOnKeystroke: () => {
+      const cur = get().current;
+      if (!cur || cur.finishedAt !== null) return false;
+      if (!rollBugOnKeystroke(get().employees, deps.rng)) return false;
+      set({ current: { ...cur, bugCount: cur.bugCount + 1 } });
+      return true;
+    },
+
+    fixBug: () => {
       const cur = get().current;
       if (!cur) return;
-      set({ current: { ...cur, bugPhrase: null } });
+      set({ current: { ...cur, bugCount: Math.max(0, cur.bugCount - 1) } });
     },
 
     hireCandidate: () => {
@@ -576,6 +592,7 @@ export const useGameStore = create<GameState>()(
         tutorialDone: false,
         current: null,
         lastReleased: null,
+        lastLevelUps: [],
         offlineReport: null,
         currentDate: d.currentDate,
         lastFixedCost: null,
