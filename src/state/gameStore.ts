@@ -1,21 +1,16 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { computeBorrow, computeMonthlyTick, computeRepay } from '../core/economy';
 import {
   computeNewlyUnlockedCategories,
   computeStageUnlocks,
   evaluateAchievements,
 } from '../core/progression';
 import { ACHIEVEMENTS } from '../data/achievements';
-import { computeBorrowingLimit, DEBT_CONFIG, DEV_PHRASES_PER_WEEK } from '../data/balance';
+import { DEV_PHRASES_PER_WEEK } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
-import {
-  newCandidate,
-  REFRESH_COST,
-  sumMonthlySalaries,
-  sumPrBonus,
-  sumProgrammerSpeed,
-} from '../data/employees';
+import { newCandidate, REFRESH_COST, sumPrBonus, sumProgrammerSpeed } from '../data/employees';
 import type { GenreId } from '../data/genres';
 import { GENRES } from '../data/genres';
 import type { Scale } from '../data/scales';
@@ -294,38 +289,10 @@ export const useGameStore = create<GameState>()(
     },
 
     monthlyTick: () => {
-      const s = get();
-      const salaries = sumMonthlySalaries(s.employees);
-      const currentScale: Scale = s.unlockedScales[s.unlockedScales.length - 1] ?? 'mini';
-      const rent = SCALE_BY_ID[currentScale]?.monthlyRent ?? 0;
-      // v0.10 仕上げ §6-7：借金月利
-      const interest = Math.round(s.debt * DEBT_CONFIG.monthlyInterestRate);
-      const total = salaries + rent + interest;
-      const cost: MonthlyFixedCost = { salaries, rent, total };
-
-      // funds から固定費を引く → マイナスになったら借金に振替
-      const rawFunds = s.funds - total;
-      let newFunds = rawFunds;
-      let newDebt = s.debt;
-      if (rawFunds < 0) {
-        newDebt = s.debt + -rawFunds;
-        newFunds = 0;
-      }
-
-      // 借入上限：月固定費 × 12 ヶ月
-      const borrowingLimit = computeBorrowingLimit(salaries + rent);
-
-      set({
-        funds: newFunds,
-        debt: newDebt,
-        lastFixedCost: cost,
-      });
-
-      // 借入上限超 + 資金 0 でゲームオーバー
-      if (newDebt > borrowingLimit && newFunds <= 0) {
-        get().triggerGameOver();
-      }
-      return cost;
+      const r = computeMonthlyTick(get());
+      set({ funds: r.funds, debt: r.debt, lastFixedCost: r.cost });
+      if (r.gameOver) get().triggerGameOver();
+      return r.cost;
     },
 
     triggerGameOver: () => {
@@ -755,23 +722,16 @@ export const useGameStore = create<GameState>()(
     clearNewlyAchieved: () => set({ newlyAchieved: [] }),
 
     borrowMoney: (amount) => {
-      if (amount <= 0) return false;
-      const s = get();
-      const salaries = sumMonthlySalaries(s.employees);
-      const currentScale: Scale = s.unlockedScales[s.unlockedScales.length - 1] ?? 'mini';
-      const rent = SCALE_BY_ID[currentScale]?.monthlyRent ?? 0;
-      const limit = computeBorrowingLimit(salaries + rent);
-      if (s.debt + amount > limit) return false;
-      set({ funds: s.funds + amount, debt: s.debt + amount });
+      const patch = computeBorrow(get(), amount);
+      if (!patch) return false;
+      set(patch);
       return true;
     },
 
     repayDebt: (amount) => {
-      if (amount <= 0) return false;
-      const s = get();
-      const pay = Math.min(amount, s.funds, s.debt);
-      if (pay <= 0) return false;
-      set({ funds: s.funds - pay, debt: s.debt - pay });
+      const patch = computeRepay(get(), amount);
+      if (!patch) return false;
+      set(patch);
       return true;
     },
 
