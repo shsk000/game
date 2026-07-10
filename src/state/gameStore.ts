@@ -1,16 +1,14 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { computeBorrow, computeMonthlyTick, computeRepay } from '../core/economy';
-import {
-  computeNewlyUnlockedCategories,
-  computeStageUnlocks,
-  evaluateAchievements,
-} from '../core/progression';
+import { defaultDeps } from '../core/ports';
+import { evaluateAchievements } from '../core/progression';
+import { computeRelease, type ReleaseOpts } from '../core/release';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { DEV_PHRASES_PER_WEEK } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
-import { newCandidate, REFRESH_COST, sumPrBonus, sumProgrammerSpeed } from '../data/employees';
+import { newCandidate, REFRESH_COST, sumProgrammerSpeed } from '../data/employees';
 import type { GenreId } from '../data/genres';
 import { GENRES } from '../data/genres';
 import type { Scale } from '../data/scales';
@@ -18,18 +16,9 @@ import { nextLockedScale, SCALE_BY_ID, SCALES } from '../data/scales';
 import type { ThemeId } from '../data/themes';
 import { THEMES } from '../data/themes';
 import { generateTitle } from '../data/titleGenerator';
-import { ensureTrend, type Trend, trendMultiplier } from '../data/trend';
+import { ensureTrend, type Trend } from '../data/trend';
 import { MAX_EMPLOYEES } from '../lib/officeLayout';
-import { computeGenreAffinityScore } from '../utils/affinity';
-import { computeCharacterScore } from '../utils/character';
-import {
-  computeMetascore,
-  computePerformanceScore,
-  computeQualityV10,
-  computeRevenue,
-  fanDelta,
-} from '../utils/metascore';
-import { decayRateFor, INITIAL_SHARE, settlePool } from '../utils/sales';
+import { settlePool } from '../utils/sales';
 import type { Records } from '../utils/storage';
 import * as storage from '../utils/storage';
 import type {
@@ -44,7 +33,6 @@ import type {
   OfflineReport,
   Screen,
   Work,
-  WorkBreakdown,
 } from './types';
 import { addWeeks, DEV_PHASE_ORDER, INITIAL_GAME_DATE, ZERO_AXES } from './types';
 
@@ -78,12 +66,6 @@ const buildMissionFlavor = (genreId: GenreId): { missionName: string; missionDes
 };
 
 const now = () => Date.now();
-
-type ReleaseOpts = {
-  launchAd?: boolean;
-  marketingAd?: boolean;
-  debugAd?: boolean;
-};
 
 type Actions = {
   goTo: (screen: Screen) => void;
@@ -464,184 +446,11 @@ export const useGameStore = create<GameState>()(
     },
 
     releaseWork: (opts) => {
-      const cur = get().current;
+      const s = get();
+      const cur = s.current;
       if (!cur) throw new Error('no current project');
-      const employees = get().employees;
-      const prBonus = sumPrBonus(employees);
-      const assignedEmployees = employees.filter((e) => cur.assignedEmployeeIds.includes(e.id));
-
-      // === 4 要素品質（v0.14：カテゴリ選択廃止に伴い category 依存を撤去）===
-      // 1) キャラ能力スコア（0..100）
-      const charResult = computeCharacterScore({
-        assignedEmployees,
-        scale: cur.scale,
-      });
-      // 2) ジャンル相性スコア（0..100）＝ compat 連続マッピング
-      const affResult = computeGenreAffinityScore({
-        genreId: cur.genreId,
-        themeId: cur.themeId,
-      });
-      // 3) タイピング演技スコア（0..100）— spec §2-2
-      // 広告ボーナス（既存仕様）はパフォーマンス側に +5 ずつ寄せる
-      const adPerfBoost = (opts?.marketingAd ? 5 : 0) + (opts?.debugAd ? 5 : 0);
-      const performance = Math.min(
-        100,
-        computePerformanceScore({ ...cur.perf, noBugs: !cur.bugPhrase }) + adPerfBoost,
-      );
-
-      // 4) computeQualityV10 で合成（運の基底 50 ± 揺らぎ）。神ゲーガチャは v0.10 で廃止。
-      const { Q: quality0, breakdown: qBreakdown } = computeQualityV10({
-        charPower: charResult.score,
-        genreAffinity: affResult.score,
-        typingScore: performance,
-      });
-
-      // v0.14：イベント新軸の合流（品質系 + バグ罰）。既存 4 要素は不変、加点/減点として上乗せ。
-      const axes = cur.axes ?? ZERO_AXES;
-      // v0.15：ビルドアップ・タイピングの開発パラメータ（文を打って積んだ 4 属性）も品質へ合流。
-      // 「打った文がどこに効いたか」の因果をリリース結果まで一本で繋ぐ（重みは叩き台 🔧）
-      const stats = cur.devStats ?? { program: 0, graphics: 0, sound: 0, design: 0 };
-      const statQualityBonus =
-        stats.program * 0.12 + stats.graphics * 0.08 + stats.sound * 0.08 + stats.design * 0.05;
-      const axisQualityBonus =
-        (axes.funFactor + axes.usability + axes.balance) * 0.3 -
-        axes.bugRate * 0.2 +
-        statQualityBonus;
-      const quality = Math.max(0, Math.min(100, Math.round(quality0 + axisQualityBonus)));
-
-      const trend = get().trend;
-      const meta = computeMetascore(quality, cur.genreId, cur.themeId, trend);
-      const launchAdActive = !!opts?.launchAd;
-      const pioneer = !get().library.some(
-        (w) => w.genreId === cur.genreId && w.themeId === cur.themeId,
-      );
-      const pioneerBonus = pioneer ? 0.3 : 0;
-      const baseTotalRevenue = computeRevenue(
-        meta.metascore,
-        cur.genreId,
-        cur.themeId,
-        cur.scale,
-        trend,
-        get().fans,
-        launchAdActive,
-        prBonus,
-        pioneerBonus,
-      );
-      // v0.14：市場系新軸（売上予測・話題性 − 炎上リスク）で売上を補正（0.5〜2.0 倍にクランプ）。
-      const axisSalesMul = Math.max(
-        0.5,
-        Math.min(2, 1 + (axes.salesForecast + axes.buzz) / 100 - axes.reputationRisk / 100),
-      );
-      const totalRevenue = Math.round(baseTotalRevenue * axisSalesMul);
-      const initialRevenue = Math.round(totalRevenue * INITIAL_SHARE);
-      const salesPool = totalRevenue - initialRevenue;
-      const decayPerSec = decayRateFor(meta.metascore);
-      // v0.14：期待/話題/信頼でファン上乗せ、炎上リスクで減（spec §5-6）。
-      const axisFans = Math.round(axes.hype + axes.buzz * 0.5 + axes.trust - axes.reputationRisk);
-      const gainedFans = Math.max(0, fanDelta(meta.metascore, prBonus) + axisFans);
-      const newFans = Math.max(0, get().fans + gainedFans);
-      const developSec = cur.finishedAt !== null ? (cur.finishedAt - cur.startedAt) / 1000 : 0;
-      const prevGhost = get().ghosts[cur.scale];
-      const ghostBeaten = prevGhost !== null && developSec <= prevGhost;
-
-      // ゲーム内週数：開始日 → 現在日 の差 ＋ イベントのスケジュール効果（devWeeksDelta）
-      const startDate = cur.startDate ?? get().currentDate;
-      const developWeeks = Math.max(
-        0,
-        (get().currentDate.year - startDate.year) * 48 +
-          (get().currentDate.month - startDate.month) * 4 +
-          (get().currentDate.week - startDate.week) +
-          Math.round(axes.devWeeksDelta),
-      );
-
-      // イベントのコスト効果（costMod%）：開発費に対する追加徴収/返金をリリース時に精算
-      const costAdjust = Math.round(SCALE_BY_ID[cur.scale].baseCost * (axes.costMod / 100));
-
-      const trendMul = trendMultiplier(trend, cur.genreId, cur.themeId);
-      const workBreakdown: WorkBreakdown = {
-        ...qBreakdown,
-        // v0.14 修正：Work.breakdown のフィールド名は performance。
-        // 旧実装は typingScore のままスプレッドしていたため、開封演出の
-        // 「タイピング演技」寄与が常に 0 表示になっていた（v0.10 からの潜在バグ）。
-        performance: qBreakdown.typingScore,
-        axisBonus: Math.round(axisQualityBonus),
-        trendMul,
-        pioneer,
-      };
-
-      const work: Work = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        title: cur.title,
-        genreId: cur.genreId,
-        themeId: cur.themeId,
-        scale: cur.scale,
-        quality,
-        metascore: meta.metascore,
-        isMasterpiece: meta.isMasterpiece,
-        developSec,
-        initialRevenue,
-        salesPool,
-        initialSalesPool: salesPool,
-        decayPerSec,
-        totalRevenue: initialRevenue, // 初動はすでに加算した分のみ。販売で積み上がる
-        selling: salesPool > 0,
-        fansGained: gainedFans,
-        ghostBeaten,
-        launchAdUsed: launchAdActive,
-        pioneer,
-        releasedAt: Date.now(),
-        createdAt: Date.now(),
-        breakdown: workBreakdown,
-        selectedCategories: [...cur.selectedCategories],
-        developWeeks,
-      };
-
-      const newLibrary = [work, ...get().library];
-      // v0.10 仕上げ §6-8：累計売上 + ヒット作のハイブリッドで解放判定
-      const projectedLifetimeRevenue = get().lifetimeRevenue + initialRevenue;
-      const stageUnlock = computeStageUnlocks(
-        get().unlockedGenres,
-        get().unlockedThemes,
-        newLibrary,
-        projectedLifetimeRevenue,
-      );
-      const newCategoryUnlocks = computeNewlyUnlockedCategories(
-        get().unlockedCategories,
-        newLibrary,
-        projectedLifetimeRevenue,
-      );
-
-      const rec = get().records;
-      const newRec: Records = {
-        bestMetascore: Math.max(rec.bestMetascore, meta.metascore),
-        bestRevenue: Math.max(rec.bestRevenue, totalRevenue),
-        bestCombo: rec.bestCombo,
-        bestWPM: rec.bestWPM,
-      };
-
-      const newAch = evaluateAchievements(get().achievements, {
-        library: newLibrary,
-        fans: newFans,
-        lifetimeRevenue: get().lifetimeRevenue + initialRevenue,
-        bestCombo: rec.bestCombo,
-        lastWork: work,
-      });
-
-      set({
-        library: newLibrary,
-        funds: get().funds + initialRevenue - costAdjust,
-        lifetimeRevenue: get().lifetimeRevenue + initialRevenue,
-        fans: newFans,
-        records: newRec,
-        achievements: newAch.unlocked,
-        newlyAchieved: [...get().newlyAchieved, ...newAch.newly],
-        unlockedGenres: [...get().unlockedGenres, ...stageUnlock.newGenres],
-        unlockedThemes: [...get().unlockedThemes, ...stageUnlock.newThemes],
-        unlockedCategories: [...get().unlockedCategories, ...newCategoryUnlocks],
-        lastReleased: work,
-        current: null,
-        screen: 'release',
-      });
+      const { work, patch } = computeRelease({ ...s, current: cur }, opts, defaultDeps);
+      set(patch);
       return work;
     },
 
