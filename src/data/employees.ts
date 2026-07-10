@@ -73,20 +73,18 @@ const rollPower = (rng: Rng): number => {
 };
 
 /**
- * v0.10 仕上げ：月給計算は balance.ts に集約。
- * 役職差なし、power のみで決まる（balance-design §6-1）。
- *   月給 = base ¥30 万 + power × ¥20 万
+ * v0.10 仕上げ：月給計算は balance.ts に集約。役職差なし。
+ * v0.17：レベル項（(level−1)×¥5万）込み。
  *
  * @param _role 役職（現バランスでは未使用、将来の差別化用にシグネチャは維持）
- * @param power power 値
  */
-const wageFor = (_role: EmployeeRole, power: number): number =>
-  Math.round(computeMonthlyWage(power));
+const wageFor = (_role: EmployeeRole, power: number, level = 1): number =>
+  Math.round(computeMonthlyWage(power, level));
 
 /**
- * v0.10：個別社員の月給を取得。
+ * v0.10：個別社員の月給を取得（v0.17：レベル項込み）。
  */
-export const employeeMonthlyWage = (e: Employee): number => wageFor(e.role, e.power);
+export const employeeMonthlyWage = (e: Employee): number => wageFor(e.role, e.power, e.level);
 
 /**
  * v0.10：全社員の月給合計（円）。

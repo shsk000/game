@@ -23,22 +23,21 @@ describe('PlanScreen（ユースケース：企画を立てて開発を開始す
     resetStore({ screen: 'plan', tutorialDone: true, employees: [emp] });
   });
 
-  it('従業員を1人もアサインしないと開発開始できない', async () => {
+  it('従業員が 1 人もいないと開発開始できない（v0.17：全員参加制）', async () => {
+    resetStore({ screen: 'plan', tutorialDone: true, employees: [] });
     render(<PlanScreen />);
     const start = page.getByRole('button', { name: '▶ 開発開始' });
     await expect.element(start).toBeDisabled();
-    await expect.element(page.getByText('※従業員 1 人以上のアサインが必要')).toBeInTheDocument();
   });
 
-  it('ジャンル・テーマを選び従業員をアサインして開始すると開発画面へ遷移する', async () => {
+  it('ジャンル・テーマを選ぶだけで開始できる（アサイン操作なし・全員参加）', async () => {
     render(<PlanScreen />);
 
-    // ジャンル「アドベンチャー」・テーマ「温泉」を選ぶ
+    // 開発チームは全員参加として表示される
+    await expect.element(page.getByText('全員参加（1人）')).toBeInTheDocument();
+
     await userEvent.click(page.getByRole('button', { name: 'アドベンチャー' }));
     await userEvent.click(page.getByRole('button', { name: '温泉' }));
-
-    // 従業員をアサイン
-    await userEvent.click(page.getByRole('checkbox'));
 
     const start = page.getByRole('button', { name: '▶ 開発開始' });
     await expect.element(start).toBeEnabled();
@@ -46,16 +45,32 @@ describe('PlanScreen（ユースケース：企画を立てて開発を開始す
 
     const s = useGameStore.getState();
     expect(s.screen).toBe('develop');
-    expect(s.current).not.toBeNull();
     expect(s.current?.genreId).toBe('adventure');
     expect(s.current?.themeId).toBe('onsen');
-    expect(s.current?.phase).toBe('planning');
+    // 全員参加
     expect(s.current?.assignedEmployeeIds).toEqual([emp.id]);
+  });
+
+  it('タイトルを自分で入力でき、そのまま作品名になる（v0.17）', async () => {
+    render(<PlanScreen />);
+    const input = page.getByRole('textbox', { name: 'ゲームタイトル' });
+    await input.fill('じぶんのげーむ');
+    await userEvent.click(page.getByRole('button', { name: '▶ 開発開始' }));
+    expect(useGameStore.getState().current?.title).toBe('じぶんのげーむ');
+  });
+
+  it('🎲 でランダムタイトルに差し替えられる', async () => {
+    render(<PlanScreen />);
+    const input = page.getByRole('textbox', { name: 'ゲームタイトル' });
+    await input.fill('');
+    await userEvent.click(page.getByRole('button', { name: 'タイトルをランダム生成' }));
+    // 組み合わせ生成で何かしらのタイトルが入る
+    const el = input.element() as HTMLInputElement;
+    expect(el.value.length).toBeGreaterThan(0);
   });
 
   it('未解放のジャンルは選択肢に出ない', async () => {
     render(<PlanScreen />);
-    // 初期解放はパズル/アドベンチャー/シミュレーションのみ。アクションは stage2 以降
     await expect.element(page.getByRole('button', { name: 'パズル' })).toBeInTheDocument();
     expect(page.getByRole('button', { name: 'アクション' }).elements()).toHaveLength(0);
   });

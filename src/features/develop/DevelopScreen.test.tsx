@@ -20,7 +20,7 @@ const devProject: CurrentProject = {
   doneLoC: 0,
   maxCombo: 0,
   devBoostRemainingSec: 0,
-  bugPhrase: null,
+  bugCount: 0,
   startedAt: 0,
   finishedAt: null,
   adBoostActive: false,

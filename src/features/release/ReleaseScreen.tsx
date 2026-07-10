@@ -77,6 +77,8 @@ export const ReleaseScreen = () => {
   const clearNewlyAchieved = useGameStore((s) => s.clearNewlyAchieved);
 
   const [stage, setStage] = useState<RevealStage>('pre-ads');
+  // v0.17：結果は 2 画面（score=評価 / sales=売上）に分割（スクロール禁止の回復。spec v17 §1）
+  const [resultStep, setResultStep] = useState<'score' | 'sales'>('score');
   const [displayQ, setDisplayQ] = useState(0);
   const [displayMeta, setDisplayMeta] = useState(0);
   const [marketingApplied, setMarketingApplied] = useState(false);
@@ -110,6 +112,7 @@ export const ReleaseScreen = () => {
     setNewAchievements(useGameStore.getState().newlyAchieved);
     const charContrib = (work.breakdown.charPower ?? 0) * WEIGHTS.charPower;
     setStage('reveal-character');
+    setResultStep('score');
     setDisplayQ(Math.round(charContrib));
 
     const timers: number[] = [];
@@ -331,96 +334,92 @@ export const ReleaseScreen = () => {
             {work.pioneer && <span className="pioneer-pill">🌱 新規開拓ボーナス</span>}
           </div>
 
-          <div className="breakdown-list">
-            {/* v0.14：内訳の読み方を明示（「41 → +14」が何なのか分からない問題への対応） */}
-            <p style={{ margin: '0 0 4px', fontSize: 11, opacity: 0.75 }}>
-              各要素の実力（0〜100 点）× 重み ＝ 品質 Q への加点。合計が Q になる
-            </p>
-            {stageReached(stage, 'reveal-character') && (
-              <div className="breakdown-row">
-                <span className="breakdown-emoji">🧑‍💻</span>
-                <span className="breakdown-label">
-                  キャラ能力 {work.breakdown.charPower ?? 0}点 ×{' '}
-                  {Math.round(WEIGHTS.charPower * 100)}%
-                </span>
-                <span className="breakdown-value">品質 +{Math.round(charContrib)}</span>
-              </div>
-            )}
-            {stageReached(stage, 'reveal-affinity') && (
-              <div className="breakdown-row">
-                <span className="breakdown-emoji">🧩</span>
-                <span className="breakdown-label">
-                  ジャンル相性 {work.breakdown.genreAffinity ?? 0}点 ×{' '}
-                  {Math.round(WEIGHTS.genreAffinity * 100)}%
-                </span>
-                <span className="breakdown-value">品質 +{Math.round(affContrib)}</span>
-              </div>
-            )}
-            {stageReached(stage, 'reveal-performance') && (
-              <div className="breakdown-row">
-                <span className="breakdown-emoji">⚡</span>
-                <span className="breakdown-label">
-                  タイピング演技 {work.breakdown.performance ?? 0}点 ×{' '}
-                  {Math.round(WEIGHTS.performance * 100)}%
-                </span>
-                <span className="breakdown-value">品質 +{Math.round(perfContrib)}</span>
-              </div>
-            )}
-            {stageReached(stage, 'reveal-luck') && (
-              <div className="breakdown-row">
-                <span className="breakdown-emoji">🎲</span>
-                <span className="breakdown-label">
-                  運 {work.breakdown.luck ?? 50}点 × {Math.round(WEIGHTS.luck * 100)}%
-                </span>
-                <span className="breakdown-value">品質 +{Math.round(luckContrib)}</span>
-              </div>
-            )}
-            {/* v0.14：開発中イベントの成果（面白さ/操作性/バランス−バグ率）を品質加点として開示 */}
-            {stageReached(stage, 'reveal-luck') && (work.breakdown.axisBonus ?? 0) !== 0 && (
-              <div className="breakdown-row">
-                <span className="breakdown-emoji">🎪</span>
-                <span className="breakdown-label">イベント成果（開発中に稼いだ面白さ等）</span>
-                <span className="breakdown-value">
-                  品質 {(work.breakdown.axisBonus ?? 0) > 0 ? '+' : ''}
-                  {work.breakdown.axisBonus}
-                </span>
-              </div>
-            )}
-            {stageReached(stage, 'reveal-total') && (
-              <div className="breakdown-row breakdown-total">
-                <span className="breakdown-emoji">🎯</span>
-                <span className="breakdown-label">品質 Q</span>
-                <span className="breakdown-value">{total}</span>
-              </div>
-            )}
-            {stageReached(stage, 'reveal-total') &&
-              work.breakdown.luckMultiplier !== undefined &&
-              work.breakdown.luckMultiplier !== 1 && (
-                <div className="breakdown-row" style={{ fontSize: 11, opacity: 0.85 }}>
-                  <span className="breakdown-emoji">✨</span>
-                  <span className="breakdown-label">運揺らぎ ×{work.breakdown.luckMultiplier}</span>
-                  <span className="breakdown-value">適用済</span>
+          <div style={{ display: resultStep === 'score' ? undefined : 'none' }}>
+            <div className="breakdown-list">
+              {/* v0.14：内訳の読み方を明示（「41 → +14」が何なのか分からない問題への対応） */}
+              <p style={{ margin: '0 0 4px', fontSize: 11, opacity: 0.75 }}>
+                各要素の実力（0〜100 点）× 重み ＝ 品質 Q への加点。合計が Q になる
+              </p>
+              {stageReached(stage, 'reveal-character') && (
+                <div className="breakdown-row">
+                  <span className="breakdown-emoji">🧑‍💻</span>
+                  <span className="breakdown-label">
+                    キャラ能力 {work.breakdown.charPower ?? 0}点 ×{' '}
+                    {Math.round(WEIGHTS.charPower * 100)}%
+                  </span>
+                  <span className="breakdown-value">品質 +{Math.round(charContrib)}</span>
                 </div>
               )}
+              {stageReached(stage, 'reveal-affinity') && (
+                <div className="breakdown-row">
+                  <span className="breakdown-emoji">🧩</span>
+                  <span className="breakdown-label">
+                    ジャンル相性 {work.breakdown.genreAffinity ?? 0}点 ×{' '}
+                    {Math.round(WEIGHTS.genreAffinity * 100)}%
+                  </span>
+                  <span className="breakdown-value">品質 +{Math.round(affContrib)}</span>
+                </div>
+              )}
+              {stageReached(stage, 'reveal-performance') && (
+                <div className="breakdown-row">
+                  <span className="breakdown-emoji">⚡</span>
+                  <span className="breakdown-label">
+                    タイピング演技 {work.breakdown.performance ?? 0}点 ×{' '}
+                    {Math.round(WEIGHTS.performance * 100)}%
+                  </span>
+                  <span className="breakdown-value">品質 +{Math.round(perfContrib)}</span>
+                </div>
+              )}
+              {stageReached(stage, 'reveal-luck') && (
+                <div className="breakdown-row">
+                  <span className="breakdown-emoji">🎲</span>
+                  <span className="breakdown-label">
+                    運 {work.breakdown.luck ?? 50}点 × {Math.round(WEIGHTS.luck * 100)}%
+                  </span>
+                  <span className="breakdown-value">品質 +{Math.round(luckContrib)}</span>
+                </div>
+              )}
+              {/* v0.14：開発中イベントの成果（面白さ/操作性/バランス−バグ率）を品質加点として開示 */}
+              {stageReached(stage, 'reveal-luck') && (work.breakdown.axisBonus ?? 0) !== 0 && (
+                <div className="breakdown-row">
+                  <span className="breakdown-emoji">🎪</span>
+                  <span className="breakdown-label">イベント成果（開発中に稼いだ面白さ等）</span>
+                  <span className="breakdown-value">
+                    品質 {(work.breakdown.axisBonus ?? 0) > 0 ? '+' : ''}
+                    {work.breakdown.axisBonus}
+                  </span>
+                </div>
+              )}
+              {stageReached(stage, 'reveal-total') && (
+                <div className="breakdown-row breakdown-total">
+                  <span className="breakdown-emoji">🎯</span>
+                  <span className="breakdown-label">品質 Q</span>
+                  <span className="breakdown-value">{total}</span>
+                </div>
+              )}
+              {stageReached(stage, 'reveal-total') &&
+                work.breakdown.luckMultiplier !== undefined &&
+                work.breakdown.luckMultiplier !== 1 && (
+                  <div className="breakdown-row" style={{ fontSize: 11, opacity: 0.85 }}>
+                    <span className="breakdown-emoji">✨</span>
+                    <span className="breakdown-label">
+                      運揺らぎ ×{work.breakdown.luckMultiplier}
+                    </span>
+                    <span className="breakdown-value">適用済</span>
+                  </div>
+                )}
+            </div>
+
+            {/* v0.17：レーダー図は内訳行と情報重複のため撤去（1280×720 スクロール禁止を優先） */}
+
+            <div className={`meta-score ${work.isMasterpiece ? 'masterpiece' : ''}`}>
+              <span className="meta-label">メタスコア</span>
+              <span className="meta-value">{displayMeta}</span>
+              <span className="meta-max">/100</span>
+            </div>
           </div>
 
-          {/* v0.10 D-8: 4 要素ウェイトの簡易レーダー（SVG） */}
-          {stageReached(stage, 'reveal-total') && (
-            <RadarChart
-              charPower={work.breakdown.charPower ?? 0}
-              genreAffinity={work.breakdown.genreAffinity ?? 0}
-              performance={work.breakdown.performance ?? 0}
-              luck={work.breakdown.luck ?? 50}
-            />
-          )}
-
-          <div className={`meta-score ${work.isMasterpiece ? 'masterpiece' : ''}`}>
-            <span className="meta-label">メタスコア</span>
-            <span className="meta-value">{displayMeta}</span>
-            <span className="meta-max">/100</span>
-          </div>
-
-          {isDone && (
+          {isDone && resultStep === 'score' && (
             <>
               {work.isMasterpiece && (
                 <PixelWindow variant="emphasis" style={{ marginBottom: 8 }}>
@@ -460,185 +459,196 @@ export const ReleaseScreen = () => {
                 <div className="achievement-badge-stack">
                   {lastLevelUps.map((lu) => (
                     <div key={`${lu.employeeId}-${lu.level}`} className="achievement-badge">
-                      ⬆ {lu.name} が Lv{lu.level} になった！
+                      ⬆ {lu.name} が Lv{lu.level} になった！（power {lu.powerBefore.toFixed(2)}→
+                      {lu.powerAfter.toFixed(2)}・給与 +{formatYen(lu.wageDelta)}/月）
                     </div>
                   ))}
                 </div>
               )}
               <ul className="release-stats">
-                <li>品質 Q {work.quality}</li>
                 <li>
-                  相性 {compatLabel(compat)} ({compat.toFixed(2)}x)
+                  品質 Q {work.quality} ／ 相性 {compatLabel(compat)} ({compat.toFixed(2)}x) ／ 👥
+                  ファン +{work.fansGained}
                 </li>
                 <li>
-                  ⏱ 開発タイム {work.developSec.toFixed(1)}秒
+                  ⏱ {work.developSec.toFixed(1)}秒
                   {work.developWeeks !== undefined && (
                     <span style={{ marginLeft: 6, color: '#9fb6d4' }}>
                       ／ ゲーム内 {formatWeeks(work.developWeeks)}（{work.developWeeks} 週）
                     </span>
                   )}
                 </li>
-                <li>👥 ファン +{work.fansGained}</li>
-                <li className="revenue">
-                  💰 初動売上 {formatYen(work.initialRevenue + bonusRevenue)}
-                  {bonusRevenue > 0 && (
-                    <span className="revenue-bonus"> (+{formatYen(bonusRevenue)})</span>
-                  )}
-                </li>
-                <li className="sales-pool">
-                  📦 販売プール {formatYen(work.salesPool)}
-                  <span className="sales-pool-note">（残りはオフィスで時間経過で売れる）</span>
-                </li>
               </ul>
 
-              {/* v0.10：利益ブレイクダウン */}
-              {(() => {
-                const scaleDef = SCALE_BY_ID[work.scale];
-                const projectedTotal = work.initialRevenue + bonusRevenue + work.salesPool;
-                const result = computeProfitForScale({
-                  totalRevenue: projectedTotal,
-                  scale: work.scale,
-                  developWeeks: work.developWeeks,
-                });
-                const devCost = result.devCost;
-                const fixedCostTotal = result.fixedCostTotal;
-                const devMonths = Math.max(
-                  1,
-                  Math.round((work.developWeeks ?? scaleDef.neededWeeks) / 4),
-                );
-                const monthlyRent = scaleDef.monthlyRent;
-                const profit = result.profit;
-                const roi = formatRoi(profit, devCost + fixedCostTotal);
-                const positive = profit >= 0;
-                return (
+              <button className="primary-btn" onClick={() => setResultStep('sales')}>
+                💰 売上を見る ▶
+              </button>
+            </>
+          )}
+
+          {isDone && resultStep === 'sales' && (
+            <>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 10,
+                  alignItems: 'start',
+                }}
+              >
+                <div>
+                  <ul className="release-stats">
+                    <li className="revenue">
+                      💰 初動売上 {formatYen(work.initialRevenue + bonusRevenue)}
+                      {bonusRevenue > 0 && (
+                        <span className="revenue-bonus"> (+{formatYen(bonusRevenue)})</span>
+                      )}
+                    </li>
+                    <li className="sales-pool">
+                      📦 販売プール {formatYen(work.salesPool)}
+                      <span className="sales-pool-note">（残りはオフィスで時間経過で売れる）</span>
+                    </li>
+                  </ul>
+
+                  {/* v0.10：利益ブレイクダウン */}
+                  {(() => {
+                    const scaleDef = SCALE_BY_ID[work.scale];
+                    const projectedTotal = work.initialRevenue + bonusRevenue + work.salesPool;
+                    const result = computeProfitForScale({
+                      totalRevenue: projectedTotal,
+                      scale: work.scale,
+                      developWeeks: work.developWeeks,
+                    });
+                    const devCost = result.devCost;
+                    const fixedCostTotal = result.fixedCostTotal;
+                    const devMonths = Math.max(
+                      1,
+                      Math.round((work.developWeeks ?? scaleDef.neededWeeks) / 4),
+                    );
+                    const monthlyRent = scaleDef.monthlyRent;
+                    const profit = result.profit;
+                    const roi = formatRoi(profit, devCost + fixedCostTotal);
+                    const positive = profit >= 0;
+                    return (
+                      <PixelWindow
+                        title="💹 利益計算（見込）"
+                        variant="emphasis"
+                        style={{ marginTop: 10 }}
+                      >
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr auto',
+                            rowGap: 4,
+                            fontSize: 13,
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
+                        >
+                          <span>売上見込（初動＋販売プール）</span>
+                          <strong>{formatYen(projectedTotal)}</strong>
+                          <span>− 開発費（{scaleDef.name}）</span>
+                          <strong style={{ color: '#ff6b6b' }}>-{formatYen(devCost)}</strong>
+                          <span>
+                            − 月固定費 × {devMonths} ヶ月（{formatYen(monthlyRent)}/月）
+                          </span>
+                          <strong style={{ color: '#ff6b6b' }}>-{formatYen(fixedCostTotal)}</strong>
+                          <span
+                            style={{
+                              gridColumn: '1 / 3',
+                              height: 1,
+                              background: '#16263e',
+                              margin: '4px 0',
+                            }}
+                          />
+                          <span style={{ fontWeight: 700 }}>利益見込</span>
+                          <strong
+                            style={{
+                              color: positive ? '#308040' : '#a03030',
+                              fontSize: 16,
+                            }}
+                          >
+                            {formatYen(profit)}
+                          </strong>
+                          <span style={{ fontWeight: 700 }}>ROI</span>
+                          <strong
+                            style={{
+                              color: positive ? '#308040' : '#a03030',
+                            }}
+                          >
+                            {roi}
+                          </strong>
+                        </div>
+                      </PixelWindow>
+                    );
+                  })()}
+                </div>
+                <div>
+                  <div className="ad-block">
+                    {launchAdApplied ? (
+                      <p className="ad-applied">✅ ローンチ広告キャンペーン適用済（売上 ×1.5）</p>
+                    ) : (
+                      <button
+                        className="primary-btn ad-btn"
+                        disabled={adRunning !== null}
+                        onClick={runLaunchAd}
+                      >
+                        {adRunning === 'launch' ? '広告再生中…' : '📺 ローンチ広告 売上 +50%'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* v0.14 開発完了フェーズ：打ち上げ（結果演出。spec §5-3） */}
                   <PixelWindow
-                    title="💹 利益計算（見込）"
+                    title="🎉 開発完了！ 打ち上げ"
                     variant="emphasis"
                     style={{ marginTop: 10 }}
                   >
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr auto',
-                        rowGap: 4,
-                        fontSize: 13,
-                        fontVariantNumeric: 'tabular-nums',
-                      }}
-                    >
-                      <span>売上見込（初動＋販売プール）</span>
-                      <strong>{formatYen(projectedTotal)}</strong>
-                      <span>− 開発費（{scaleDef.name}）</span>
-                      <strong style={{ color: '#ff6b6b' }}>-{formatYen(devCost)}</strong>
-                      <span>
-                        − 月固定費 × {devMonths} ヶ月（{formatYen(monthlyRent)}/月）
-                      </span>
-                      <strong style={{ color: '#ff6b6b' }}>-{formatYen(fixedCostTotal)}</strong>
-                      <span
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div
                         style={{
-                          gridColumn: '1 / 3',
-                          height: 1,
-                          background: '#16263e',
-                          margin: '4px 0',
-                        }}
-                      />
-                      <span style={{ fontWeight: 700 }}>利益見込</span>
-                      <strong
-                        style={{
-                          color: positive ? '#308040' : '#a03030',
-                          fontSize: 16,
+                          border: '2px solid #2b3a1c',
+                          overflow: 'hidden',
+                          aspectRatio: '6 / 1',
                         }}
                       >
-                        {formatYen(profit)}
-                      </strong>
-                      <span style={{ fontWeight: 700 }}>ROI</span>
-                      <strong
+                        <img
+                          src={`${import.meta.env.BASE_URL}phase/complete.png`}
+                          alt="打ち上げ"
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            objectPosition: 'center 30%',
+                            imageRendering: 'pixelated',
+                          }}
+                        />
+                      </div>
+                      <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>
+                        リリースおめでとう！！ チーム全員おつかれさまでした！
+                      </p>
+                      <ul
                         style={{
-                          color: positive ? '#308040' : '#a03030',
+                          listStyle: 'none',
+                          margin: 0,
+                          padding: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 4,
                         }}
                       >
-                        {roi}
-                      </strong>
+                        {completionAwards(work).map((a) => (
+                          <li key={a.title} style={{ fontSize: 13 }}>
+                            {a.icon} <strong>{a.title}</strong>
+                            <span style={{ fontSize: 11, opacity: 0.8, marginLeft: 6 }}>
+                              {a.note}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   </PixelWindow>
-                );
-              })()}
-
-              <div className="ad-block">
-                {launchAdApplied ? (
-                  <p className="ad-applied">✅ ローンチ広告キャンペーン適用済（売上 ×1.5）</p>
-                ) : (
-                  <button
-                    className="primary-btn ad-btn"
-                    disabled={adRunning !== null}
-                    onClick={runLaunchAd}
-                  >
-                    {adRunning === 'launch' ? '広告再生中…' : '📺 ローンチ広告 売上 +50%'}
-                  </button>
-                )}
-              </div>
-
-              {/* v0.14 開発完了フェーズ：打ち上げ（結果演出。spec §5-3） */}
-              <PixelWindow
-                title="🎉 開発完了！ 打ち上げ"
-                variant="emphasis"
-                style={{ marginTop: 10 }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div
-                    style={{
-                      border: '2px solid #2b3a1c',
-                      overflow: 'hidden',
-                      aspectRatio: '3 / 1',
-                    }}
-                  >
-                    <img
-                      src={`${import.meta.env.BASE_URL}phase/complete.png`}
-                      alt="打ち上げ"
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        objectPosition: 'center 30%',
-                        imageRendering: 'pixelated',
-                      }}
-                    />
-                  </div>
-                  <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>
-                    リリースおめでとう！！ チーム全員おつかれさまでした！
-                  </p>
-                  <ul
-                    style={{
-                      listStyle: 'none',
-                      margin: 0,
-                      padding: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 4,
-                    }}
-                  >
-                    {completionAwards(work).map((a) => (
-                      <li key={a.title} style={{ fontSize: 13 }}>
-                        {a.icon} <strong>{a.title}</strong>
-                        <span style={{ fontSize: 11, opacity: 0.8, marginLeft: 6 }}>{a.note}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr auto',
-                      rowGap: 2,
-                      fontSize: 12,
-                      fontVariantNumeric: 'tabular-nums',
-                    }}
-                  >
-                    <span>ファン増加</span>
-                    <strong>+{work.fansGained} 人</strong>
-                    <span>開発期間</span>
-                    <strong>{formatWeeks(work.developWeeks ?? 0)}</strong>
-                  </div>
                 </div>
-              </PixelWindow>
+              </div>
 
               <button className="primary-btn" onClick={handleNext}>
                 次へ（オフィス）
@@ -651,93 +661,6 @@ export const ReleaseScreen = () => {
           </div>
         </div>
       </section>
-    </div>
-  );
-};
-
-/**
- * v0.10 D-8：4 要素ウェイトの簡易レーダー。
- * 4 軸（キャラ/相性/演技/運）を 0..100 で正方形領域内にプロット。
- */
-type RadarProps = {
-  charPower: number;
-  genreAffinity: number;
-  performance: number;
-  luck: number;
-};
-
-const RadarChart = ({ charPower, genreAffinity, performance, luck }: RadarProps) => {
-  const size = 160;
-  const cx = size / 2;
-  const cy = size / 2;
-  const r = size / 2 - 12;
-  // 4 軸（北・東・南・西）
-  const pt = (axis: number, val: number): [number, number] => {
-    const ratio = Math.max(0, Math.min(100, val)) / 100;
-    const angles = [-Math.PI / 2, 0, Math.PI / 2, Math.PI]; // N, E, S, W
-    const a = angles[axis];
-    return [cx + Math.cos(a) * r * ratio, cy + Math.sin(a) * r * ratio];
-  };
-  const points = [pt(0, charPower), pt(1, genreAffinity), pt(2, performance), pt(3, luck)];
-  const polygon = points.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  const guideRings = [0.25, 0.5, 0.75, 1.0];
-  const labels = [
-    { axis: 0, text: 'キャラ', sub: `${charPower}` },
-    { axis: 1, text: '相性', sub: `${genreAffinity}` },
-    { axis: 2, text: '演技', sub: `${performance}` },
-    { axis: 3, text: '運', sub: `${luck}` },
-  ];
-  return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        margin: '8px 0 4px',
-        background: '#24395c',
-        border: '3px solid #0a1422',
-        padding: 8,
-        imageRendering: 'pixelated',
-      }}
-    >
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <title>4 要素ウェイト レーダー</title>
-        {guideRings.map((g) => (
-          <polygon
-            key={g}
-            points={[pt(0, g * 100), pt(1, g * 100), pt(2, g * 100), pt(3, g * 100)]
-              .map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`)
-              .join(' ')}
-            fill="none"
-            stroke="#6b4f3a"
-            strokeWidth={1}
-            opacity={0.3}
-          />
-        ))}
-        <polygon
-          points={polygon}
-          fill="#5aa84a"
-          fillOpacity={0.45}
-          stroke="#308040"
-          strokeWidth={2}
-        />
-        {labels.map((l) => {
-          const [x, y] = pt(l.axis, 110);
-          return (
-            <text
-              key={l.text}
-              x={x}
-              y={y}
-              fontSize={9}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fill="#1a0f08"
-              fontWeight={700}
-            >
-              {l.text}:{l.sub}
-            </text>
-          );
-        })}
-      </svg>
     </div>
   );
 };

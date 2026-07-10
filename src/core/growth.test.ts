@@ -71,8 +71,11 @@ describe('applyReleaseGrowth', () => {
     expect(grown.level).toBe(2);
     expect(grown.exp).toBe(a.exp + 15 - nextExpFor(1));
     expect(grown.power).toBe(powerAt(a.basePower, 2));
-    expect(grown.wage).toBe(Math.round(computeMonthlyWage(grown.power)));
-    expect(r.levelUps).toEqual([{ employeeId: 'a', name: a.name, level: 2 }]);
+    expect(grown.wage).toBe(Math.round(computeMonthlyWage(grown.power, 2)));
+    expect(r.levelUps).toEqual([
+      expect.objectContaining({ employeeId: 'a', name: a.name, level: 2 }),
+    ]);
+    expect(r.levelUps[0].wageDelta).toBe(grown.wage - a.wage);
   });
 
   it('大量 exp で複数レベル一気に上がる', () => {

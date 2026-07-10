@@ -145,19 +145,23 @@ export const GROWTH = {
 // ============================================================
 
 /**
- * 従業員 1 人あたりの月給。役職差なし、power（0..1 正規化・成長込みの現在値）のみで計算。
- *   月給 = base ¥30 万 + power × ¥60 万
+ * 従業員 1 人あたりの月給。役職差なし、power（0..1 正規化・成長込みの現在値）とレベルで計算。
+ *   月給 = base ¥30 万 + power × ¥60 万 + (level − 1) × ¥5 万
  *
- * 例：新人 power 0.3 → ¥48 万 / 上位新人 0.6 → ¥66 万 / Lv10 精鋭 1.4 → ¥114 万
+ * v0.17：レベル項を追加（オーナー指示「Lv が上がるごとに固定費が上がるように」）。
+ * 例：basePower 0.4 → Lv1 ¥54 万 / Lv5 ¥88 万 / Lv10 ¥146 万
  * 成長するほど高給になる＝強い会社は固定費も重い（経済の緊張を維持）。
  */
 export const MONTHLY_WAGE_FORMULA = {
   base: 300_000,
   perPowerUnit: 600_000,
+  perLevel: 50_000,
 } as const;
 
-export const computeMonthlyWage = (power: number): number =>
-  MONTHLY_WAGE_FORMULA.base + power * MONTHLY_WAGE_FORMULA.perPowerUnit;
+export const computeMonthlyWage = (power: number, level = 1): number =>
+  MONTHLY_WAGE_FORMULA.base +
+  power * MONTHLY_WAGE_FORMULA.perPowerUnit +
+  (Math.max(1, level) - 1) * MONTHLY_WAGE_FORMULA.perLevel;
 
 // ============================================================
 // 賃料（balance-design §6-2、一律固定）
@@ -283,6 +287,31 @@ export const QUALITY_WEIGHTS = {
  * 旧実装は上限なしで青天井だったため、序盤でもスコアが積み上がりすぎた。
  */
 export const STAT_QUALITY_BONUS_CAP = 8;
+
+// ============================================================
+// v0.17：バグ発生システム（spec v17 §4。数値は叩き台 🔧）
+// ============================================================
+
+/**
+ * バグは「タイピングの腕」と「エンジニアの質」の両方が現れる場所。
+ * 発生（開発中）→ 発覚（テスト）→ 返済（デバッグ）の一本の因果。
+ */
+export const BUG_CONFIG = {
+  /** ミス打鍵 1 回がバグになる確率（抑制前） */
+  onMissRate: 0.35,
+  /** フレーズ完走ごとのコード起因バグ確率（抑制前。ミスゼロでも一定量出る） */
+  onPhraseRate: 0.1,
+  /** 抑制率 = min(maxSuppression, プログラマー power 合計 / suppressCap) */
+  suppressCap: 2.0,
+  maxSuppression: 0.8,
+  /** デバッグ工数：バグ 1 匹 = 修正フレーズ N 文 */
+  phrasesPerBug: 2,
+  /** テストフェーズのチケット数（バグを「発覚」させる工程） */
+  testTickets: 3,
+  /** 残バグ 1 匹あたりのペナルティ（このまま発売した場合） */
+  qualityPenaltyPerBug: 2,
+  reputationRiskPerBug: 2,
+} as const;
 
 /**
  * 各スコアの計算基準値（balance-design §6-3〜§6-5）。

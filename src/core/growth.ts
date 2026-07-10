@@ -27,6 +27,11 @@ export type LevelUp = {
   name: string;
   /** 到達した新レベル */
   level: number;
+  /** 成長前後の power（開封演出で「何が良くなったか」を見せる。spec v17 §3） */
+  powerBefore: number;
+  powerAfter: number;
+  /** 月給の増分（円）。レベルが上がるごとに固定費が上がる（オーナー指示） */
+  wageDelta: number;
 };
 
 /**
@@ -47,14 +52,26 @@ export const applyReleaseGrowth = (
     if (!assigned.has(e.id)) return e;
     let level = e.level;
     let exp = e.exp + gained;
+    const reached: number[] = [];
     while (level < GROWTH.levelCap && exp >= nextExpFor(level)) {
       exp -= nextExpFor(level);
       level += 1;
-      levelUps.push({ employeeId: e.id, name: e.name, level });
+      reached.push(level);
     }
     if (level === e.level) return { ...e, exp };
     const power = powerAt(e.basePower, level);
-    return { ...e, level, exp, power, wage: Math.round(computeMonthlyWage(power)) };
+    const wage = Math.round(computeMonthlyWage(power, level));
+    for (const lv of reached) {
+      levelUps.push({
+        employeeId: e.id,
+        name: e.name,
+        level: lv,
+        powerBefore: e.power,
+        powerAfter: power,
+        wageDelta: wage - e.wage,
+      });
+    }
+    return { ...e, level, exp, power, wage };
   });
 
   return { employees: updated, levelUps };

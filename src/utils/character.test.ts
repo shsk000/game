@@ -42,8 +42,8 @@ describe('computeCharacterScore（v0.16：能力が支配項）', () => {
       scale: 'mini',
     });
     expect(solo.breakdown.powerBonus).toBe(trio.breakdown.powerBonus);
-    // むしろ 3 人は mini の推奨人数超過で -5
-    expect(trio.breakdown.fitBonus).toBe(-5);
+    // v0.17：全員参加制のため超過ペナルティは廃止（推奨未満 -10 のみ残る）
+    expect(trio.breakdown.fitBonus).toBe(0);
     expect(solo.breakdown.fitBonus).toBe(0);
   });
 

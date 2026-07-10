@@ -21,7 +21,7 @@ const project = (over: Partial<CurrentProject> = {}): CurrentProject => ({
   doneLoC: 100,
   maxCombo: 50,
   devBoostRemainingSec: 0,
-  bugPhrase: null,
+  bugCount: 0,
   startedAt: 0,
   finishedAt: 60_000, // 60 秒開発
   adBoostActive: false,
@@ -203,6 +203,22 @@ describe('computeRelease', () => {
     expect(grown.exp).toBeGreaterThan(0);
     expect(idle.exp).toBe(0);
     expect(Array.isArray(patch.lastLevelUps)).toBe(true);
+  });
+
+  it('残バグを抱えたまま発売すると品質が下がる（v0.17 バグシステム）', () => {
+    const clean = computeRelease(ctx({ current: project({ bugCount: 0 }) }), undefined, deps());
+    const buggy = computeRelease(ctx({ current: project({ bugCount: 5 }) }), undefined, deps());
+    // バグゼロは noBugs ボーナス（+5）も乗るため、差は品質減点(5×2)以上になる
+    expect(buggy.work.quality).toBeLessThan(clean.work.quality);
+    expect(clean.work.quality - buggy.work.quality).toBeGreaterThanOrEqual(10);
+  });
+
+  it('残バグは炎上リスクとして売上にも響く', () => {
+    const clean = computeRelease(ctx({ current: project({ bugCount: 0 }) }), undefined, deps());
+    const buggy = computeRelease(ctx({ current: project({ bugCount: 20 }) }), undefined, deps());
+    const total = (w: Work) => w.initialRevenue + w.salesPool;
+    // 炎上リスク 20×2=40 → 売上倍率が 1.0 → 0.6 に低下（品質減点の影響も乗る）
+    expect(total(buggy.work)).toBeLessThan(total(clean.work));
   });
 
   it('ゴースト（開発タイム記録）を上回ったら ghostBeaten', () => {

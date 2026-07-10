@@ -248,8 +248,12 @@ export type CurrentProject = {
   maxCombo: number;
   /** 開発加速広告（生産速度2倍）の残り秒数 */
   devBoostRemainingSec: number;
-  /** バグイベント中のフレーズ（赤行）。クリアで品質ボーナス */
-  bugPhrase: string | null;
+  /**
+   * v0.17：残バグ数。開発中にミス打鍵/コード起因で増え、デバッグフェーズの修正で減る。
+   * リリース時に残っていると品質減点＋炎上リスク。0 なら「バグゼロ」ボーナス。
+   * （旧 bugPhrase（v0.14 の15%抽選）はこのシステムに一本化して廃止）
+   */
+  bugCount: number;
   startedAt: number;
   finishedAt: number | null;
   /** 旧フィールド（互換のため残置）：従業員モック広告 */

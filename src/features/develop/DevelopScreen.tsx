@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
-import { planWeeksAllowance } from '../../data/balance';
+import { pickBugFixPhrase } from '../../core/bugs';
+import { BUG_CONFIG, planWeeksAllowance } from '../../data/balance';
 import { buildLine } from '../../data/codeSnippets';
 import {
   ATTR_BASE_GAIN,
@@ -93,6 +94,10 @@ export const DevelopScreen = () => {
   const addDevelopLoC = useGameStore((s) => s.addDevelopLoC);
   const addDevStat = useGameStore((s) => s.addDevStat);
   const advancePhase = useGameStore((s) => s.advancePhase);
+  const noteBugOnMiss = useGameStore((s) => s.noteBugOnMiss);
+  const noteBugOnPhrase = useGameStore((s) => s.noteBugOnPhrase);
+  const fixBug = useGameStore((s) => s.fixBug);
+  const bugCount = useGameStore((s) => s.current?.bugCount ?? 0);
   const applyAxisDelta = useGameStore((s) => s.applyAxisDelta);
   const reportCombo = useGameStore((s) => s.reportCombo);
   const reportWPM = useGameStore((s) => s.reportWPM);
@@ -342,6 +347,11 @@ export const DevelopScreen = () => {
           progressGain(wpmRef.current, false, comboRef.current) * (feverActiveRef.current ? 2 : 1);
         addDevelopLoC(progress);
 
+        // v0.17：コード起因バグ（ミスゼロでも一定量出る）。デバッグフェーズで返済する
+        if (noteBugOnPhrase()) {
+          sfx.alert();
+        }
+
         // 待機中のイベントがあれば、次の文としてイベント文を投入（途中差し替えしない）
         if (pendingRef.current) {
           setActiveEvent(pendingRef.current);
@@ -366,6 +376,11 @@ export const DevelopScreen = () => {
       comboRef.current = 0;
       sfx.miss();
       decayFever();
+      // v0.17：ミス打鍵はバグの種（プログラマー力で抑制）。開発フェーズ中のみ
+      if (isDevelopment && noteBugOnMiss()) {
+        sfx.alert();
+        setFlash((n) => n + 1);
+      }
     },
     onWpm: (w) => {
       wpmRef.current = w;
@@ -512,6 +527,7 @@ export const DevelopScreen = () => {
               view={view}
               failCount={failCount}
               charsPerMin={charsPerMin}
+              bugCount={bugCount}
               accuracyPct={accuracyPct}
               programLog={programLog}
               liveCodeLine={liveCodeLine}
@@ -539,16 +555,20 @@ export const DevelopScreen = () => {
               view={view}
               failCount={failCount}
               charsPerMin={charsPerMin}
+              bugCount={bugCount}
               accuracyPct={accuracyPct}
               memos={planMemos}
               cards={planCards}
               lastResult={lastResult}
             />
+          ) : phase === 'debugging' ? (
+            <DebugFlow key={phase} bugCount={bugCount} onFix={fixBug} onAllDone={advancePhase} />
           ) : (
             <MissionFlow
               key={phase}
               phase={phase}
               label={phaseMeta.label}
+              bugCount={bugCount}
               onAllDone={advancePhase}
               applyDelta={applyAxisDelta}
             />
@@ -724,6 +744,7 @@ const DevelopCenter = ({
   view,
   failCount,
   charsPerMin,
+  bugCount,
   accuracyPct,
   programLog,
   liveCodeLine,
@@ -743,6 +764,7 @@ const DevelopCenter = ({
   view: { hiragana: string; completed: string; remained: string };
   failCount: number;
   charsPerMin: number;
+  bugCount: number;
   accuracyPct: number;
   programLog: string[];
   liveCodeLine: string;
@@ -957,6 +979,20 @@ const DevelopCenter = ({
               >
                 {accuracyPct}%
               </span>
+            </div>
+            <div key={`bug-${bugCount}`} style={{ ...devBox(), gap: 1, padding: 5 }}>
+              <span style={{ fontSize: 9, color: DEV.sub }}>🐛バグ</span>
+              <span
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: bugCount > 0 ? DEV.orange : DEV.greenBright,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                ×{bugCount}
+              </span>
+              <span style={{ fontSize: 8, color: DEV.sub }}>デバッグで返済</span>
             </div>
           </div>
         </div>
@@ -1472,6 +1508,7 @@ const PlanningCenter = ({
   view,
   failCount,
   charsPerMin,
+  bugCount,
   accuracyPct,
   memos,
   cards,
@@ -1484,6 +1521,7 @@ const PlanningCenter = ({
   view: { hiragana: string; completed: string; remained: string };
   failCount: number;
   charsPerMin: number;
+  bugCount: number;
   accuracyPct: number;
   memos: string[];
   cards: string[];
@@ -1679,6 +1717,20 @@ const PlanningCenter = ({
               >
                 {accuracyPct}%
               </span>
+            </div>
+            <div key={`bug-${bugCount}`} style={{ ...devBox(), gap: 1, padding: 5 }}>
+              <span style={{ fontSize: 9, color: DEV.sub }}>🐛バグ</span>
+              <span
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: bugCount > 0 ? DEV.orange : DEV.greenBright,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                ×{bugCount}
+              </span>
+              <span style={{ fontSize: 8, color: DEV.sub }}>デバッグで返済</span>
             </div>
           </div>
         </div>
@@ -1919,14 +1971,113 @@ const buildMissionQueue = (phase: DevPhase): DevEvent[] =>
  * 中央：開発以外のフェーズ。
  * イベントが発生していれば入力ミッションで対応、無ければ「✓ 完了」演出で自動進行。
  */
+/**
+ * v0.17 デバッグフェーズ：たまったバグを修正フレーズで返済する（spec v17 §4-3）。
+ * バグが多いほど打つ量が線形に増える。全部潰すと「バグゼロ」ボーナス（noBugs +5）、
+ * [このまま発売] で残バグ 1 匹につき 品質−2・炎上リスク+2 を背負って先へ進める。
+ */
+const DebugFlow = ({
+  bugCount,
+  onFix,
+  onAllDone,
+}: {
+  bugCount: number;
+  onFix: () => void;
+  onAllDone: () => void;
+}) => {
+  // バグ 1 匹 = PHRASES_PER_BUG 文。打ち切るごとに progress、満了で駆除
+  const [phraseInBug, setPhraseInBug] = useState(0);
+  const [fixedCount, setFixedCount] = useState(0);
+  const [phrase, setPhrase] = useState(() => pickBugFixPhrase());
+
+  useEffect(() => {
+    if (bugCount > 0) return;
+    sfx.phase();
+    const t = window.setTimeout(onAllDone, 1200);
+    return () => window.clearTimeout(t);
+  }, [bugCount]);
+
+  if (bugCount <= 0) {
+    return (
+      <PhaseShell label="デバッグ">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+          <span style={{ fontSize: 26, fontWeight: 700, color: DEV.greenBright }}>
+            ✓ バグゼロ！
+          </span>
+          <span style={{ fontSize: 13, color: DEV.cream }}>
+            {fixedCount > 0
+              ? `${fixedCount} 匹すべて駆除した。品質ボーナスを獲得（バグゼロ +5）`
+              : 'もともとバグが無かった。品質ボーナスを獲得（バグゼロ +5）'}
+          </span>
+        </div>
+      </PhaseShell>
+    );
+  }
+
+  return (
+    <PhaseShell label="デバッグ">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ fontSize: 12, color: DEV.sub }}>
+          残りバグ <span style={{ color: DEV.orange, fontWeight: 700 }}>🐛×{bugCount}</span>
+          <span style={{ marginLeft: 8 }}>
+            （修正 {phraseInBug}/{BUG_CONFIG.phrasesPerBug} 文）
+          </span>
+        </div>
+        <div style={{ fontSize: 20, color: DEV.cream, fontWeight: 700 }}>
+          🐛 バグを修正する（{fixedCount + 1} 匹目）
+        </div>
+
+        <MissionTyping
+          key={`${fixedCount}-${phraseInBug}`}
+          phrase={phrase}
+          onComplete={() => {
+            const next = phraseInBug + 1;
+            if (next >= BUG_CONFIG.phrasesPerBug) {
+              onFix();
+              sfx.success();
+              setFixedCount((n) => n + 1);
+              setPhraseInBug(0);
+            } else {
+              setPhraseInBug(next);
+            }
+            setPhrase(pickBugFixPhrase());
+          }}
+        />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            onClick={onAllDone}
+            style={{
+              fontFamily: 'inherit',
+              fontSize: 11,
+              padding: '4px 10px',
+              background: '#3a2a12',
+              color: DEV.orange,
+              border: `1px solid ${DEV.orange}`,
+              cursor: 'pointer',
+            }}
+          >
+            ⚠ このまま発売する（残バグ 1 匹につき 品質−{BUG_CONFIG.qualityPenaltyPerBug}・炎上+
+            {BUG_CONFIG.reputationRiskPerBug}）
+          </button>
+        </div>
+      </div>
+    </PhaseShell>
+  );
+};
+
 const MissionFlow = ({
   phase,
   label,
+  bugCount,
   onAllDone,
   applyDelta,
 }: {
   phase: DevPhase;
   label: string;
+  /** v0.17：テストフェーズ完了時に「発覚」させる残バグ数 */
+  bugCount: number;
   onAllDone: () => void;
   applyDelta: (delta: AxisDelta) => void;
 }) => {
@@ -1956,6 +2107,19 @@ const MissionFlow = ({
           <span style={{ fontSize: 26, fontWeight: 700, color: DEV.greenBright }}>
             ✓ {label}フェーズ 完了
           </span>
+          {phase === 'testing' && (
+            <span
+              style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: bugCount > 0 ? DEV.orange : DEV.greenBright,
+              }}
+            >
+              {bugCount > 0
+                ? `🐛 バグが ${bugCount} 匹みつかった！ デバッグで直そう`
+                : '🎉 バグは見つからなかった！'}
+            </span>
+          )}
           {log.length > 0 ? (
             <div style={{ ...devBox(), gap: 2, alignSelf: 'stretch' }}>
               {log.map((line, idx) => (

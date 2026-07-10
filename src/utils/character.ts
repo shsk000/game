@@ -65,9 +65,10 @@ export const computeCharacterScore = (
   const roleCount = new Set(assignedEmployees.map((e) => e.role)).size;
   const roleVarietyBonus = roleCount >= 3 ? 10 : roleCount === 2 ? 5 : 0;
 
-  // 3) 規模適合：推奨人数より少ない -10、ぴったり 0、超過 -5
+  // 3) 規模適合：推奨人数より少ない -10（雇用の動機）。
+  // v0.17：超過ペナルティは廃止（全員参加制で人数はプレイヤーのレバーではなくなったため）
   const recommended = RECOMMENDED_HEADCOUNT[scale];
-  const fitBonus = headcount < recommended ? -10 : headcount === recommended ? 0 : -5;
+  const fitBonus = headcount < recommended ? -10 : 0;
 
   const raw = powerBonus + roleVarietyBonus + fitBonus;
   const score = clamp(raw, 0, 100);

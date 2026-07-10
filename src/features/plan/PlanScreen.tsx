@@ -3,8 +3,9 @@ import { ads } from '../../ads/AdProvider';
 import { JacketView } from '../../components/JacketView';
 import { Tutorial } from '../../components/Tutorial';
 import { PixelButton, PixelWindow } from '../../components/ui';
+import { bugSuppression } from '../../core/bugs';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
-import { planWeeksAllowance } from '../../data/balance';
+import { planWeeksAllowance, ROLE_EFFECT } from '../../data/balance';
 import { compatLabel, getCompat } from '../../data/compatibility';
 import type { GenreId } from '../../data/genres';
 import { GENRE_BY_ID, GENRES } from '../../data/genres';
@@ -12,6 +13,7 @@ import type { Scale } from '../../data/scales';
 import { SCALE_BY_ID, SCALES } from '../../data/scales';
 import type { ThemeId } from '../../data/themes';
 import { THEME_BY_ID, THEMES } from '../../data/themes';
+import { generateTitle } from '../../data/titleGenerator';
 import { trendLabel } from '../../data/trend';
 import { useGameStore } from '../../state/gameStore';
 import { estimateRevenueRange, formatWeeks, formatYen } from '../../utils/format';
@@ -130,7 +132,7 @@ export const PlanScreen = () => {
   const [genreId, setGenreId] = useState<GenreId>(firstGenre);
   const [themeId, setThemeId] = useState<ThemeId>(firstTheme);
   const [scale, setScale] = useState<Scale>('mini');
-  const [assignedEmployeeIds, setAssignedEmployeeIds] = useState<string[]>([]);
+  const [title, setTitle] = useState(() => generateTitle(firstGenre, firstTheme));
   const [surveyedCompat, setSurveyedCompat] = useState<number | null>(null);
   const [adRunning, setAdRunning] = useState(false);
 
@@ -145,23 +147,10 @@ export const PlanScreen = () => {
     setSurveyedCompat(null);
   }, [genreId, themeId]);
 
-  // 退職などで存在しなくなった従業員が割当に残っていたら除去
-  useEffect(() => {
-    setAssignedEmployeeIds((prev) => prev.filter((id) => employees.some((e) => e.id === id)));
-  }, [employees]);
-
   const isTrendyGenre = trend && trend.genreId === genreId;
   const isTrendyTheme = trend && trend.themeId === themeId;
 
   const pioneer = !library.some((w) => w.genreId === genreId && w.themeId === themeId);
-
-  const toggleEmployee = (id: string) => {
-    setAssignedEmployeeIds((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
-      if (prev.length >= 3) return prev;
-      return [...prev, id];
-    });
-  };
 
   const handleSurvey = () => {
     if (adRunning) return;
@@ -176,12 +165,12 @@ export const PlanScreen = () => {
     });
   };
 
-  // v0.14：カテゴリ選択は廃止（オーナー決定）。従業員 1 人以上で開始できる
-  const canStart = assignedEmployeeIds.length >= 1;
+  // v0.17：従業員は常に全員参加（オーナー指示）。社員が 1 人でもいれば開始できる
+  const canStart = employees.length >= 1;
 
   const handleStart = () => {
     if (!canStart) return;
-    startProject(genreId, themeId, scale, assignedEmployeeIds);
+    startProject(genreId, themeId, scale, title);
   };
 
   // v0.11 G2：PlanScreen は ScreenOverlay の中身として描画される（ページ遷移しない）
@@ -348,82 +337,75 @@ export const PlanScreen = () => {
           </div>
         </PixelWindow>
 
-        {/* 従業員アサイン */}
+        {/* v0.17：開発チーム（常に全員参加）＋チーム効果プレビュー */}
         <PixelWindow
           title={
             <span>
-              従業員アサイン
-              <span style={subMetaStyle}>アサイン {assignedEmployeeIds.length}/3</span>
+              👥 開発チーム<span style={subMetaStyle}>全員参加（{employees.length}人）</span>
             </span>
           }
           variant="standard"
         >
           {employees.length === 0 ? (
-            <p style={hintStyle}>オフィスで従業員を雇うとアサインできます。</p>
+            <p style={hintStyle}>オフィスで従業員を雇うと開発を始められます。</p>
           ) : (
-            <ul
-              style={{
-                listStyle: 'none',
-                margin: 0,
-                padding: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 6,
-              }}
-            >
-              {employees.map((e) => {
-                const isAssigned = assignedEmployeeIds.includes(e.id);
-                const reachedMax = assignedEmployeeIds.length >= 3 && !isAssigned;
-                const roleLabel =
-                  e.role === 'programmer'
-                    ? 'プログラマー'
-                    : e.role === 'designer'
-                      ? 'デザイナー'
-                      : '広報';
-                return (
-                  <li key={e.id}>
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        padding: '6px 10px',
-                        background: isAssigned ? '#fff3cf' : '#eef0f3',
-                        border: `3px solid ${COLORS.borderHard}`,
-                        cursor: reachedMax ? 'not-allowed' : 'pointer',
-                        opacity: reachedMax ? 0.6 : 1,
-                        fontSize: 13,
-                        boxShadow: isAssigned
-                          ? 'inset 0 0 0 2px #d99114'
-                          : 'inset 0 0 0 2px rgba(0,0,0,0.1)',
-                        imageRendering: 'pixelated',
-                        userSelect: 'none',
-                      }}
-                    >
-                      {/* テスト互換性のため <input type="checkbox" data-employee-id> を維持 */}
-                      <input
-                        type="checkbox"
-                        data-employee-id={e.id}
-                        checked={isAssigned}
-                        disabled={reachedMax}
-                        onChange={() => toggleEmployee(e.id)}
-                        style={{
-                          width: 16,
-                          height: 16,
-                          accentColor: '#5aa84a',
-                          cursor: reachedMax ? 'not-allowed' : 'pointer',
-                        }}
-                      />
-                      <strong style={{ minWidth: 80 }}>{e.name}</strong>
-                      <span style={{ fontSize: 11, color: COLORS.textSub }}>
-                        {roleLabel} ／ Lv{e.level} power {e.power.toFixed(2)}
-                      </span>
-                      {/* v0.14：得意分野表示はカテゴリ廃止に伴い一旦撤去（ジャンル連動への転用を検討中） */}
-                    </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <ul
+                style={{
+                  listStyle: 'none',
+                  margin: 0,
+                  padding: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}
+              >
+                {employees.map((e) => (
+                  <li key={e.id} style={{ fontSize: 12, color: COLORS.textDark }}>
+                    <strong>{e.name}</strong>
+                    <span style={{ fontSize: 11, color: COLORS.textSub, marginLeft: 6 }}>
+                      {e.role === 'programmer'
+                        ? '🧑‍💻 プログラマー'
+                        : e.role === 'designer'
+                          ? '🎨 デザイナー'
+                          : '📣 広報'}{' '}
+                      ／ Lv{e.level}
+                    </span>
                   </li>
+                ))}
+              </ul>
+              {(() => {
+                // このチームで作ると何が起きるか（効き先の可視化。値は balance.ts から生成）
+                const speed = employees
+                  .filter((e) => e.role === 'programmer')
+                  .reduce((a, b) => a + b.power * ROLE_EFFECT.programmerLocPerSec, 0);
+                const quality = employees
+                  .filter((e) => e.role === 'designer')
+                  .reduce((a, b) => a + b.power * ROLE_EFFECT.designerQualityBonus, 0);
+                const sales = employees
+                  .filter((e) => e.role === 'pr')
+                  .reduce((a, b) => a + b.power * ROLE_EFFECT.prSalesBonus, 0);
+                const suppress = Math.round(bugSuppression(employees) * 100);
+                return (
+                  <div
+                    style={{
+                      borderTop: `2px solid ${COLORS.borderHard}`,
+                      paddingTop: 6,
+                      fontSize: 11,
+                      color: COLORS.textDark,
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      rowGap: 2,
+                    }}
+                  >
+                    <span>⚡ 開発速度 +{speed.toFixed(2)} LoC/秒</span>
+                    <span>🎨 品質 +{quality.toFixed(1)}</span>
+                    <span>📣 売上 +{Math.round(sales * 100)}%</span>
+                    <span>🐛 バグ抑制 {suppress}%</span>
+                  </div>
                 );
-              })}
-            </ul>
+              })()}
+            </div>
           )}
         </PixelWindow>
       </div>
@@ -490,6 +472,34 @@ export const PlanScreen = () => {
 
         {/* 企画プレビュー */}
         <PixelWindow title="🎮 企画プレビュー" variant="emphasis" bodyStyle={{ padding: 8 }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+            <input
+              type="text"
+              value={title}
+              maxLength={16}
+              placeholder="ゲームタイトル"
+              onChange={(e) => setTitle(e.target.value)}
+              aria-label="ゲームタイトル"
+              style={{
+                flex: 1,
+                fontSize: 13,
+                fontWeight: 700,
+                padding: '4px 6px',
+                border: `3px solid ${COLORS.borderHard}`,
+                background: '#fffef2',
+                color: COLORS.textDark,
+                fontFamily: 'inherit',
+              }}
+            />
+            <PixelButton
+              size="small"
+              variant="secondary"
+              onClick={() => setTitle(generateTitle(genreId, themeId))}
+              ariaLabel="タイトルをランダム生成"
+            >
+              🎲
+            </PixelButton>
+          </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
             <JacketView genreId={genreId} themeId={themeId} size="sm" />
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -552,7 +562,9 @@ export const PlanScreen = () => {
               ▶ 開発開始
             </PixelButton>
             {!canStart && (
-              <p style={{ ...hintStyle, fontSize: 10 }}>※従業員 1 人以上のアサインが必要</p>
+              <p style={{ ...hintStyle, fontSize: 10 }}>
+                ※従業員がいません（オフィスで採用すると開始できます）
+              </p>
             )}
             <p style={{ ...hintStyle, fontSize: 11 }}>資金: {formatYen(funds)}</p>
           </div>

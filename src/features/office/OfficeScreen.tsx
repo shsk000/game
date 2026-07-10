@@ -9,6 +9,7 @@ import {
   PixelWindow,
   SegGauge,
 } from '../../components/ui';
+import { nextExpFor } from '../../core/growth';
 import { ACHIEVEMENTS } from '../../data/achievements';
 import { computeBorrowingLimit, DEBT_CONFIG, ROLE_EFFECT } from '../../data/balance';
 import { REFRESH_COST, roleLabel, sumMonthlySalaries } from '../../data/employees';
@@ -38,7 +39,7 @@ type ModalKind = 'hire' | 'scale' | 'achievements' | 'settings' | 'debt' | null;
 // v0.16：power は 0..1 正規化。表示は ROLE_EFFECT で実効値に換算する
 const formatPower = (role: string, power: number) => {
   if (role === 'programmer')
-    return `+${(power * ROLE_EFFECT.programmerLocPerSec).toFixed(2)} LoC/秒`;
+    return `開発 +${(power * ROLE_EFFECT.programmerLocPerSec).toFixed(2)} LoC/秒・🐛バグ抑制`;
   if (role === 'designer')
     return `品質基礎 +${(power * ROLE_EFFECT.designerQualityBonus).toFixed(1)}`;
   return `売上 +${Math.round(power * ROLE_EFFECT.prSalesBonus * 100)}%`;
@@ -654,6 +655,7 @@ export const OfficeScreen = () => {
                   </span>
                   <span style={{ fontWeight: 700, fontSize: 13, flex: 1 }}>{e.name}</span>
                   <span style={{ fontSize: 11, color: '#3a4452' }}>
+                    Lv{e.level}（次まで exp {Math.max(0, nextExpFor(e.level) - e.exp)}）／{' '}
                     {formatPower(e.role, e.power)}
                   </span>
                   <PixelButton size="small" variant="danger" onClick={() => fireEmployee(e.id)}>
