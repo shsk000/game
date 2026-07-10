@@ -159,16 +159,9 @@ export const OfficeScreen = () => {
     },
   ];
 
-  // G1：規模ごとの OfficeView 実寸（OfficeView の LAYOUTS × cellPx=96 と同期）
-  const STAGE_SIZE: Record<string, { w: number; h: number }> = {
-    mini: { w: 768, h: 672 },
-    mobile: { w: 1056, h: 672 },
-    indie: { w: 1056, h: 864 },
-    hit: { w: 1344, h: 864 },
-    aaa: { w: 1344, h: 1056 },
-  };
-  const stageSize = STAGE_SIZE[currentScale] ?? STAGE_SIZE.mini;
-  // 等倍を上限に（画面に収まらない大きい規模だけ縮小）。mini を画面いっぱいに拡大しない＝?layout と同サイズ。
+  // v0.17.1：オフィスの見た目は規模で変えない（オーナー指示「大きさは変わらなくていい」）。
+  // 常に mini 部屋（768×672）で固定。机レイアウトは元々全規模共通。
+  const stageSize = { w: 768, h: 672 };
   const stageScale = Math.min(1, 1280 / stageSize.w, 720 / stageSize.h);
 
   // G5：お知らせ（リファレンスの左上窓）。store の状態から直近の出来事を導出
@@ -199,7 +192,7 @@ export const OfficeScreen = () => {
       {/* ── 世界ステージ：オフィスが画面全体（HUD の裏まで広がる） ── */}
       <div className="office-stage">
         <div style={{ transform: `scale(${stageScale})`, transformOrigin: 'center center' }}>
-          <OfficeView scale={currentScale} employeeCount={employees.length} />
+          <OfficeView scale="mini" employeeCount={employees.length} />
         </div>
       </div>
 
