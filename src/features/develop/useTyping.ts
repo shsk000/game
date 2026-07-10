@@ -1,5 +1,6 @@
 import NanoTypeJp from '@shsk002/nano-type-jp';
 import { useEffect, useRef, useState } from 'react';
+import { applyKey, initialTypingStats, type TypingStats } from './typingEngine';
 
 export type TypingView = {
   hiragana: string;
@@ -21,6 +22,11 @@ type Options = {
   onAccuracy?: (acc: number) => void;
 };
 
+/**
+ * タイピング入力フック（薄いアダプタ。logic-architecture §5）。
+ * 責務は「nano-type-jp の保持・keypress 購読・React state への反映」のみ。
+ * コンボ/WPM/正確度の計算は typingEngine.ts（純粋関数）に委譲する。
+ */
 export const useTyping = ({
   phrases,
   onPhraseComplete,
@@ -53,13 +59,8 @@ export const useTyping = ({
     onAccuracyRef.current = onAccuracy;
   }, [onPhraseComplete, onComboBreak, onCorrect, onWpm, onAccuracy]);
 
-  // WPM 計算用：成功打鍵タイムスタンプ（直近30件で平均）
-  const correctTimesRef = useRef<number[]>([]);
-  // 正確度カウント
-  const correctCountRef = useRef(0);
-  const failCountRef = useRef(0);
-  // combo の実値（setState の updater 内で副作用コールバックを呼ばないための真値）
-  const comboValueRef = useRef(0);
+  // 統計の真値（setState の updater 内で副作用コールバックを呼ばないため ref に保持）
+  const statsRef = useRef<TypingStats>(initialTypingStats());
 
   useEffect(() => {
     const engine = engineRef.current!;
@@ -75,60 +76,39 @@ export const useTyping = ({
 
   useEffect(() => {
     if (paused) return;
-    const reportAccuracy = () => {
-      const correct = correctCountRef.current;
-      const fail = failCountRef.current;
-      const total = correct + fail;
-      const acc = total === 0 ? 1 : correct / total;
-      setAccuracy(acc);
-      onAccuracyRef.current?.(acc);
-    };
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key.length !== 1) return;
       const engine = engineRef.current!;
       const r = engine.answerAlphabet(e.key);
+      if (r.result !== 'correct' && r.result !== 'fail' && r.result !== 'complete') return;
+
+      const applied = applyKey(statsRef.current, r.result, performance.now());
+      statsRef.current = applied.stats;
+
+      // React state へ反映
+      setCombo(applied.stats.combo);
+      setFailCount(applied.stats.failCount);
+      setAccuracy(applied.stats.accuracy);
+      if (applied.wpmUpdated) setWpm(applied.stats.wpm);
+
+      // 種別ごとの表示更新とコールバック発火
       if (r.result === 'correct') {
-        correctCountRef.current += 1;
         setView((v) => ({
           ...v,
           completed: r.inputAlphabet.completedInputAlphabet,
           remained: r.inputAlphabet.remainedAlphabet,
         }));
-        const nc = comboValueRef.current + 1;
-        comboValueRef.current = nc;
-        setCombo(nc);
-        onCorrectRef.current?.(nc);
-        const now = performance.now();
-        const arr = correctTimesRef.current;
-        arr.push(now);
-        while (arr.length > 30) arr.shift();
-        if (arr.length >= 5) {
-          const spanMin = (arr[arr.length - 1] - arr[0]) / 1000 / 60;
-          if (spanMin > 0) {
-            const w = (arr.length - 1) / spanMin;
-            setWpm(w);
-            onWpmRef.current?.(w);
-          }
-        }
-        reportAccuracy();
+        onCorrectRef.current?.(applied.stats.combo);
+        if (applied.wpmUpdated) onWpmRef.current?.(applied.stats.wpm);
       } else if (r.result === 'fail') {
-        failCountRef.current += 1;
-        setFailCount((c) => c + 1);
-        if (comboValueRef.current > 0) onComboBreakRef.current?.(comboValueRef.current);
-        comboValueRef.current = 0;
-        setCombo(0);
-        reportAccuracy();
-      } else if (r.result === 'complete') {
-        correctCountRef.current += 1;
+        if (applied.comboBroken !== null) onComboBreakRef.current?.(applied.comboBroken);
+      } else {
         onPhraseCompleteRef.current();
-        const nc = comboValueRef.current + 1;
-        comboValueRef.current = nc;
-        setCombo(nc);
-        onCorrectRef.current?.(nc);
+        onCorrectRef.current?.(applied.stats.combo);
         setIdx((i) => i + 1);
-        reportAccuracy();
       }
+      onAccuracyRef.current?.(applied.stats.accuracy);
     };
     window.addEventListener('keypress', handler);
     return () => window.removeEventListener('keypress', handler);
