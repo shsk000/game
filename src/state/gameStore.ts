@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { rollBugOnMiss, rollBugOnPhrase } from '../core/bugs';
+import { ensureMinBugsOnDevComplete, rollBugOnKeystroke, rollBugOnMiss } from '../core/bugs';
 import { computeBorrow, computeMonthlyTick, computeRepay } from '../core/economy';
 import type { LevelUp } from '../core/growth';
 import { type Deps, defaultDeps } from '../core/ports';
@@ -118,8 +118,8 @@ type Actions = {
   buyAdSurvey: (g: GenreId, t: ThemeId) => void;
   /** v0.17：ミス打鍵によるバグ発生判定（発生したら true。プログラマー力で抑制） */
   noteBugOnMiss: () => boolean;
-  /** v0.17：フレーズ完走ごとのコード起因バグ判定（発生したら true） */
-  noteBugOnPhrase: () => boolean;
+  /** v0.17.1：正打 1 打鍵ごとのバグ判定（発生したら true。社員能力で抑制） */
+  noteBugOnKeystroke: () => boolean;
   /** v0.17：デバッグフェーズでバグを 1 匹修正 */
   fixBug: () => void;
   hireCandidate: () => boolean;
@@ -449,7 +449,10 @@ export const useGameStore = create<GameState>()(
         get().finishDevelopment();
         return;
       }
-      set({ current: { ...cur, phase: next } });
+      // v0.17.1：開発完了時はバグの最低保証（どんなコードにもバグはいる）
+      const bugCount =
+        phase === 'development' ? ensureMinBugsOnDevComplete(cur.bugCount) : cur.bugCount;
+      set({ current: { ...cur, phase: next, bugCount } });
     },
 
     applyAxisDelta: (delta) => {
@@ -496,10 +499,10 @@ export const useGameStore = create<GameState>()(
       return true;
     },
 
-    noteBugOnPhrase: () => {
+    noteBugOnKeystroke: () => {
       const cur = get().current;
       if (!cur || cur.finishedAt !== null) return false;
-      if (!rollBugOnPhrase(get().employees, deps.rng)) return false;
+      if (!rollBugOnKeystroke(get().employees, deps.rng)) return false;
       set({ current: { ...cur, bugCount: cur.bugCount + 1 } });
       return true;
     },

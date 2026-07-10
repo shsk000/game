@@ -5,10 +5,11 @@ import {
   BUG_FIX_PHRASES,
   bugSuppression,
   debugWorkFor,
+  ensureMinBugsOnDevComplete,
   pickBugFixPhrase,
   remainingBugPenalty,
+  rollBugOnKeystroke,
   rollBugOnMiss,
-  rollBugOnPhrase,
 } from './bugs';
 import { mulberry32 } from './ports';
 
@@ -48,9 +49,9 @@ describe('rollBugOnMiss / rollBugOnPhrase（発生率）', () => {
     return hit / 10_000;
   };
 
-  it('ミス打鍵のバグ化率はエンジニアがいないと基礎率どおり', () => {
+  it('バグ化率はエンジニアがいないと基礎率どおり（ミス/正打鍵）', () => {
     expect(rate(rollBugOnMiss, [])).toBeCloseTo(BUG_CONFIG.onMissRate, 1);
-    expect(rate(rollBugOnPhrase, [])).toBeCloseTo(BUG_CONFIG.onPhraseRate, 1);
+    expect(rate(rollBugOnKeystroke, [])).toBeCloseTo(BUG_CONFIG.onKeystrokeRate, 2);
   });
 
   it('エンジニアを入れると発生率が下がる', () => {
@@ -75,6 +76,16 @@ describe('remainingBugPenalty（このまま発売の代償）', () => {
       qualityPenalty: 5 * BUG_CONFIG.qualityPenaltyPerBug,
       reputationRisk: 5 * BUG_CONFIG.reputationRiskPerBug,
     });
+  });
+});
+
+describe('ensureMinBugsOnDevComplete（v0.17.1 最低保証）', () => {
+  it('抽選が全部外れても最低 1 匹は見つかる（まともに作ってもバグは出る）', () => {
+    expect(ensureMinBugsOnDevComplete(0)).toBe(BUG_CONFIG.minBugsOnDevComplete);
+  });
+
+  it('すでに出ている分はそのまま', () => {
+    expect(ensureMinBugsOnDevComplete(5)).toBe(5);
   });
 });
 

@@ -14,6 +14,8 @@ type Options = {
   paused?: boolean;
   /** コンボが切れたとき呼ばれる */
   onComboBreak?: (lastCombo: number) => void;
+  /** ミス打鍵ごとに毎回呼ばれる（コンボ 0 中のミスも含む） */
+  onFail?: () => void;
   /** 正打ごとに今のコンボ値が渡る */
   onCorrect?: (combo: number) => void;
   /** WPM（成功打鍵/分）が更新されたとき */
@@ -32,6 +34,7 @@ export const useTyping = ({
   onPhraseComplete,
   paused = false,
   onComboBreak,
+  onFail,
   onCorrect,
   onWpm,
   onAccuracy,
@@ -48,16 +51,18 @@ export const useTyping = ({
 
   const onPhraseCompleteRef = useRef(onPhraseComplete);
   const onComboBreakRef = useRef(onComboBreak);
+  const onFailRef = useRef(onFail);
   const onCorrectRef = useRef(onCorrect);
   const onWpmRef = useRef(onWpm);
   const onAccuracyRef = useRef(onAccuracy);
   useEffect(() => {
     onPhraseCompleteRef.current = onPhraseComplete;
     onComboBreakRef.current = onComboBreak;
+    onFailRef.current = onFail;
     onCorrectRef.current = onCorrect;
     onWpmRef.current = onWpm;
     onAccuracyRef.current = onAccuracy;
-  }, [onPhraseComplete, onComboBreak, onCorrect, onWpm, onAccuracy]);
+  }, [onPhraseComplete, onComboBreak, onFail, onCorrect, onWpm, onAccuracy]);
 
   // 統計の真値（setState の updater 内で副作用コールバックを呼ばないため ref に保持）
   const statsRef = useRef<TypingStats>(initialTypingStats());
@@ -102,6 +107,7 @@ export const useTyping = ({
         onCorrectRef.current?.(applied.stats.combo);
         if (applied.wpmUpdated) onWpmRef.current?.(applied.stats.wpm);
       } else if (r.result === 'fail') {
+        onFailRef.current?.();
         if (applied.comboBroken !== null) onComboBreakRef.current?.(applied.comboBroken);
       } else {
         onPhraseCompleteRef.current();

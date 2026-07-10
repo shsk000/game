@@ -99,6 +99,18 @@ describe('save / load（v5 往復）', () => {
     expect(loaded?.unlockedGenres).toContain('puzzle');
   });
 
+  it('ステージ解放したジャンル/テーマはリロードで巻き戻らない（v0.17.1 回帰）', () => {
+    const d = storage.defaults();
+    storage.save({
+      ...d,
+      unlockedGenres: [...d.unlockedGenres, 'action'],
+      unlockedThemes: [...d.unlockedThemes, 'ninja'],
+    });
+    const loaded = storage.load();
+    expect(loaded?.unlockedGenres).toContain('action');
+    expect(loaded?.unlockedThemes).toContain('ninja');
+  });
+
   it('reset で消える', () => {
     storage.save(storage.defaults());
     storage.reset();

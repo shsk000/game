@@ -95,7 +95,7 @@ export const DevelopScreen = () => {
   const addDevStat = useGameStore((s) => s.addDevStat);
   const advancePhase = useGameStore((s) => s.advancePhase);
   const noteBugOnMiss = useGameStore((s) => s.noteBugOnMiss);
-  const noteBugOnPhrase = useGameStore((s) => s.noteBugOnPhrase);
+  const noteBugOnKeystroke = useGameStore((s) => s.noteBugOnKeystroke);
   const fixBug = useGameStore((s) => s.fixBug);
   const bugCount = useGameStore((s) => s.current?.bugCount ?? 0);
   const applyAxisDelta = useGameStore((s) => s.applyAxisDelta);
@@ -347,11 +347,6 @@ export const DevelopScreen = () => {
           progressGain(wpmRef.current, false, comboRef.current) * (feverActiveRef.current ? 2 : 1);
         addDevelopLoC(progress);
 
-        // v0.17：コード起因バグ（ミスゼロでも一定量出る）。デバッグフェーズで返済する
-        if (noteBugOnPhrase()) {
-          sfx.alert();
-        }
-
         // 待機中のイベントがあれば、次の文としてイベント文を投入（途中差し替えしない）
         if (pendingRef.current) {
           setActiveEvent(pendingRef.current);
@@ -369,14 +364,23 @@ export const DevelopScreen = () => {
     onCorrect: (c) => {
       comboRef.current = c;
       sfx.key();
-      if (isDevelopment) addFever(1); // フィーバー（ノリ）は開発フェーズ専用
+      if (isDevelopment) {
+        addFever(1); // フィーバー（ノリ）は開発フェーズ専用
+        // v0.17.1：実装の打鍵のたびにバグ抽選（社員能力が高いほど発生率低下）
+        if (noteBugOnKeystroke()) {
+          sfx.alert();
+          setFlash((n) => n + 1);
+        }
+      }
       reportCombo(c);
     },
     onComboBreak: () => {
       comboRef.current = 0;
       sfx.miss();
       decayFever();
-      // v0.17：ミス打鍵はバグの種（プログラマー力で抑制）。開発フェーズ中のみ
+    },
+    // v0.17.1：バグの種はコンボ切れではなく「毎ミス」で判定（連続ミスも漏らさない）
+    onFail: () => {
       if (isDevelopment && noteBugOnMiss()) {
         sfx.alert();
         setFlash((n) => n + 1);

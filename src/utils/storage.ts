@@ -354,14 +354,18 @@ const shapeLoaded = (parsed: Persisted): Persisted => {
       : [...INITIAL_CATEGORY_IDS];
   merged.currentDate = parsed.currentDate ?? { ...INITIAL_GAME_DATE };
 
-  // v0.10 仕上げマイグレーション：人気ジャンル / テーマを再ロック
-  // 達成（library に既出のもの）は維持しつつ、設計上 stage 1 のものだけに絞り込む。
-  const newInitialGenres = defaults().unlockedGenres;
-  const newInitialThemes = defaults().unlockedThemes;
-  const usedGenres = new Set(merged.library.map((w) => w.genreId));
-  const usedThemes = new Set(merged.library.map((w) => w.themeId));
-  merged.unlockedGenres = Array.from(new Set([...newInitialGenres, ...Array.from(usedGenres)]));
-  merged.unlockedThemes = Array.from(new Set([...newInitialThemes, ...Array.from(usedThemes)]));
+  // v0.17.1 修正：保存済みの解放（ステージ解放含む）を尊重する。
+  // 旧実装は v0.10 時代の「人気ジャンル再ロック」を毎回適用しており、
+  // セッション中に解放したジャンル/テーマがリロードで巻き戻っていた（オーナー報告）。
+  // 初期解放 ∪ 保存済み解放 ∪ ライブラリ使用済み の和集合で防御だけ行う。
+  const usedGenres = merged.library.map((w) => w.genreId);
+  const usedThemes = merged.library.map((w) => w.themeId);
+  merged.unlockedGenres = Array.from(
+    new Set([...defaults().unlockedGenres, ...(parsed.unlockedGenres ?? []), ...usedGenres]),
+  );
+  merged.unlockedThemes = Array.from(
+    new Set([...defaults().unlockedThemes, ...(parsed.unlockedThemes ?? []), ...usedThemes]),
+  );
   return merged;
 };
 

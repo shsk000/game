@@ -24,9 +24,16 @@ export const bugSuppression = (employees: Employee[]): number =>
 export const rollBugOnMiss = (employees: Employee[], rng: Rng): boolean =>
   rng() < BUG_CONFIG.onMissRate * (1 - bugSuppression(employees));
 
-/** フレーズ完走 1 回でコード起因バグが発生するか（ミスゼロでも一定量出る） */
-export const rollBugOnPhrase = (employees: Employee[], rng: Rng): boolean =>
-  rng() < BUG_CONFIG.onPhraseRate * (1 - bugSuppression(employees));
+/** 正打 1 打鍵ごとのバグ発生判定（実装するほどバグは埋まる。ミスゼロでも出る） */
+export const rollBugOnKeystroke = (employees: Employee[], rng: Rng): boolean =>
+  rng() < BUG_CONFIG.onKeystrokeRate * (1 - bugSuppression(employees));
+
+/**
+ * 開発完了時の最低保証（v0.17.1）。抽選が全部外れても最低 minBugsOnDevComplete 匹は
+ * テストで見つかる。エンジニアが強くても「ゼロにはならない」（抑制は量を減らすだけ）。
+ */
+export const ensureMinBugsOnDevComplete = (bugCount: number): number =>
+  Math.max(BUG_CONFIG.minBugsOnDevComplete, bugCount);
 
 /** デバッグフェーズの作業量（修正フレーズ数）＝ バグが多いほど大変（線形） */
 export const debugWorkFor = (bugCount: number): number =>
