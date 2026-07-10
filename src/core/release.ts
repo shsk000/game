@@ -1,4 +1,4 @@
-import { STAT_QUALITY_BONUS_CAP } from '../data/balance';
+import { AXIS_QUALITY_BONUS_CAP, STAT_QUALITY_BONUS_CAP } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { sumPrBonus } from '../data/employees';
 import type { GenreId } from '../data/genres';
@@ -140,11 +140,13 @@ export const computeRelease = (
   );
   // v0.17：残バグを抱えたまま発売した場合のペナルティ（品質減点＋炎上リスク）
   const bugPenalty = remainingBugPenalty(remainingBugs);
-  const axisQualityBonus =
-    (axes.funFactor + axes.usability + axes.balance) * 0.3 -
-    axes.bugRate * 0.2 +
-    statQualityBonus -
-    bugPenalty.qualityPenalty;
+  // v0.17.1：正のボーナス合計は AXIS_QUALITY_BONUS_CAP で頭打ち
+  // （企画・イベント・ビルドアップはタイピングの腕で増えるため、0.15 ウェイトの迂回路にしない）
+  const positiveAxisBonus = Math.min(
+    AXIS_QUALITY_BONUS_CAP,
+    (axes.funFactor + axes.usability + axes.balance) * 0.3 + statQualityBonus,
+  );
+  const axisQualityBonus = positiveAxisBonus - axes.bugRate * 0.2 - bugPenalty.qualityPenalty;
   const quality = Math.max(0, Math.min(100, Math.round(quality0 + axisQualityBonus)));
 
   const trend = ctx.trend;

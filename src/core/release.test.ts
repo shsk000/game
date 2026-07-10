@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { AXIS_QUALITY_BONUS_CAP } from '../data/balance';
 import { SCALE_BY_ID } from '../data/scales';
 import type { CurrentProject, DevAxes, Work } from '../state/types';
 import { ZERO_AXES } from '../state/types';
@@ -203,6 +204,18 @@ describe('computeRelease', () => {
     expect(grown.exp).toBeGreaterThan(0);
     expect(idle.exp).toBe(0);
     expect(Array.isArray(patch.lastLevelUps)).toBe(true);
+  });
+
+  it('企画・イベント由来の品質ボーナスは上限で頭打ち（v0.17.1 タイピング0.15の迂回防止）', () => {
+    const plain = computeRelease(ctx(), undefined, deps()).work;
+    // 面白さを極端に盛っても（×0.3 で +300 相当）、品質増は AXIS_QUALITY_BONUS_CAP まで
+    const boosted = computeRelease(
+      ctx({ current: project({ axes: axes({ funFactor: 1000 }) }) }),
+      undefined,
+      deps(),
+    ).work;
+    expect(boosted.quality - plain.quality).toBeLessThanOrEqual(AXIS_QUALITY_BONUS_CAP);
+    expect(boosted.quality).toBeGreaterThan(plain.quality);
   });
 
   it('残バグを抱えたまま発売すると品質が下がる（v0.17 バグシステム）', () => {

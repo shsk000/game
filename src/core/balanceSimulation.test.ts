@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STAT_QUALITY_BONUS_CAP } from '../data/balance';
+import { AXIS_QUALITY_BONUS_CAP } from '../data/balance';
 import type { Employee, EmployeeRole } from '../state/types';
 import { computeCharacterScore } from '../utils/character';
 import { computeMetascore, computeQualityV10 } from '../utils/metascore';
@@ -35,7 +35,7 @@ type Persona = {
   /** 相性スコア（0..100）。神=69（compat1.6）、初期good=42（1.25）など */
   affinity: number;
   typingScore: number;
-  /** ビルドアップ属性ボーナス（0..STAT_QUALITY_BONUS_CAP） */
+  /** 軸ボーナス（企画・イベント・ビルドアップの合計。上限 AXIS_QUALITY_BONUS_CAP） */
   statBonus: number;
   /** トレンド完全一致ボーナス（メタ +3.5 相当）を得ているか */
   trendMatch: boolean;
@@ -82,7 +82,7 @@ const earlyGame = (): Persona => {
     charPower: score,
     affinity: Math.round(((1.25 - 0.7) / 1.3) * 100), // 初期帯の上限 compat 1.25
     typingScore: 90,
-    statBonus: STAT_QUALITY_BONUS_CAP,
+    statBonus: AXIS_QUALITY_BONUS_CAP,
     trendMatch: true,
   };
 };
@@ -97,7 +97,7 @@ const midGame = (): Persona => {
     charPower: score,
     affinity: Math.round(((1.35 - 0.7) / 1.3) * 100),
     typingScore: 85,
-    statBonus: STAT_QUALITY_BONUS_CAP,
+    statBonus: AXIS_QUALITY_BONUS_CAP,
     trendMatch: true,
   };
 };
@@ -112,7 +112,7 @@ const lateGame = (): Persona => {
     charPower: score,
     affinity: Math.round(((1.6 - 0.7) / 1.3) * 100),
     typingScore: 92,
-    statBonus: STAT_QUALITY_BONUS_CAP,
+    statBonus: AXIS_QUALITY_BONUS_CAP,
     trendMatch: true,
   };
 };
