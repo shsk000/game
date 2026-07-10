@@ -116,7 +116,7 @@ type Actions = {
   releaseWork: (opts?: ReleaseOpts) => Work;
   buyAdDevBoost: () => void;
   buyAdSurvey: (g: GenreId, t: ThemeId) => void;
-  /** v0.17：ミス打鍵によるバグ発生判定（発生したら true。プログラマー力で抑制） */
+  /** v0.17.1：ミス打鍵はバグ確定（開発フェーズ中のみ。発生したら true） */
   noteBugOnMiss: () => boolean;
   /** v0.17.1：正打 1 打鍵ごとのバグ判定（発生したら true。社員能力で抑制） */
   noteBugOnKeystroke: () => boolean;
@@ -494,7 +494,7 @@ export const useGameStore = create<GameState>()(
     noteBugOnMiss: () => {
       const cur = get().current;
       if (!cur || cur.finishedAt !== null) return false;
-      if (!rollBugOnMiss(get().employees, deps.rng)) return false;
+      if (!rollBugOnMiss()) return false;
       set({ current: { ...cur, bugCount: cur.bugCount + 1 } });
       return true;
     },

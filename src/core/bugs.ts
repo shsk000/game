@@ -20,9 +20,11 @@ const programmerPowerSum = (employees: Employee[]): number =>
 export const bugSuppression = (employees: Employee[]): number =>
   Math.min(BUG_CONFIG.maxSuppression, programmerPowerSum(employees) / BUG_CONFIG.suppressCap);
 
-/** ミス打鍵 1 回でバグが発生するか */
-export const rollBugOnMiss = (employees: Employee[], rng: Rng): boolean =>
-  rng() < BUG_CONFIG.onMissRate * (1 - bugSuppression(employees));
+/**
+ * ミス打鍵はバグ確定（v0.17.1 オーナー指示「入力間違えた場合はバグ」）。
+ * 社員能力の抑制は正打側の抽選にのみ効く＝ミスの責任はプレイヤーの腕。
+ */
+export const rollBugOnMiss = (): boolean => BUG_CONFIG.missAlwaysBugs;
 
 /** 正打 1 打鍵ごとのバグ発生判定（実装するほどバグは埋まる。ミスゼロでも出る） */
 export const rollBugOnKeystroke = (employees: Employee[], rng: Rng): boolean =>

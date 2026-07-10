@@ -41,23 +41,24 @@ describe('bugSuppression（エンジニアの質がバグを抑える）', () =>
   });
 });
 
-describe('rollBugOnMiss / rollBugOnPhrase（発生率）', () => {
-  const rate = (roll: (e: Employee[], rng: () => number) => boolean, team: Employee[]) => {
+describe('rollBugOnMiss / rollBugOnKeystroke（発生判定）', () => {
+  const rate = (team: Employee[]) => {
     const rng = mulberry32(42);
     let hit = 0;
-    for (let i = 0; i < 10_000; i++) if (roll(team, rng)) hit++;
+    for (let i = 0; i < 10_000; i++) if (rollBugOnKeystroke(team, rng)) hit++;
     return hit / 10_000;
   };
 
-  it('バグ化率はエンジニアがいないと基礎率どおり（ミス/正打鍵）', () => {
-    expect(rate(rollBugOnMiss, [])).toBeCloseTo(BUG_CONFIG.onMissRate, 1);
-    expect(rate(rollBugOnKeystroke, [])).toBeCloseTo(BUG_CONFIG.onKeystrokeRate, 2);
+  it('ミス打鍵は必ずバグになる（v0.17.1 オーナー指示「入力間違えた場合はバグ」）', () => {
+    expect(rollBugOnMiss()).toBe(true);
   });
 
-  it('エンジニアを入れると発生率が下がる', () => {
-    const noEng = rate(rollBugOnMiss, []);
-    const withEng = rate(rollBugOnMiss, [programmer(1)]);
-    expect(withEng).toBeLessThan(noEng * 0.7);
+  it('正打鍵のバグ化率はエンジニアがいないと基礎率どおり', () => {
+    expect(rate([])).toBeCloseTo(BUG_CONFIG.onKeystrokeRate, 2);
+  });
+
+  it('エンジニアを入れると正打鍵の発生率が下がる', () => {
+    expect(rate([programmer(1)])).toBeLessThan(rate([]) * 0.7);
   });
 });
 

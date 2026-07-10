@@ -59,7 +59,8 @@ type LastResult =
       speedPct: number;
       qualityDelta: number;
       bugPct: number;
-      exp: number;
+      /** この 1 文で実際に進んだ完成度（進捗ゲージに入る値そのもの） */
+      progress: number;
       ts: number;
     }
   | {
@@ -67,8 +68,9 @@ type LastResult =
       rank: SpeedRank;
       funGain: number;
       hypeGain: number;
-      driftPct: number;
-      exp: number;
+      /** 獲得量の実際の内訳（コンボ倍率・速度倍率） */
+      comboMult: number;
+      speedMult: number;
       ts: number;
     }
   | { kind: 'event'; event: DevEvent; ts: number };
@@ -247,15 +249,14 @@ export const DevelopScreen = () => {
         const hypeGain = weights.hype * gain;
         applyAxisDelta({ funFactor: funGain, hype: hypeGain });
 
-        const impactNow = computeDevImpact({ wpm: wpmRef.current, accuracy: accuracyRef.current });
         sfx[rank === 'PERFECT' ? 'success' : 'complete']();
         setLastResult({
           kind: 'plan',
           rank,
           funGain,
           hypeGain,
-          driftPct: impactNow.bugPct,
-          exp: gain * 40,
+          comboMult,
+          speedMult,
           ts: Date.now(),
         });
 
@@ -299,6 +300,8 @@ export const DevelopScreen = () => {
         addDevStat(category, gain);
 
         const impactNow = computeDevImpact({ wpm: wpmRef.current, accuracy: accuracyRef.current });
+        const progressNow =
+          progressGain(wpmRef.current, false, comboRef.current) * (feverActiveRef.current ? 2 : 1);
         sfx[rank === 'PERFECT' ? 'success' : 'complete']();
         setLastResult({
           kind: 'ticket',
@@ -306,7 +309,7 @@ export const DevelopScreen = () => {
           speedPct: impactNow.speedPct,
           qualityDelta: impactNow.qualityDelta,
           bugPct: impactNow.bugPct,
-          exp: gain * 30,
+          progress: Math.round(progressNow * 10) / 10,
           ts: Date.now(),
         });
 
@@ -1436,13 +1439,8 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
           <ResultChip icon="💡" label="面白さ" value={`+${result.funGain}`} color="#ffd166" />
           <ResultChip icon="⭐" label="期待度" value={`+${result.hypeGain}`} color="#7adfff" />
-          <ResultChip
-            icon="🌀"
-            label="迷走リスク"
-            value={`${result.driftPct}%`}
-            color={result.driftPct <= 0 ? '#5fe08a' : '#ff6b6b'}
-          />
-          <ResultChip icon="✨" label="獲得EXP" value={`+${result.exp}`} color="#d8a5ff" />
+          <ResultChip icon="🔥" label="コンボ倍率" value={`×${result.comboMult}`} color="#ff9d4d" />
+          <ResultChip icon="⚡" label="速度倍率" value={`×${result.speedMult}`} color="#d8a5ff" />
         </div>
       </div>
     );
@@ -1466,7 +1464,7 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
           value={`${result.bugPct}%`}
           color={result.bugPct <= 0 ? '#5fe08a' : '#ff6b6b'}
         />
-        <ResultChip icon="✨" label="獲得EXP" value={`+${result.exp}`} color="#d8a5ff" />
+        <ResultChip icon="🏗" label="進捗" value={`+${result.progress}`} color="#d8a5ff" />
       </div>
     </div>
   );
