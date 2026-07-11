@@ -9,6 +9,8 @@ export type ScaleDef = {
   baseQuality: number;
   baseUnit: number;
   unlockCost: number;
+  /** v0.18：解放に必要な累計売上（これまで未参照の死に設定だったのを有効化） */
+  unlockSalesRequired: number;
   /** v0.10：標準必要週数。balance.ts から引く */
   neededWeeks: number;
   /** v0.10：開発の基本開発費（円）。balance.ts から引く（旧 baseCost） */
@@ -49,6 +51,7 @@ export const SCALES: ScaleDef[] = (['mini', 'mobile', 'indie', 'hit', 'aaa'] as 
       baseQuality: meta[id].baseQuality,
       baseUnit: meta[id].baseUnit,
       unlockCost: b.unlockCost,
+      unlockSalesRequired: b.unlockSalesRequired,
       neededWeeks: b.neededWeeks,
       baseCost: b.devCost,
       monthlyRent: MONTHLY_RENT, // 一律

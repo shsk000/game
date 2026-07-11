@@ -180,7 +180,7 @@ export const OfficeScreen = () => {
   if (debt > 0) {
     news.push({ icon: '⚠', text: `借金 ${formatYen(debt)} の返済をお忘れなく`, tone: 'warn' });
   }
-  if (next && funds >= next.unlockCost) {
+  if (next && funds >= next.unlockCost && lifetimeRevenue >= next.unlockSalesRequired) {
     news.push({ icon: '🏆', text: `「${next.name}」が解放可能です！`, tone: 'good' });
   }
   if (news.length === 0) {

@@ -543,6 +543,8 @@ export const useGameStore = create<GameState>()(
     unlockNextScale: () => {
       const next = nextLockedScale(get().unlockedScales);
       if (!next) return false;
+      // v0.18：累計売上ゲートを有効化（実績を積まないと金だけでは解放できない）
+      if (get().lifetimeRevenue < next.unlockSalesRequired) return false;
       if (get().funds < next.unlockCost) return false;
       set({
         funds: get().funds - next.unlockCost,
