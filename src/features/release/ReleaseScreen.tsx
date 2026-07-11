@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ads } from '../../ads/AdProvider';
 import { JacketView } from '../../components/JacketView';
 import { PixelWindow } from '../../components/ui';
+import { adviceFor } from '../../core/advice';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
 import { QUALITY_WEIGHTS } from '../../data/balance';
 import { compatLabel, getCompat } from '../../data/compatibility';
@@ -655,6 +656,19 @@ export const ReleaseScreen = () => {
                   </PixelWindow>
                 </div>
               </div>
+
+              {/* v0.18：次の一手（最大のボトルネックを1つだけ翻訳。core/advice.ts） */}
+              <p
+                style={{
+                  margin: '8px 0 0',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: '#24395c',
+                  textAlign: 'center',
+                }}
+              >
+                📈 {adviceFor(work)}
+              </p>
 
               <button className="primary-btn" onClick={handleNext}>
                 次へ（オフィス）

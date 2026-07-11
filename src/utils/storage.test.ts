@@ -37,7 +37,7 @@ describe('defaults', () => {
     expect(d.unlockedGenres).toEqual(['puzzle', 'adventure', 'simulation']);
     expect(d.unlockedThemes).toEqual(['sushi', 'onsen', 'farming']);
     expect(d.unlockedCategories).toEqual([...INITIAL_CATEGORY_IDS]);
-    expect(d.version).toBe(6);
+    expect(d.version).toBe(7);
   });
 });
 
@@ -118,7 +118,7 @@ describe('save / load（v5 往復）', () => {
   });
 });
 
-describe('v5 → v6 マイグレーション（v0.16 社員成長・power 正規化）', () => {
+describe('v5 → v7 マイグレーション（v0.16 power 正規化 + v0.18 累計圧縮）', () => {
   it('旧 power が役割別スケールから 0..1 に正規化され、成長フィールドが付く', () => {
     mem.setItem(
       'typing-factory:v5',
@@ -144,10 +144,10 @@ describe('v5 → v6 マイグレーション（v0.16 社員成長・power 正規
       expect(e.basePower).toBe(e.power);
       expect(e.wage).toBe(Math.round(computeMonthlyWage(e.power)));
     }
-    // v6 として保存し直され、旧キーは消える
+    // v7 として保存し直され、旧キーは消える
     expect(mem.getItem('typing-factory:v5')).toBeNull();
-    expect(mem.getItem('typing-factory:v6')).not.toBeNull();
-    expect(loaded?.version).toBe(6);
+    expect(mem.getItem('typing-factory:v7')).not.toBeNull();
+    expect(loaded?.version).toBe(7);
   });
 
   it('資金・ライブラリ等の進行は保持される', () => {
@@ -167,8 +167,34 @@ describe('v5 → v6 マイグレーション（v0.16 社員成長・power 正規
   });
 });
 
-describe('v4 → v6 マイグレーション', () => {
-  it('金額が ×10,000 され、v4 キーは削除される', () => {
+describe('v6 → v7 マイグレーション（v0.18 旧経済の圧縮）', () => {
+  it('累計売上が ÷100 され、解放が圧縮後の累計で再計算される', () => {
+    const d = storage.defaults();
+    mem.setItem(
+      'typing-factory:v6',
+      JSON.stringify({
+        ...d,
+        version: 6,
+        lifetimeRevenue: 150_000_000, // 旧経済の ¥1.5 億 → ¥150 万
+        unlockedScales: ['mini', 'mobile', 'indie', 'hit', 'aaa'],
+        unlockedGenres: ['puzzle', 'adventure', 'simulation', 'action', 'rpg', 'horror'],
+        unlockedThemes: ['sushi', 'onsen', 'farming', 'ninja', 'zombie'],
+      }),
+    );
+    const loaded = storage.load();
+    expect(loaded?.version).toBe(7);
+    expect(loaded?.lifetimeRevenue).toBe(1_500_000);
+    // ¥150 万では mobile（¥3000 万）に届かない → mini のみに再ロック
+    expect(loaded?.unlockedScales).toEqual(['mini']);
+    // ジャンル/テーマも stage1 に戻る（library 未使用のため）
+    expect(loaded?.unlockedGenres).toEqual(d.unlockedGenres);
+    expect(loaded?.unlockedThemes).toEqual(d.unlockedThemes);
+    expect(mem.getItem('typing-factory:v6')).toBeNull();
+  });
+});
+
+describe('v4 → v7 マイグレーション', () => {
+  it('金額が ×10,000 → 累計は ÷100 圧縮され、v4 キーは削除される', () => {
     mem.setItem(
       'typing-factory:v4',
       JSON.stringify({
@@ -184,16 +210,17 @@ describe('v4 → v6 マイグレーション', () => {
     const loaded = storage.load();
     expect(loaded).not.toBeNull();
     expect(loaded?.funds).toBe(5_000_000);
-    expect(loaded?.lifetimeRevenue).toBe(10_000_000);
+    // 旧経済圧縮込み：×10,000 → ÷100 = ×100
+    expect(loaded?.lifetimeRevenue).toBe(100_000);
     expect(loaded?.records.bestRevenue).toBe(2_000_000);
     expect(loaded?.fans).toBe(10);
-    // v6 として保存し直され、旧キーは消える
+    // v7 として保存し直され、旧キーは消える
     expect(mem.getItem('typing-factory:v4')).toBeNull();
-    expect(mem.getItem('typing-factory:v6')).not.toBeNull();
+    expect(mem.getItem('typing-factory:v7')).not.toBeNull();
   });
 
   it('壊れた JSON は null（クラッシュしない）', () => {
-    mem.setItem('typing-factory:v6', '{broken json');
+    mem.setItem('typing-factory:v7', '{broken json');
     expect(storage.load()).toBeNull();
   });
 });

@@ -226,29 +226,30 @@ export const SCALE_BALANCE: Record<
   mobile: {
     devCost: 3_000_000, // ¥300 万
     baseRevenue: 3_000_000, // normal で ¥5000 万
-    unlockSalesRequired: 30_000_000, // ¥3000 万
-    unlockCost: 5_000_000, // ¥500 万
+    // v0.18：新分布に整合（旧値 ¥3000万 は初手メタ95時代の設定。8〜12作目で到達する水準に）
+    unlockSalesRequired: 30_000_000, // ¥3000 万（シミュレーションで 8〜16 作目に調整）
+    unlockCost: 2_000_000, // ¥200 万
     neededWeeks: 12, // 3 ヶ月
   },
   indie: {
     devCost: 50_000_000, // ¥5000 万
     baseRevenue: 30_000_000, // normal で ¥5 億
-    unlockSalesRequired: 300_000_000, // ¥3 億
-    unlockCost: 50_000_000, // ¥5000 万
+    unlockSalesRequired: 200_000_000, // ¥2 億（v0.18）
+    unlockCost: 15_000_000, // ¥1500 万（v0.18）
     neededWeeks: 20, // 5 ヶ月
   },
   hit: {
     devCost: 1_000_000_000, // ¥10 億
     baseRevenue: 300_000_000, // normal で ¥50 億
-    unlockSalesRequired: 3_000_000_000, // ¥30 億
-    unlockCost: 500_000_000, // ¥5 億
+    unlockSalesRequired: 2_000_000_000, // ¥20 億（v0.18）
+    unlockCost: 150_000_000, // ¥1.5 億（v0.18）
     neededWeeks: 28, // 7 ヶ月
   },
   aaa: {
     devCost: 10_000_000_000, // ¥100 億
     baseRevenue: 3_000_000_000, // normal で ¥500 億
-    unlockSalesRequired: 300_000_000_000, // ¥3000 億
-    unlockCost: 5_000_000_000, // ¥50 億
+    unlockSalesRequired: 25_000_000_000, // ¥250 億（v0.18）
+    unlockCost: 1_500_000_000, // ¥15 億（v0.18）
     neededWeeks: 36, // 9 ヶ月
   },
 };
@@ -342,6 +343,12 @@ export const SCORE_BASE = 30;
 
 /** 運の中庸値 */
 export const LUCK_DEFAULT = 50;
+
+/**
+ * v0.18：リリース結果アドバイス（core/advice.ts）の「高水準」しきい値 🔧叩き台。
+ * 3 要素（キャラ能力・相性・タイピング）の最小値がこれ以上なら「死角なし」扱い。
+ */
+export const ADVICE_GOOD_THRESHOLD = 70;
 
 // ============================================================
 // v0.11 開発フェーズ：打鍵フィードバック（DevelopScreen 中央パネル）
