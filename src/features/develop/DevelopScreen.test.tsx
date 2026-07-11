@@ -21,6 +21,7 @@ const devProject: CurrentProject = {
   maxCombo: 0,
   devBoostRemainingSec: 0,
   bugCount: 0,
+  adDebugUsed: false,
   startedAt: 0,
   finishedAt: null,
   adBoostActive: false,
@@ -39,21 +40,35 @@ const nextKey = (): string | null => {
   return el?.textContent?.trim() || null;
 };
 
-describe('DevelopScreen（ユースケース：正しく打鍵すると開発が進む）', () => {
+/** v0.19：手札3枚の提示を待って 1 キーで選ぶ（1枚目は常に標準チケット） */
+const selectFirstHandTicket = async () => {
+  await expect.element(page.getByText('つぎの作業を選ぶ', { exact: false })).toBeInTheDocument();
+  await userEvent.keyboard('1');
+  await vi.waitFor(() => expect(nextKey()).toBeTruthy());
+};
+
+describe('DevelopScreen（ユースケース：手札を選んで打鍵すると開発が進む）', () => {
   beforeEach(() => {
     resetStore({ screen: 'develop', tutorialDone: true, current: devProject });
   });
 
-  it('開発フェーズの画面に入力行（次に打つキー）が表示される', async () => {
+  it('開発フェーズはまず手札選択が出て、選ぶまでタイピングが始まらない', async () => {
     render(<DevelopScreen />);
     await expect.element(page.getByText('テスト開発中')).toBeInTheDocument();
-    // 入力行のネクストキーが提示される
-    await vi.waitFor(() => expect(nextKey()).toBeTruthy());
+    // 手札3枚の選択UIが提示され、入力行はまだ無い
+    await expect.element(page.getByText('つぎの作業を選ぶ', { exact: false })).toBeInTheDocument();
+    expect(nextKey()).toBeNull();
   });
 
-  it('提示どおりに打鍵するとコンボと正打が積み上がる', async () => {
+  it('キー1で手札を選ぶと入力行（次に打つキー）が表示される', async () => {
     render(<DevelopScreen />);
-    await vi.waitFor(() => expect(nextKey()).toBeTruthy());
+    await selectFirstHandTicket();
+    expect(nextKey()).toBeTruthy();
+  });
+
+  it('手札を選んで提示どおりに打鍵するとコンボと正打が積み上がる', async () => {
+    render(<DevelopScreen />);
+    await selectFirstHandTicket();
 
     // 画面が提示するネクストキーをそのまま 10 打鍵
     for (let i = 0; i < 10; i++) {
@@ -67,9 +82,31 @@ describe('DevelopScreen（ユースケース：正しく打鍵すると開発が
     expect(cur?.perf.accuracy).toBe(1);
   });
 
+  it('キー1で選択→1文打ち切りで属性報酬（devStats）が入る', async () => {
+    render(<DevelopScreen />);
+    // 1枚目は常に標準チケット。puzzle の ticketIndex 0 はプログラム作業
+    await selectFirstHandTicket();
+
+    // 1文（かな十数文字）を打ち切るまで提示キーを打ち続ける
+    for (let i = 0; i < 120; i++) {
+      const s = useGameStore.getState().current;
+      if ((s?.devStats?.program ?? 0) > 0) break;
+      const k = nextKey();
+      if (!k) {
+        await vi.waitFor(() => expect(nextKey()).toBeTruthy());
+        continue;
+      }
+      await userEvent.keyboard(k);
+    }
+
+    const cur = useGameStore.getState().current;
+    expect(cur?.devStats?.program ?? 0).toBeGreaterThan(0);
+    expect(cur?.doneLoC ?? 0).toBeGreaterThan(0);
+  });
+
   it('間違ったキーを打つと、その数だけバグが積まれる（v0.17.1 ミス＝バグ確定）', async () => {
     render(<DevelopScreen />);
-    await vi.waitFor(() => expect(nextKey()).toBeTruthy());
+    await selectFirstHandTicket();
 
     // 提示キーと必ず違うキーを 5 回打つ（実 CDP 入力＝本物の入力経路）
     for (let i = 0; i < 5; i++) {

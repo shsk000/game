@@ -335,6 +335,23 @@ export const BUG_CONFIG = {
   reputationRiskPerBug: 2,
 } as const;
 
+// ============================================================
+// v0.19：作業チケットの選択制（spec v19 §1・§4。数値は叩き台 🔧）
+// ============================================================
+
+/**
+ * 開発フェーズの手札3枚の内訳。標準チケットは常に1枚以上（1枚目に固定）。
+ * - チャレンジ＝リスクリターン：長文（5文）・属性報酬×1.5・打鍵中のミスはバグ化×2
+ * - 即修＝バグの前倒し返済：bugCount≥1 のときだけ出現。短文（2文）でバグ−1
+ * 計算本体は core/tickets.ts（drawHand）。
+ */
+export const TICKET_HAND_CONFIG = {
+  /** 手札の枚数（1〜3 キーに対応） */
+  handSize: 3,
+  challenge: { rate: 0.3, phrases: 5, rewardMult: 1.5, missBugMult: 2 },
+  bugfix: { rate: 0.5, phrases: 2, bugsFixed: 1 },
+} as const;
+
 /**
  * 各スコアの計算基準値（balance-design §6-3〜§6-5）。
  * 「何もしないと base 30」設計。base + 各種ボーナスで 100 まで上がる。

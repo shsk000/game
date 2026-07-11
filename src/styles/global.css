@@ -1359,6 +1359,41 @@ body,
   animation: dev-rating-fade 600ms steps(4) both;
 }
 
+/* v0.19 デバッグ画面：残バグ列の虫がもぞもぞ待機（離散） */
+@keyframes debug-bug-wiggle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+.debug-bug {
+  display: inline-block;
+  animation: debug-bug-wiggle 800ms steps(2) infinite;
+}
+
+/* v0.19 デバッグ画面：駆除の瞬間 💥 が潰れて消える（消えると列が詰まる） */
+@keyframes debug-bug-squash {
+  0% {
+    transform: scale(2);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+.debug-bug-squash {
+  display: inline-block;
+  animation: debug-bug-squash 400ms steps(2) both;
+}
+
 /* v0.14 0.1 秒ジュース：正打で最後の文字が光る（key 再生） */
 /* v0.14 0.1 秒ジュース：ミスで入力枠が揺れる（failCount の key 再生） */
 @keyframes dev-miss-shake {
