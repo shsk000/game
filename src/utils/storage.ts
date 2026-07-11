@@ -1,4 +1,5 @@
-import { computeMonthlyWage, INITIAL_FUNDS } from '../data/balance';
+import { computeStageUnlocks } from '../core/progression';
+import { computeMonthlyWage, INITIAL_FUNDS, SCALE_BALANCE } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import type { GenreId } from '../data/genres';
@@ -9,6 +10,9 @@ import type { Achievement, Employee, GameDate, Work, WorkBreakdown } from '../st
 import { INITIAL_GAME_DATE } from '../state/types';
 
 /**
+ * v7（v0.18）で導入：
+ *  - 旧経済（v0.15 以前）で稼いだ lifetimeRevenue を ÷100 に圧縮し、
+ *    規模・ジャンル・テーマの解放を圧縮後の累計で再計算（新バランスの進行カーブに乗せる）
  * v6（v0.16）で導入：
  *  - Employee の power を全役割共通の 0..1 正規化スケールに換算
  *    （旧: プログラマー0.3〜1.2 / デザイナー2〜10 / 広報5〜20）
@@ -17,7 +21,8 @@ import { INITIAL_GAME_DATE } from '../state/types';
  *  - currentDate（ゲーム内日付・週単位）
  *  - 金額を v0.10 の桁感に合わせて ×10,000（records.bestRevenue 含む）
  */
-const KEY = 'typing-factory:v6';
+const KEY = 'typing-factory:v7';
+const LEGACY_KEY_V6 = 'typing-factory:v6';
 const LEGACY_KEY_V5 = 'typing-factory:v5';
 const LEGACY_KEY_V4 = 'typing-factory:v4';
 const LEGACY_KEY_V3 = 'typing-factory:v3';
@@ -35,7 +40,7 @@ export type Records = {
 };
 
 export type Persisted = {
-  version: 6;
+  version: 7;
   funds: number;
   lifetimeRevenue: number;
   fans: number;
@@ -72,7 +77,7 @@ const defaultBreakdown = (): WorkBreakdown => ({
 });
 
 export const defaults = (): Persisted => ({
-  version: 6,
+  version: 7,
   // v0.10 仕上げ：初期資金は balance.ts INITIAL_FUNDS（¥500 万）に統一。
   // 失敗 2-3 本で詰む緊張感（balance-design §0、§5-4）。
   funds: INITIAL_FUNDS,
@@ -339,6 +344,40 @@ const migrateFromV1 = (raw: string): Persisted | null => {
 };
 
 /**
+ * v6→v7（v0.18）：旧経済の荒稼ぎ圧縮と解放の再計算。
+ * v0.15 以前は初手メタ95で1本¥1.5億が可能で、その累計を引き継ぐと
+ * 新バランスでは絶対に届かない解放条件（累計売上ゲート）を即満たしてしまう。
+ * lifetimeRevenue を ÷100 し、解放は「初期 ∪ 圧縮後累計のステージ解放 ∪ 使用済み」で作り直す。
+ */
+const toV7 = (p: Omit<Persisted, 'version'> & { version: number }): Persisted => {
+  const lifetimeRevenue = Math.round(p.lifetimeRevenue / 100);
+  const base = defaults();
+  const stage = computeStageUnlocks(
+    base.unlockedGenres,
+    base.unlockedThemes,
+    p.library,
+    lifetimeRevenue,
+  );
+  const usedGenres = p.library.map((w) => w.genreId);
+  const usedThemes = p.library.map((w) => w.themeId);
+  const unlockedScales = (['mini', 'mobile', 'indie', 'hit', 'aaa'] as Scale[]).filter(
+    (sc) => sc === 'mini' || lifetimeRevenue >= SCALE_BALANCE[sc].unlockSalesRequired,
+  );
+  return {
+    ...p,
+    version: 7,
+    lifetimeRevenue,
+    unlockedScales,
+    unlockedGenres: Array.from(
+      new Set([...base.unlockedGenres, ...stage.newGenres, ...usedGenres]),
+    ),
+    unlockedThemes: Array.from(
+      new Set([...base.unlockedThemes, ...stage.newThemes, ...usedThemes]),
+    ),
+  };
+};
+
+/**
  * 読込データの共通整形：defaults とのマージ・欠損フィールドの防御・
  * v0.10 の人気ジャンル/テーマ再ロック（達成済みは維持）。
  */
@@ -374,8 +413,23 @@ export const load = (): Persisted | null => {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Persisted;
-      if (parsed && parsed.version === 6) {
+      if (parsed && parsed.version === 7) {
         return shapeLoaded(parsed);
+      }
+    }
+    // v6 → v7：旧経済の累計を圧縮し解放を再計算（v0.18）
+    const v6 = localStorage.getItem(LEGACY_KEY_V6);
+    if (v6) {
+      const parsed = JSON.parse(v6) as Omit<Persisted, 'version'> & { version: number };
+      if (parsed && parsed.version === 6) {
+        const migrated = shapeLoaded(toV7(parsed));
+        save(migrated);
+        try {
+          localStorage.removeItem(LEGACY_KEY_V6);
+        } catch {
+          /* ignore */
+        }
+        return migrated;
       }
     }
     // v5 → v6：employees の power 正規化＋成長フィールド付与（v0.16）
@@ -386,11 +440,13 @@ export const load = (): Persisted | null => {
         employees: LegacyEmployeeV5[];
       };
       if (parsed && parsed.version === 5) {
-        const migrated = shapeLoaded({
-          ...parsed,
-          version: 6,
-          employees: (parsed.employees ?? []).map(normalizeEmployeeV6),
-        });
+        const migrated = shapeLoaded(
+          toV7({
+            ...parsed,
+            version: 6,
+            employees: (parsed.employees ?? []).map(normalizeEmployeeV6),
+          }),
+        );
         save(migrated);
         try {
           localStorage.removeItem(LEGACY_KEY_V5);
@@ -402,8 +458,10 @@ export const load = (): Persisted | null => {
     }
     const v4 = localStorage.getItem(LEGACY_KEY_V4);
     if (v4) {
-      const migrated = migrateFromV4(v4);
-      if (migrated) {
+      const legacyV4 = migrateFromV4(v4);
+      if (legacyV4) {
+        // 旧経済セーブは v7 圧縮を通して新カーブに乗せる
+        const migrated = shapeLoaded(toV7(legacyV4));
         save(migrated);
         try {
           localStorage.removeItem(LEGACY_KEY_V4);
@@ -415,8 +473,10 @@ export const load = (): Persisted | null => {
     }
     const v3 = localStorage.getItem(LEGACY_KEY_V3);
     if (v3) {
-      const migrated = migrateFromV3(v3);
-      if (migrated) {
+      const legacyV3 = migrateFromV3(v3);
+      if (legacyV3) {
+        // 旧経済セーブは v7 圧縮を通して新カーブに乗せる
+        const migrated = shapeLoaded(toV7(legacyV3));
         save(migrated);
         try {
           localStorage.removeItem(LEGACY_KEY_V3);
@@ -428,8 +488,10 @@ export const load = (): Persisted | null => {
     }
     const v2 = localStorage.getItem(LEGACY_KEY_V2);
     if (v2) {
-      const migrated = migrateFromV2(v2);
-      if (migrated) {
+      const legacyV2 = migrateFromV2(v2);
+      if (legacyV2) {
+        // 旧経済セーブは v7 圧縮を通して新カーブに乗せる
+        const migrated = shapeLoaded(toV7(legacyV2));
         save(migrated);
         try {
           localStorage.removeItem(LEGACY_KEY_V2);
@@ -441,8 +503,10 @@ export const load = (): Persisted | null => {
     }
     const legacy = localStorage.getItem(LEGACY_KEY_V1);
     if (legacy) {
-      const migrated = migrateFromV1(legacy);
-      if (migrated) {
+      const legacyV1 = migrateFromV1(legacy);
+      if (legacyV1) {
+        // 旧経済セーブは v7 圧縮を通して新カーブに乗せる
+        const migrated = shapeLoaded(toV7(legacyV1));
         save(migrated);
         try {
           localStorage.removeItem(LEGACY_KEY_V1);
@@ -469,6 +533,7 @@ export const save = (p: Persisted): void => {
 export const reset = (): void => {
   try {
     localStorage.removeItem(KEY);
+    localStorage.removeItem(LEGACY_KEY_V6);
     localStorage.removeItem(LEGACY_KEY_V5);
     localStorage.removeItem(LEGACY_KEY_V4);
     localStorage.removeItem(LEGACY_KEY_V3);

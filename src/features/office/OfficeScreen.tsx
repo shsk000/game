@@ -9,6 +9,7 @@ import {
   PixelWindow,
   SegGauge,
 } from '../../components/ui';
+import { nextGoals } from '../../core/goals';
 import { nextExpFor } from '../../core/growth';
 import { ACHIEVEMENTS } from '../../data/achievements';
 import { computeBorrowingLimit, DEBT_CONFIG, ROLE_EFFECT } from '../../data/balance';
@@ -249,6 +250,49 @@ export const OfficeScreen = () => {
                       n.tone === 'warn' ? '#e05252' : n.tone === 'good' ? '#3fb950' : '#2f81d6',
                   }}
                 />
+              </li>
+            ))}
+          </ul>
+        </PixelWindow>
+
+        {/* v0.18：つぎの目標（常設3行。core/goals.ts。短期目標の連鎖でリテンションを作る） */}
+        <PixelWindow title="🎯 つぎの目標" variant="standard" bodyStyle={{ padding: 8 }}>
+          <ul
+            style={{
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              fontSize: 11,
+              lineHeight: 1.4,
+            }}
+          >
+            {nextGoals({
+              unlockedScales: unlocked,
+              lifetimeRevenue,
+              funds,
+              employees,
+              library,
+            }).map((g) => (
+              <li
+                key={`${g.icon}-${g.label}`}
+                style={{
+                  display: 'flex',
+                  gap: 6,
+                  justifyContent: 'space-between',
+                  color: '#1c2228',
+                  fontWeight: g.done ? 700 : 400,
+                }}
+              >
+                <span>
+                  {g.icon} {g.label}
+                </span>
+                <span style={{ color: g.done ? '#2a7a3c' : '#3a4148', whiteSpace: 'nowrap' }}>
+                  {g.done ? '✓ ' : ''}
+                  {g.value}
+                </span>
               </li>
             ))}
           </ul>
