@@ -62,6 +62,8 @@ type LastResult =
       bugPct: number;
       /** この 1 文で実際に進んだ完成度（進捗ゲージに入る値そのもの） */
       progress: number;
+      /** v0.19.1：チャレンジ完遂ボーナス（進捗ブースト・バグ-1）が出た時だけ表示する注記 */
+      bonusNote?: string;
       ts: number;
     }
   | {
@@ -285,6 +287,21 @@ export const DevelopScreen = () => {
   selectHandTicketRef.current = selectHandTicket;
   selectPlanCardRef.current = selectPlanCard;
 
+  // v0.19.1：手札に実質的な選択肢が無い（＝チャレンジ/即修が混ざっていない、または1枚しか無い）
+  // ときは選択画面を挟まず即決する。「毎回選ばされる」爽快感の低下はオーナーFB
+  // （2026-07-11）で明確に指摘された。標準チケット同士はカテゴリ以外差が無く、選ばせても
+  // 意思決定にならないため、リスクリターンが実際にある時だけ手を止めさせる。
+  useEffect(() => {
+    if (hand && (hand.length <= 1 || hand.every((t) => t.kind === 'standard'))) {
+      selectHandTicketRef.current(hand[0]);
+    }
+  }, [hand]);
+  useEffect(() => {
+    if (planHand && planHand.length <= 1) {
+      selectPlanCardRef.current(planHand[0]);
+    }
+  }, [planHand]);
+
   // 1〜3 キーで手札を選ぶ（ホームポジションから手を離さない）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -403,20 +420,20 @@ export const DevelopScreen = () => {
         const finishing = nextCount >= t.phrases;
 
         if (t.kind !== 'bugfix' && t.category && t.flavor) {
-          // 属性報酬：チャレンジは rewardMult（×1.5）で増える
-          const gain = Math.max(
-            1,
-            Math.round(ATTR_BASE_GAIN * comboMult * speedMult * feverMult * t.rewardMult),
-          );
+          // 属性報酬（v0.19.1：devStats は標準と同じ基準。チャレンジの見返りは
+          // 進捗ブースト＋完遂時バグ-1に一本化した＝品質への還元は上限+8で無効化されるため使わない）
+          const gain = Math.max(1, Math.round(ATTR_BASE_GAIN * comboMult * speedMult * feverMult));
           addDevStat(t.category, gain);
 
           const impactNow = computeDevImpact({
             wpm: wpmRef.current,
             accuracy: accuracyRef.current,
           });
+          const rewardBonusMult = t.kind === 'challenge' ? t.rewardMult : 1;
           const progressNow =
             progressGain(wpmRef.current, false, comboRef.current) *
-            (feverActiveRef.current ? 2 : 1);
+            (feverActiveRef.current ? 2 : 1) *
+            rewardBonusMult;
           sfx[rank === 'PERFECT' ? 'success' : 'complete']();
           setLastResult({
             kind: 'ticket',
@@ -455,6 +472,16 @@ export const DevelopScreen = () => {
               ts: Date.now(),
             });
           } else if (t.category && t.flavor) {
+            if (t.kind === 'challenge') {
+              // v0.19.1：チャレンジ完遂ボーナス＝バグ-1（その場で見える即時報酬。
+              // 進捗ブーストは下の addDevelopLoC 側ですでに rewardMult 倍を適用済み）
+              fixBug();
+              setLastResult((r) =>
+                r && r.kind === 'ticket'
+                  ? { ...r, bonusNote: `🎉 チャレンジ達成！進捗×${t.rewardMult}・バグ-1` }
+                  : r,
+              );
+            }
             setCompletedTickets((l) =>
               [
                 ...l,
@@ -484,9 +511,13 @@ export const DevelopScreen = () => {
           );
         }
 
-        // 進捗（完成度）は従来通り：速度＋コンボ倍率＋フィーバー×2
+        // 進捗（完成度）：速度＋コンボ倍率＋フィーバー×2
+        // v0.19.1：チャレンジは rewardMult 倍で多く進む＝報酬をその場の進捗バーで即座に見せる
+        const rewardBonusMult = t.kind === 'challenge' ? t.rewardMult : 1;
         const progress =
-          progressGain(wpmRef.current, false, comboRef.current) * (feverActiveRef.current ? 2 : 1);
+          progressGain(wpmRef.current, false, comboRef.current) *
+          (feverActiveRef.current ? 2 : 1) *
+          rewardBonusMult;
         addDevelopLoC(progress);
 
         // 待機中のイベントがあれば、次の文としてイベント文を投入
@@ -671,6 +702,7 @@ export const DevelopScreen = () => {
                   const t = hand?.[i];
                   if (t) selectHandTicket(t);
                 }}
+                lastResult={lastResult}
               />
             ) : (
               <DevelopCenter
@@ -718,6 +750,7 @@ export const DevelopScreen = () => {
                   const c = planHand?.[i];
                   if (c) selectPlanCard(c);
                 }}
+                lastResult={lastResult}
               />
             ) : (
               <PlanningCenter
@@ -953,7 +986,8 @@ const devHandCard = (t: HandTicket, bugCount: number): HandCardView => {
       tag: `長文チャレンジ（${t.phrases}文）`,
       tagColor: DEV.orange,
       desc: devTicketDesc(t),
-      note: `${meta.label} ×${t.rewardMult} ⚠ミスでバグ×${t.missBugMult}`,
+      // v0.19.1：報酬は進捗ブースト＋完遂ボーナスのバグ-1（品質への還元は上限で無効化されるため使わない）
+      note: `進捗 ×${t.rewardMult}・完遂でバグ-1 ⚠ミスでバグ×${t.missBugMult}`,
       noteColor: DEV.orange,
     };
   }
@@ -995,12 +1029,19 @@ const HandSelectPanel = ({
   phaseLabel,
   cards,
   onSelect,
+  lastResult,
 }: {
   headerIcon: string;
   headerColor: string;
   phaseLabel: string;
   cards: HandCardView[];
   onSelect: (index: number) => void;
+  /**
+   * v0.19.1：直前チケットの結果カードをここにも表示する。
+   * チケット完了→手札提示は同一フレームで切り替わるため、DevelopCenter 側だけに
+   * 出していると「達成ボーナス」等の注記が実質一度も見えないまま消えていた。
+   */
+  lastResult?: LastResult | null;
 }) => (
   <div
     style={{
@@ -1021,6 +1062,7 @@ const HandSelectPanel = ({
       </span>
     </div>
     <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
+      {lastResult && <ResultCard result={lastResult} />}
       <span style={{ fontSize: 14, fontWeight: 700, color: DEV.cream }}>
         つぎの作業を選ぶ（1・2・3 キー or クリック）
       </span>
@@ -1162,7 +1204,7 @@ const DevelopCenter = ({
     ticket.kind === 'bugfix'
       ? `${catMeta.icon} 即修チケット`
       : ticket.kind === 'challenge'
-        ? `⚡ チャレンジ ×${ticket.rewardMult}／ミスでバグ×${ticket.missBugMult}`
+        ? `⚡ チャレンジ：進捗×${ticket.rewardMult}・完遂でバグ-1／ミスでバグ×${ticket.missBugMult}`
         : `${catMeta.icon} ${catMeta.label}作業`;
   return (
     <div
@@ -1845,6 +1887,9 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
       <span style={{ fontSize: 14, fontWeight: 700, color: RANK_COLOR[result.rank] }}>
         {result.rank}!
       </span>
+      {result.bonusNote && (
+        <span style={{ fontSize: 12, fontWeight: 700, color: DEV.orange }}>{result.bonusNote}</span>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
         <ResultChip
           icon="⚡"
