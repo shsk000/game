@@ -1661,3 +1661,53 @@ body,
 .funds-loss {
   animation: g-flash-loss 400ms steps(2) both;
 }
+
+/* v0.20 A：コンボ節目の称号ポップ（50/150/300。打鍵を止めず視界の上部に一瞬） */
+@keyframes dev-combo-title-kf {
+  0% {
+    transform: translateX(-50%) scale(2.4);
+    opacity: 0;
+  }
+  18% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+  72% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-50%) scale(1) translateY(-12px);
+    opacity: 0;
+  }
+}
+.dev-combo-title {
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  z-index: 40;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  animation: dev-combo-title-kf 1200ms steps(8) both;
+}
+.dev-combo-title > span:first-child {
+  font-size: 32px;
+  font-weight: 700;
+  color: #ffd54a;
+  letter-spacing: 0.08em;
+  text-shadow:
+    2px 2px 0 #4a2e00,
+    -2px 2px 0 #4a2e00,
+    2px -2px 0 #4a2e00,
+    -2px -2px 0 #4a2e00,
+    0 0 14px rgba(255, 213, 74, 0.55);
+}
+.dev-combo-title-sub {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ff9d4d;
+  text-shadow: 1px 1px 0 #331a00;
+}

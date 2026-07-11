@@ -58,30 +58,6 @@ describe('advancePhase（v0.17.1 バグ最低保証）', () => {
   });
 });
 
-describe('noteBugOnMiss（v0.19 ミスバグ化の倍率）', () => {
-  beforeEach(() => resetStore());
-
-  it('引数なしはバグ +1（従来互換）', () => {
-    resetStore({ current: devProject({ bugCount: 0 }) });
-    expect(useGameStore.getState().noteBugOnMiss()).toBe(true);
-    expect(useGameStore.getState().current?.bugCount).toBe(1);
-  });
-
-  it('mult=2 でミス1打がバグ2匹になる（チャレンジチケット中）', () => {
-    resetStore({ current: devProject({ bugCount: 3 }) });
-    expect(useGameStore.getState().noteBugOnMiss(2)).toBe(true);
-    expect(useGameStore.getState().current?.bugCount).toBe(5);
-  });
-
-  it('プロジェクトが無い/完了済みなら発生しない', () => {
-    resetStore({ current: null });
-    expect(useGameStore.getState().noteBugOnMiss(2)).toBe(false);
-    resetStore({ current: devProject({ finishedAt: 100 }) });
-    expect(useGameStore.getState().noteBugOnMiss(2)).toBe(false);
-    expect(useGameStore.getState().current?.bugCount).toBe(0);
-  });
-});
-
 describe('adDebugAssist（v0.19 広告でバグ半減・1開発1回）', () => {
   beforeEach(() => resetStore());
 

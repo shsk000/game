@@ -121,11 +121,8 @@ type Actions = {
   releaseWork: (opts?: ReleaseOpts) => Work;
   buyAdDevBoost: () => void;
   buyAdSurvey: (g: GenreId, t: ThemeId) => void;
-  /**
-   * v0.17.1：ミス打鍵はバグ確定（開発フェーズ中のみ。発生したら true）。
-   * v0.19：mult＝ミス1打あたりのバグ化数（チャレンジチケット中は 2。省略時 1）
-   */
-  noteBugOnMiss: (mult?: number) => boolean;
+  /** v0.17.1：ミス打鍵はバグ確定（開発フェーズ中のみ。発生したら true） */
+  noteBugOnMiss: () => boolean;
   /** v0.17.1：正打 1 打鍵ごとのバグ判定（発生したら true。社員能力で抑制） */
   noteBugOnKeystroke: () => boolean;
   /** v0.17：デバッグフェーズでバグを 1 匹修正 */
@@ -505,11 +502,11 @@ export const useGameStore = create<GameState>()(
       }
     },
 
-    noteBugOnMiss: (mult = 1) => {
+    noteBugOnMiss: () => {
       const cur = get().current;
       if (!cur || cur.finishedAt !== null) return false;
       if (!rollBugOnMiss()) return false;
-      set({ current: { ...cur, bugCount: cur.bugCount + mult } });
+      set({ current: { ...cur, bugCount: cur.bugCount + 1 } });
       return true;
     },
 

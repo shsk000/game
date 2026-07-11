@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ads } from '../../ads/AdProvider';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
 import { bugSuppression, bugsClearedByAd, pickBugFixPhrase } from '../../core/bugs';
-import { drawHand, drawPlanHand, type HandTicket } from '../../core/tickets';
+import { comboTitleAt, keyPitchStep } from '../../core/juice';
 import { BUG_CONFIG, planWeeksAllowance } from '../../data/balance';
 import { buildLine } from '../../data/codeSnippets';
 import {
   ATTR_BASE_GAIN,
   CATEGORY_META,
   comboAttrMultiplier,
+  getTicketAt,
   PHRASES_PER_TICKET,
   pickPhrase,
   type SpeedRank,
@@ -62,8 +63,6 @@ type LastResult =
       bugPct: number;
       /** この 1 文で実際に進んだ完成度（進捗ゲージに入る値そのもの） */
       progress: number;
-      /** v0.19.1：チャレンジ完遂ボーナス（進捗ブースト・バグ-1）が出た時だけ表示する注記 */
-      bonusNote?: string;
       ts: number;
     }
   | {
@@ -76,13 +75,7 @@ type LastResult =
       speedMult: number;
       ts: number;
     }
-  | { kind: 'event'; event: DevEvent; ts: number }
-  | {
-      /** v0.19 即修チケット完了：バグを1匹その場で駆除した */
-      kind: 'bugfix';
-      remaining: number;
-      ts: number;
-    };
+  | { kind: 'event'; event: DevEvent; ts: number };
 
 /**
  * v0.15.2「作業チケット」UI（オーナー改修指示 2026-07-08）：
@@ -124,8 +117,7 @@ export const DevelopScreen = () => {
   const comboRef = useRef(0);
   const phraseStartRef = useRef(performance.now());
 
-  // ★作業チケット状態（v0.19 手札選択制）：チケット完了ごとに手札3枚から次を選ぶ。
-  // ticketIndex は標準チケットの周回位置（手札の題材の種）として従来どおり進む。
+  // ★作業チケット状態：ticketIndex が進むほど CATEGORY_ORDER を周回しながら次のチケットへ。
   const [ticketIndex, setTicketIndex] = useState(0);
   const ticketIndexRef = useRef(0);
   const [ticketPhraseCount, setTicketPhraseCount] = useState(0);
@@ -133,45 +125,28 @@ export const DevelopScreen = () => {
   const [completedTickets, setCompletedTickets] = useState<
     { title: string; category: TicketCategory }[]
   >([]);
-  /** 手札（選択待ちのとき非 null）。選択中はタイピングを止める */
-  const [hand, setHand] = useState<HandTicket[] | null>(null);
-  const handRef = useRef<HandTicket[] | null>(null);
-  handRef.current = hand;
-  /** いま打っているチケット（「打つ対象は常に1つ」原則はここで堅持） */
-  const [activeTicket, setActiveTicket] = useState<HandTicket | null>(null);
-  const activeTicketRef = useRef<HandTicket | null>(null);
-  activeTicketRef.current = activeTicket;
+  const currentTicket = useMemo(() => getTicketAt(genreId, ticketIndex), [genreId, ticketIndex]);
+  const nextTicket = useMemo(() => getTicketAt(genreId, ticketIndex + 1), [genreId, ticketIndex]);
 
-  const [ticketPhrase, setTicketPhrase] = useState('');
+  const [ticketPhrase, setTicketPhrase] = useState(() => pickPhrase(currentTicket.category));
 
-  // ★企画チケット状態（v0.19）：残り 7 カテゴリから「次にどれを埋めるか」を手札で選ぶ。
+  // ★企画チケット状態（v0.15.3）：固定 7 カテゴリを順に打ち切ると企画書が埋まり、開発フェーズへ。
+  const [planIndex, setPlanIndex] = useState(0);
+  const planIndexRef = useRef(0);
   const [planPhraseCount, setPlanPhraseCount] = useState(0);
   const planPhraseCountRef = useRef(0);
   const [planDecided, setPlanDecided] = useState<{ category: PlanCategory; decided: string }[]>([]);
-  const [planHand, setPlanHand] = useState<PlanCategory[] | null>(null);
-  const planHandRef = useRef<PlanCategory[] | null>(null);
-  planHandRef.current = planHand;
-  const [activePlanCategory, setActivePlanCategory] = useState<PlanCategory | null>(null);
-  const activePlanCategoryRef = useRef<PlanCategory | null>(null);
-  activePlanCategoryRef.current = activePlanCategory;
   const [planMemos, setPlanMemos] = useState<string[]>([]);
   const [planCards, setPlanCards] = useState<string[]>([]);
   const planCtx = useMemo(
     () => ({ genreName: GENRE_BY_ID[genreId]?.name ?? '', projectTitle: current?.title ?? '' }),
     [genreId, current?.title],
   );
-  /** まだ企画書に書かれていないカテゴリ（PLAN_CATEGORY_ORDER 順） */
-  const planRemaining = useMemo(
-    () => PLAN_CATEGORY_ORDER.filter((c) => !planDecided.some((d) => d.category === c)),
-    [planDecided],
-  );
-  /** 表示用の企画チケット（選択中は残りの先頭を仮表示） */
-  const displayPlanCategory = activePlanCategory ?? planRemaining[0] ?? 'sales';
   const currentPlanTicket = useMemo(
-    () => getPlanTicketAt(genreId, PLAN_CATEGORY_ORDER.indexOf(displayPlanCategory), planCtx),
-    [genreId, displayPlanCategory, planCtx],
+    () => getPlanTicketAt(genreId, Math.min(planIndex, PLAN_CATEGORY_ORDER.length - 1), planCtx),
+    [genreId, planIndex, planCtx],
   );
-  const [planPhrase, setPlanPhrase] = useState('');
+  const [planPhrase, setPlanPhrase] = useState(() => pickPlanPhrase(PLAN_CATEGORY_ORDER[0]));
 
   // ★プログラム作業中の「今まさに書かれているコード行」（打鍵に合わせて1文字ずつ伸びる）
   const themeId = current?.themeId ?? 'sushi';
@@ -199,6 +174,10 @@ export const DevelopScreen = () => {
   activeRef.current = activeEvent;
 
   const [flash, setFlash] = useState(0);
+  // v0.20 A：コンボ節目の称号ポップ（50/150/300。key で CSS アニメを再トリガー）
+  const [comboTitle, setComboTitle] = useState<{ label: string; combo: number; key: number } | null>(
+    null,
+  );
 
   // フィーバー：正打で蓄積・ミスで減少、MAX で自動発動
   const [feverGauge, setFeverGauge] = useState(0);
@@ -246,87 +225,6 @@ export const DevelopScreen = () => {
     return () => window.clearInterval(timer);
   }, [isDevelopment, isPlanning, !current]);
 
-  // ★手札の初期提示（v0.19）：フェーズに入ったら最初の手札を配る
-  useEffect(() => {
-    if (!isDevelopment || !current) return;
-    if (activeTicketRef.current || handRef.current) return;
-    setHand(
-      drawHand({
-        genreId,
-        ticketIndex: ticketIndexRef.current,
-        bugCount: useGameStore.getState().current?.bugCount ?? 0,
-      }),
-    );
-  }, [isDevelopment, !current, genreId]);
-
-  useEffect(() => {
-    if (!isPlanning || !current) return;
-    if (activePlanCategoryRef.current || planHandRef.current) return;
-    setPlanHand(drawPlanHand(planRemaining));
-  }, [isPlanning, !current]);
-
-  // ★手札の選択（クリック共通処理。1〜3 キーは下の keydown リスナーから呼ぶ）
-  const selectHandTicket = (t: HandTicket) => {
-    setHand(null);
-    setActiveTicket(t);
-    ticketPhraseCountRef.current = 0;
-    setTicketPhraseCount(0);
-    setTicketPhrase(t.kind === 'bugfix' ? pickBugFixPhrase() : pickPhrase(t.category ?? 'program'));
-    sfx.complete();
-  };
-  const selectPlanCard = (c: PlanCategory) => {
-    setPlanHand(null);
-    setActivePlanCategory(c);
-    planPhraseCountRef.current = 0;
-    setPlanPhraseCount(0);
-    setPlanPhrase(pickPlanPhrase(c));
-    sfx.complete();
-  };
-  const selectHandTicketRef = useRef(selectHandTicket);
-  const selectPlanCardRef = useRef(selectPlanCard);
-  selectHandTicketRef.current = selectHandTicket;
-  selectPlanCardRef.current = selectPlanCard;
-
-  // v0.19.1：手札に実質的な選択肢が無い（＝チャレンジ/即修が混ざっていない、または1枚しか無い）
-  // ときは選択画面を挟まず即決する。「毎回選ばされる」爽快感の低下はオーナーFB
-  // （2026-07-11）で明確に指摘された。標準チケット同士はカテゴリ以外差が無く、選ばせても
-  // 意思決定にならないため、リスクリターンが実際にある時だけ手を止めさせる。
-  useEffect(() => {
-    if (hand && (hand.length <= 1 || hand.every((t) => t.kind === 'standard'))) {
-      selectHandTicketRef.current(hand[0]);
-    }
-  }, [hand]);
-  useEffect(() => {
-    if (planHand && planHand.length <= 1) {
-      selectPlanCardRef.current(planHand[0]);
-    }
-  }, [planHand]);
-
-  // 1〜3 キーで手札を選ぶ（ホームポジションから手を離さない）
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const n = Number(e.key);
-      if (!Number.isInteger(n) || n < 1 || n > 3) return;
-      if (handRef.current && !activeTicketRef.current) {
-        const t = handRef.current[n - 1];
-        if (t) {
-          // keypress を抑止（選択キーがタイピング判定にミスとして流れ込むのを防ぐ）
-          e.preventDefault();
-          selectHandTicketRef.current(t);
-        }
-      } else if (planHandRef.current && !activePlanCategoryRef.current) {
-        const c = planHandRef.current[n - 1];
-        if (c) {
-          e.preventDefault();
-          selectPlanCardRef.current(c);
-        }
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
   const currentInputPhrase = activeEvent
     ? activeEvent.mission
     : isPlanning
@@ -334,13 +232,9 @@ export const DevelopScreen = () => {
       : ticketPhrase;
   const phrases = useMemo(() => [currentInputPhrase], [currentInputPhrase]);
 
-  // 手札の選択中はタイピングを止める（打つ対象が決まってから 1 文入力）
-  const selectingDev = isDevelopment && !activeTicket;
-  const selectingPlan = isPlanning && !activePlanCategory;
-
   const { view, failCount, wpm, accuracy } = useTyping({
     phrases,
-    paused: !current || !(isDevelopment || isPlanning) || selectingDev || selectingPlan,
+    paused: !current || !(isDevelopment || isPlanning),
     onPhraseComplete: () => {
       if (activeRef.current) {
         // イベント文を打ち切り＝成功（スキップ無し。詰みが無い代わりに必ず打つ）
@@ -381,148 +275,89 @@ export const DevelopScreen = () => {
         const nextCount = planPhraseCountRef.current + 1;
         const finishing = nextCount >= PHRASES_PER_PLAN_TICKET;
         if (finishing) {
-          const newDecided = [...planDecided, { category: t.category, decided: t.flavor.decided }];
-          setPlanDecided(newDecided);
+          setPlanDecided((l) => [...l, { category: t.category, decided: t.flavor.decided }]);
+          planIndexRef.current += 1;
+          setPlanIndex(planIndexRef.current);
           planPhraseCountRef.current = 0;
           setPlanPhraseCount(0);
-          setActivePlanCategory(null);
-          setPlanPhrase('');
-          const remaining = PLAN_CATEGORY_ORDER.filter(
-            (c) => !newDecided.some((d) => d.category === c),
-          );
-          if (remaining.length === 0) {
+          if (planIndexRef.current >= PLAN_CATEGORY_ORDER.length) {
             // 企画書が完成 → 開発フェーズへ
             sfx.phase();
             advancePhase();
-          } else {
-            // 次の手札を提示（どの企画項目から埋めるかはプレイヤーが決める）
-            setPlanHand(drawPlanHand(remaining));
           }
         } else {
           planPhraseCountRef.current = nextCount;
           setPlanPhraseCount(nextCount);
-          setPlanPhrase(pickPlanPhrase(t.category));
         }
+        const nextPlanIdx = Math.min(planIndexRef.current, PLAN_CATEGORY_ORDER.length - 1);
+        setPlanPhrase(pickPlanPhrase(PLAN_CATEGORY_ORDER[nextPlanIdx]));
 
-        if (!finishing && pendingRef.current) {
+        if (pendingRef.current) {
           setActiveEvent(pendingRef.current);
           setPendingEvent(null);
         }
       } else {
-        const t = activeTicket;
-        if (!t) return;
+        const category = currentTicket.category;
         const elapsed = performance.now() - phraseStartRef.current;
         const { rank, mult: speedMult } = speedRank(ticketPhrase.length, elapsed);
         const comboMult = comboAttrMultiplier(comboRef.current);
         const feverMult = feverActiveRef.current ? 1.5 : 1;
+        const gain = Math.max(1, Math.round(ATTR_BASE_GAIN * comboMult * speedMult * feverMult));
+        addDevStat(category, gain);
 
+        const impactNow = computeDevImpact({ wpm: wpmRef.current, accuracy: accuracyRef.current });
+        const progressNow =
+          progressGain(wpmRef.current, false, comboRef.current) * (feverActiveRef.current ? 2 : 1);
+        sfx[rank === 'PERFECT' ? 'success' : 'complete']();
+        setLastResult({
+          kind: 'ticket',
+          rank,
+          speedPct: impactNow.speedPct,
+          qualityDelta: impactNow.qualityDelta,
+          bugPct: impactNow.bugPct,
+          progress: Math.round(progressNow * 10) / 10,
+          ts: Date.now(),
+        });
+
+        // 実装中の様子：カテゴリごとに違う見え方で反映
         const nextCount = ticketPhraseCountRef.current + 1;
-        const finishing = nextCount >= t.phrases;
-
-        if (t.kind !== 'bugfix' && t.category && t.flavor) {
-          // 属性報酬（v0.19.1：devStats は標準と同じ基準。チャレンジの見返りは
-          // 進捗ブースト＋完遂時バグ-1に一本化した＝品質への還元は上限+8で無効化されるため使わない）
-          const gain = Math.max(1, Math.round(ATTR_BASE_GAIN * comboMult * speedMult * feverMult));
-          addDevStat(t.category, gain);
-
-          const impactNow = computeDevImpact({
-            wpm: wpmRef.current,
-            accuracy: accuracyRef.current,
+        const finishing = nextCount >= PHRASES_PER_TICKET;
+        if (category === 'program') {
+          setProgramLog((l) => {
+            const next = [...l, fullCodeLine];
+            if (finishing) next.push(`// ✅ ${currentTicket.flavor.title} 完了`);
+            return next.slice(-4);
           });
-          const rewardBonusMult = t.kind === 'challenge' ? t.rewardMult : 1;
-          const progressNow =
-            progressGain(wpmRef.current, false, comboRef.current) *
-            (feverActiveRef.current ? 2 : 1) *
-            rewardBonusMult;
-          sfx[rank === 'PERFECT' ? 'success' : 'complete']();
-          setLastResult({
-            kind: 'ticket',
-            rank,
-            speedPct: impactNow.speedPct,
-            qualityDelta: impactNow.qualityDelta,
-            bugPct: impactNow.bugPct,
-            progress: Math.round(progressNow * 10) / 10,
-            ts: Date.now(),
-          });
-
-          // 実装中の様子：カテゴリごとに違う見え方で反映
-          if (t.category === 'program') {
-            setProgramLog((l) => {
-              const next = [...l, fullCodeLine];
-              if (finishing) next.push(`// ✅ ${t.flavor?.title} 完了`);
-              return next.slice(-4);
-            });
-          } else if (t.category === 'design') {
-            setDesignNotes((l) => [...l, t.flavor?.title ?? ''].slice(-4));
-          } else if (t.category === 'graphics') {
-            setGraphicsFrame((f) => f + 1);
-          } else if (t.category === 'sound') {
-            setSoundBeatKey((k) => k + 1);
-          }
+        } else if (category === 'design') {
+          setDesignNotes((l) => [...l, currentTicket.flavor.title].slice(-4));
+        } else if (category === 'graphics') {
+          setGraphicsFrame((f) => f + 1);
+        } else if (category === 'sound') {
+          setSoundBeatKey((k) => k + 1);
         }
 
         if (finishing) {
-          if (t.kind === 'bugfix') {
-            // 即修チケット：2文打ち切りでバグを1匹その場で駆除
-            fixBug();
-            sfx.success();
-            setLastResult({
-              kind: 'bugfix',
-              remaining: useGameStore.getState().current?.bugCount ?? 0,
-              ts: Date.now(),
-            });
-          } else if (t.category && t.flavor) {
-            if (t.kind === 'challenge') {
-              // v0.19.1：チャレンジ完遂ボーナス＝バグ-1（その場で見える即時報酬。
-              // 進捗ブーストは下の addDevelopLoC 側ですでに rewardMult 倍を適用済み）
-              fixBug();
-              setLastResult((r) =>
-                r && r.kind === 'ticket'
-                  ? { ...r, bonusNote: `🎉 チャレンジ達成！進捗×${t.rewardMult}・バグ-1` }
-                  : r,
-              );
-            }
-            setCompletedTickets((l) =>
-              [
-                ...l,
-                { title: t.flavor?.title ?? '', category: t.category as TicketCategory },
-              ].slice(-6),
-            );
-            ticketIndexRef.current += 1;
-            setTicketIndex(ticketIndexRef.current);
-          }
+          setCompletedTickets((l) =>
+            [...l, { title: currentTicket.flavor.title, category }].slice(-6),
+          );
+          ticketIndexRef.current += 1;
+          setTicketIndex(ticketIndexRef.current);
           ticketPhraseCountRef.current = 0;
           setTicketPhraseCount(0);
-          // ★チケット完了 → 次の手札を提示（選択中はタイピング停止）
-          setActiveTicket(null);
-          setTicketPhrase('');
-          setHand(
-            drawHand({
-              genreId,
-              ticketIndex: ticketIndexRef.current,
-              bugCount: useGameStore.getState().current?.bugCount ?? 0,
-            }),
-          );
         } else {
           ticketPhraseCountRef.current = nextCount;
           setTicketPhraseCount(nextCount);
-          setTicketPhrase(
-            t.kind === 'bugfix' ? pickBugFixPhrase() : pickPhrase(t.category ?? 'program'),
-          );
         }
+        const newCategory = getTicketAt(genreId, ticketIndexRef.current).category;
+        setTicketPhrase(pickPhrase(newCategory));
 
-        // 進捗（完成度）：速度＋コンボ倍率＋フィーバー×2
-        // v0.19.1：チャレンジは rewardMult 倍で多く進む＝報酬をその場の進捗バーで即座に見せる
-        const rewardBonusMult = t.kind === 'challenge' ? t.rewardMult : 1;
+        // 進捗（完成度）は従来通り：速度＋コンボ倍率＋フィーバー×2
         const progress =
-          progressGain(wpmRef.current, false, comboRef.current) *
-          (feverActiveRef.current ? 2 : 1) *
-          rewardBonusMult;
+          progressGain(wpmRef.current, false, comboRef.current) * (feverActiveRef.current ? 2 : 1);
         addDevelopLoC(progress);
 
-        // 待機中のイベントがあれば、次の文としてイベント文を投入
-        // （チケット完了時＝手札選択中は投入せず、選択後の打鍵完了まで持ち越す）
-        if (!finishing && pendingRef.current) {
+        // 待機中のイベントがあれば、次の文としてイベント文を投入（途中差し替えしない）
+        if (pendingRef.current) {
           setActiveEvent(pendingRef.current);
           setPendingEvent(null);
         }
@@ -537,7 +372,13 @@ export const DevelopScreen = () => {
     },
     onCorrect: (c) => {
       comboRef.current = c;
-      sfx.key();
+      // v0.20 A：コンボが乗るほど打鍵音の音階が上がる（切れると元に戻る）
+      sfx.key(keyPitchStep(c));
+      const title = comboTitleAt(c);
+      if (title) {
+        sfx.combo();
+        setComboTitle((t) => ({ label: title, combo: c, key: (t?.key ?? 0) + 1 }));
+      }
       if (isDevelopment) {
         addFever(1); // フィーバー（ノリ）は開発フェーズ専用
         // v0.17.1：実装の打鍵のたびにバグ抽選（社員能力が高いほど発生率低下）
@@ -554,9 +395,8 @@ export const DevelopScreen = () => {
       decayFever();
     },
     // v0.17.1：バグの種はコンボ切れではなく「毎ミス」で判定（連続ミスも漏らさない）
-    // v0.19：チャレンジチケット中はミス1打がバグ missBugMult 匹になる（リスク側）
     onFail: () => {
-      if (isDevelopment && noteBugOnMiss(activeTicketRef.current?.missBugMult ?? 1)) {
+      if (isDevelopment && noteBugOnMiss()) {
         sfx.alert();
         setFlash((n) => n + 1);
       }
@@ -597,12 +437,10 @@ export const DevelopScreen = () => {
     Math.min(TOTAL_PHASE_DOTS, Math.ceil((progressPct / 100) * TOTAL_PHASE_DOTS)),
   );
 
-  // 企画の進捗（企画書完成度）：決定済みカテゴリ＋現在チケット内のフレーズ消化
+  // 企画の進捗（企画書完成度）：完了チケット＋現在チケット内のフレーズ消化
   const planProgressPct = Math.min(
     100,
-    ((planDecided.length + planPhraseCount / PHRASES_PER_PLAN_TICKET) /
-      PLAN_CATEGORY_ORDER.length) *
-      100,
+    ((planIndex + planPhraseCount / PHRASES_PER_PLAN_TICKET) / PLAN_CATEGORY_ORDER.length) * 100,
   );
   const planLitDots = Math.max(
     1,
@@ -636,6 +474,14 @@ export const DevelopScreen = () => {
 
       {flash > 0 && <div key={`flash-${flash}`} className="dev-flash-vignette" />}
 
+      {/* v0.20 A：コンボ節目の称号ポップ（打鍵は止めない。目線の少し上に一瞬出て消える） */}
+      {comboTitle && (
+        <div key={`combo-title-${comboTitle.key}`} className="dev-combo-title">
+          <span>{comboTitle.label}</span>
+          <span className="dev-combo-title-sub">{comboTitle.combo} COMBO</span>
+        </div>
+      )}
+
       <div
         style={{
           flex: 1,
@@ -655,7 +501,7 @@ export const DevelopScreen = () => {
           <TeamStatus
             employeeIds={current.assignedEmployeeIds}
             allEmployees={employees}
-            currentCategory={isDevelopment ? (activeTicket?.category ?? null) : null}
+            currentCategory={isDevelopment ? currentTicket.category : null}
           />
           <div style={{ ...devBox(), gap: 6 }}>
             <span style={{ fontSize: 11, color: DEV.sub }}>
@@ -692,89 +538,56 @@ export const DevelopScreen = () => {
         {/* 中央：フェーズ別メインパネル */}
         <main style={{ minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           {isDevelopment ? (
-            !activeTicket ? (
-              <HandSelectPanel
-                headerIcon={'</> '}
-                headerColor={DEV.green}
-                phaseLabel={`${phaseMeta.label}フェーズ`}
-                cards={(hand ?? []).map((t) => devHandCard(t, bugCount))}
-                onSelect={(i) => {
-                  const t = hand?.[i];
-                  if (t) selectHandTicket(t);
-                }}
-                lastResult={lastResult}
-              />
-            ) : (
-              <DevelopCenter
-                phaseLabel={phaseMeta.label}
-                litPhaseDots={litPhaseDots}
-                ticket={activeTicket}
-                ticketProgressPct={Math.min(
+            <DevelopCenter
+              phaseLabel={phaseMeta.label}
+              litPhaseDots={litPhaseDots}
+              ticket={currentTicket}
+              ticketProgressPct={Math.min(
+                100,
+                ((ticketPhraseCount +
+                  view.completed.length /
+                    Math.max(1, view.completed.length + view.remained.length)) /
+                  PHRASES_PER_TICKET) *
                   100,
-                  ((ticketPhraseCount +
-                    view.completed.length /
-                      Math.max(1, view.completed.length + view.remained.length)) /
-                    activeTicket.phrases) *
-                    100,
-                )}
-                activeEvent={activeEvent}
-                view={view}
-                failCount={failCount}
-                charsPerMin={charsPerMin}
-                bugCount={bugCount}
-                accuracyPct={accuracyPct}
-                programLog={programLog}
-                liveCodeLine={liveCodeLine}
-                designNotes={designNotes}
-                graphicsFrame={graphicsFrame}
-                ticketPhraseCount={ticketPhraseCount}
-                soundBeatKey={soundBeatKey}
-                genre={genre}
-                lastResult={lastResult}
-                feverActive={feverActive}
-              />
-            )
+              )}
+              activeEvent={activeEvent}
+              view={view}
+              failCount={failCount}
+              charsPerMin={charsPerMin}
+              bugCount={bugCount}
+              accuracyPct={accuracyPct}
+              programLog={programLog}
+              liveCodeLine={liveCodeLine}
+              designNotes={designNotes}
+              graphicsFrame={graphicsFrame}
+              ticketPhraseCount={ticketPhraseCount}
+              soundBeatKey={soundBeatKey}
+              genre={genre}
+              lastResult={lastResult}
+              feverActive={feverActive}
+            />
           ) : isPlanning ? (
-            !activePlanCategory ? (
-              <HandSelectPanel
-                headerIcon="💡 "
-                headerColor={PLAN.accent}
-                phaseLabel="企画フェーズ"
-                cards={(planHand ?? []).map((c) =>
-                  planHandCard(
-                    c,
-                    getPlanTicketAt(genreId, PLAN_CATEGORY_ORDER.indexOf(c), planCtx),
-                  ),
-                )}
-                onSelect={(i) => {
-                  const c = planHand?.[i];
-                  if (c) selectPlanCard(c);
-                }}
-                lastResult={lastResult}
-              />
-            ) : (
-              <PlanningCenter
-                litPhaseDots={planLitDots}
-                ticket={currentPlanTicket}
-                ticketProgressPct={Math.min(
+            <PlanningCenter
+              litPhaseDots={planLitDots}
+              ticket={currentPlanTicket}
+              ticketProgressPct={Math.min(
+                100,
+                ((planPhraseCount +
+                  view.completed.length /
+                    Math.max(1, view.completed.length + view.remained.length)) /
+                  PHRASES_PER_PLAN_TICKET) *
                   100,
-                  ((planPhraseCount +
-                    view.completed.length /
-                      Math.max(1, view.completed.length + view.remained.length)) /
-                    PHRASES_PER_PLAN_TICKET) *
-                    100,
-                )}
-                activeEvent={activeEvent}
-                view={view}
-                failCount={failCount}
-                charsPerMin={charsPerMin}
-                bugCount={bugCount}
-                accuracyPct={accuracyPct}
-                memos={planMemos}
-                cards={planCards}
-                lastResult={lastResult}
-              />
-            )
+              )}
+              activeEvent={activeEvent}
+              view={view}
+              failCount={failCount}
+              charsPerMin={charsPerMin}
+              bugCount={bugCount}
+              accuracyPct={accuracyPct}
+              memos={planMemos}
+              cards={planCards}
+              lastResult={lastResult}
+            />
           ) : phase === 'debugging' ? (
             <DebugFlow key={phase} bugCount={bugCount} onFix={fixBug} onAllDone={advancePhase} />
           ) : (
@@ -802,7 +615,7 @@ export const DevelopScreen = () => {
               scaleName={scaleDef.name}
               decided={planDecided}
               currentTicket={currentPlanTicket}
-              planDone={planDecided.length >= PLAN_CATEGORY_ORDER.length}
+              planDone={planIndex >= PLAN_CATEGORY_ORDER.length}
             />
           ) : (
             <>
@@ -831,9 +644,13 @@ export const DevelopScreen = () => {
                 )}
                 {isDevelopment && (
                   <span style={{ fontSize: 11, color: DEV.white, fontWeight: 700 }}>
-                    ▶ {activeTicket ? devTicketTitle(activeTicket) : 'つぎの作業を手札から選択中…'}
+                    ▶ {currentTicket.flavor.title}
                   </span>
                 )}
+                <span style={{ fontSize: 10, color: DEV.sub, marginTop: 6 }}>次の目標</span>
+                <span style={{ fontSize: 12, color: DEV.cream, fontWeight: 700 }}>
+                  {nextTicket.flavor.title}
+                </span>
               </div>
             </>
           )}
@@ -944,217 +761,6 @@ const TeamStatus = ({
   );
 };
 
-/** 即修チケット（バグ修正）の表示メタ（CATEGORY_META と同形） */
-const BUGFIX_META = { icon: '🐛', label: 'バグ修正', color: '#ff6b6b', dim: '#4a1212' } as const;
-
-/** 手札チケットの見出し（bugfix はフレーバーを持たないため固定文言） */
-const devTicketTitle = (t: HandTicket): string =>
-  t.kind === 'bugfix' ? 'バグを1匹すぐ直す' : (t.flavor?.title ?? '');
-
-const devTicketDesc = (t: HandTicket): string =>
-  t.kind === 'bugfix' ? '見つけたバグをその場で修正して返済する' : (t.flavor?.desc ?? '');
-
-/** 手札カードの表示モデル（開発・企画で共通の見た目にするための正規化） */
-type HandCardView = {
-  icon: string;
-  heading: string;
-  tag: string;
-  tagColor: string;
-  desc: string;
-  note: string;
-  noteColor: string;
-};
-
-/** 開発フェーズの手札カード表示（spec v19 §1-1 のモック準拠） */
-const devHandCard = (t: HandTicket, bugCount: number): HandCardView => {
-  if (t.kind === 'bugfix') {
-    return {
-      icon: BUGFIX_META.icon,
-      heading: devTicketTitle(t),
-      tag: `短い（${t.phrases}文）`,
-      tagColor: BUGFIX_META.color,
-      desc: `残りバグ ×${bugCount}。今すぐ1匹返済してデバッグを軽くする`,
-      note: 'バグ −1',
-      noteColor: BUGFIX_META.color,
-    };
-  }
-  const meta = CATEGORY_META[t.category ?? 'program'];
-  if (t.kind === 'challenge') {
-    return {
-      icon: meta.icon,
-      heading: devTicketTitle(t),
-      tag: `長文チャレンジ（${t.phrases}文）`,
-      tagColor: DEV.orange,
-      desc: devTicketDesc(t),
-      // v0.19.1：報酬は進捗ブースト＋完遂ボーナスのバグ-1（品質への還元は上限で無効化されるため使わない）
-      note: `進捗 ×${t.rewardMult}・完遂でバグ-1 ⚠ミスでバグ×${t.missBugMult}`,
-      noteColor: DEV.orange,
-    };
-  }
-  return {
-    icon: meta.icon,
-    heading: devTicketTitle(t),
-    tag: `ふつう（${t.phrases}文）`,
-    tagColor: meta.color,
-    desc: devTicketDesc(t),
-    note: `${meta.label} +標準`,
-    noteColor: meta.color,
-  };
-};
-
-/** 企画フェーズの手札カード表示（効果 💡面白さ / ⭐期待度つき） */
-const planHandCard = (
-  c: PlanCategory,
-  ticket: ReturnType<typeof getPlanTicketAt>,
-): HandCardView => {
-  const meta = PLAN_CATEGORY_META[c];
-  return {
-    icon: meta.icon,
-    heading: ticket.flavor.title,
-    tag: meta.label,
-    tagColor: meta.color,
-    desc: ticket.flavor.desc,
-    note: `💡×${meta.effects.funFactor} ⭐×${meta.effects.hype}`,
-    noteColor: PLAN.accent,
-  };
-};
-
-/**
- * 中央：手札選択パネル（v0.19）。チケット完了ごとに 3 枚から次の作業を選ぶ。
- * 1〜3 キー（親の keydown リスナー）またはクリックで選択。1280×720 内・スクロールなし。
- */
-const HandSelectPanel = ({
-  headerIcon,
-  headerColor,
-  phaseLabel,
-  cards,
-  onSelect,
-  lastResult,
-}: {
-  headerIcon: string;
-  headerColor: string;
-  phaseLabel: string;
-  cards: HandCardView[];
-  onSelect: (index: number) => void;
-  /**
-   * v0.19.1：直前チケットの結果カードをここにも表示する。
-   * チケット完了→手札提示は同一フレームで切り替わるため、DevelopCenter 側だけに
-   * 出していると「達成ボーナス」等の注記が実質一度も見えないまま消えていた。
-   */
-  lastResult?: LastResult | null;
-}) => (
-  <div
-    style={{
-      flex: 1,
-      minHeight: 0,
-      background: DEV.panelBg,
-      border: `2px solid ${DEV.panelBorder}`,
-      boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-    }}
-  >
-    <div style={{ padding: '8px 12px', borderBottom: `2px solid ${DEV.panelBorder}` }}>
-      <span style={{ color: headerColor, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}>
-        {headerIcon}
-        {phaseLabel}
-      </span>
-    </div>
-    <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
-      {lastResult && <ResultCard result={lastResult} />}
-      <span style={{ fontSize: 14, fontWeight: 700, color: DEV.cream }}>
-        つぎの作業を選ぶ（1・2・3 キー or クリック）
-      </span>
-      {cards.map((c, i) => (
-        <button
-          key={`${i}-${c.heading}`}
-          type="button"
-          onClick={() => onSelect(i)}
-          style={{
-            fontFamily: 'inherit',
-            textAlign: 'left',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '10px 12px',
-            background: '#0a0f08',
-            border: `2px solid ${c.tagColor}`,
-            cursor: 'pointer',
-            minWidth: 0,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 16,
-              fontWeight: 700,
-              color: DEV.white,
-              border: `1px solid ${DEV.panelBorder}`,
-              background: '#11180b',
-              padding: '4px 8px',
-              flexShrink: 0,
-            }}
-          >
-            {i + 1}
-          </span>
-          <span style={{ fontSize: 18, flexShrink: 0 }}>{c.icon}</span>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              <span
-                style={{
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: DEV.cream,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {c.heading}
-              </span>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  padding: '2px 6px',
-                  color: c.tagColor,
-                  border: `1px solid ${c.tagColor}`,
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                }}
-              >
-                {c.tag}
-              </span>
-            </div>
-            <span
-              style={{
-                fontSize: 11,
-                color: DEV.sub,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {c.desc}
-            </span>
-          </div>
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 700,
-              color: c.noteColor,
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            {c.note}
-          </span>
-        </button>
-      ))}
-    </div>
-  </div>
-);
-
 /** 中央：開発フェーズ本体 */
 const DevelopCenter = ({
   phaseLabel,
@@ -1179,7 +785,7 @@ const DevelopCenter = ({
 }: {
   phaseLabel: string;
   litPhaseDots: number;
-  ticket: HandTicket;
+  ticket: ReturnType<typeof getTicketAt>;
   ticketProgressPct: number;
   activeEvent: DevEvent | null;
   view: { hiragana: string; completed: string; remained: string };
@@ -1197,15 +803,8 @@ const DevelopCenter = ({
   lastResult: LastResult | null;
   feverActive: boolean;
 }) => {
-  const catMeta =
-    ticket.kind === 'bugfix' ? BUGFIX_META : CATEGORY_META[ticket.category ?? 'program'];
+  const catMeta = CATEGORY_META[ticket.category];
   const inputColor = activeEvent ? '#ff8a3c' : catMeta.color;
-  const ticketTag =
-    ticket.kind === 'bugfix'
-      ? `${catMeta.icon} 即修チケット`
-      : ticket.kind === 'challenge'
-        ? `⚡ チャレンジ：進捗×${ticket.rewardMult}・完遂でバグ-1／ミスでバグ×${ticket.missBugMult}`
-        : `${catMeta.icon} ${catMeta.label}作業`;
   return (
     <div
       style={{
@@ -1295,7 +894,7 @@ const DevelopCenter = ({
                   textOverflow: 'ellipsis',
                 }}
               >
-                {activeEvent ? activeEvent.name : devTicketTitle(ticket)}
+                {activeEvent ? activeEvent.name : ticket.flavor.title}
               </span>
               <span
                 style={{
@@ -1309,7 +908,7 @@ const DevelopCenter = ({
                   flexShrink: 0,
                 }}
               >
-                {activeEvent ? '⚡ イベント作業' : ticketTag}
+                {activeEvent ? '⚡ イベント作業' : `${catMeta.icon} ${catMeta.label}作業`}
               </span>
             </div>
             <span
@@ -1321,7 +920,7 @@ const DevelopCenter = ({
                 textOverflow: 'ellipsis',
               }}
             >
-              {activeEvent ? activeEvent.flavor : devTicketDesc(ticket)}
+              {activeEvent ? activeEvent.flavor : ticket.flavor.desc}
             </span>
           </div>
           {!activeEvent && (
@@ -1454,9 +1053,9 @@ const DevelopCenter = ({
           </div>
         </div>
 
-        {/* 実装中の様子（カテゴリで見た目が変わる。即修はコード画面） */}
+        {/* 実装中の様子（カテゴリで見た目が変わる） */}
         <WorkInProgressPanel
-          category={ticket.category ?? 'program'}
+          category={ticket.category}
           programLog={programLog}
           liveCodeLine={liveCodeLine}
           designNotes={designNotes}
@@ -1464,7 +1063,7 @@ const DevelopCenter = ({
           ticketPhraseCount={ticketPhraseCount}
           soundBeatKey={soundBeatKey}
           genre={genre}
-          ticketTitle={devTicketTitle(ticket)}
+          ticketTitle={ticket.flavor.title}
         />
 
         {/* ③今回の結果（入力した結果どう変わったか） */}
@@ -1851,22 +1450,6 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
       </div>
     );
   }
-  if (result.kind === 'bugfix') {
-    return (
-      <div
-        key={result.ts}
-        className="dev-result-pop"
-        style={{ ...devBox(), gap: 4, borderColor: BUGFIX_META.color }}
-      >
-        <span style={{ fontSize: 13, fontWeight: 700, color: BUGFIX_META.color }}>
-          🐛 バグを1匹駆除！
-        </span>
-        <span style={{ fontSize: 11, color: DEV.cream }}>
-          残りバグ ×{result.remaining}（デバッグがその分軽くなる）
-        </span>
-      </div>
-    );
-  }
   if (result.kind === 'plan') {
     return (
       <div key={result.ts} className="dev-result-pop" style={{ ...devBox(), gap: 6 }}>
@@ -1887,9 +1470,6 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
       <span style={{ fontSize: 14, fontWeight: 700, color: RANK_COLOR[result.rank] }}>
         {result.rank}!
       </span>
-      {result.bonusNote && (
-        <span style={{ fontSize: 12, fontWeight: 700, color: DEV.orange }}>{result.bonusNote}</span>
-      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
         <ResultChip
           icon="⚡"
