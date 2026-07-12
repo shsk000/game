@@ -572,7 +572,7 @@ export const DevelopScreen = () => {
       {/* v0.20 C：クランチタイム突入バナー（80%到達の瞬間に1回だけ横切る） */}
       {crunchBannerKey > 0 && (
         <div key={`crunch-${crunchBannerKey}`} className="dev-crunch-banner">
-          ⏰CRUNCH TIME!!⏰
+          ⏰ラストスパート！！⏰
         </div>
       )}
 
@@ -1019,7 +1019,7 @@ const DevelopCenter = ({
           )}
           {crunchActive && (
             <span style={{ fontSize: 12, fontWeight: 700, color: '#ffb84d' }}>
-              ⏰クランチ 進捗×{JUICE_CONFIG.crunch.progressMult}
+              ⏰ラストスパート 進捗×{JUICE_CONFIG.crunch.progressMult}
             </span>
           )}
           <span style={{ fontSize: 11, color: DEV.sub }}>

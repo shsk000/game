@@ -38,7 +38,7 @@
 - [x] `JUICE_CONFIG.crunch` に `bossRate: 0.15`・`bossFeverBonus: 30` を追加
 - [x] `data/devPhrases.ts` に `pickBossPhrase(category, rng)` を追加（プールから2文連結）
 - [x] クランチタイム自動発動：`overallProgressPct >= crunch.startPct` で `addDevelopLoC` の乗数に `crunch.progressMult` を追加（feverMultと併用）
-- [x] クランチ突入演出：`sfx.crunch()`・「⏰CRUNCH TIME!!⏰」バナー（1回のみ）・常時バッジ表示
+- [x] クランチ突入演出：`sfx.crunch()`・「⏰ラストスパート！！⏰」バナー（1回のみ）・常時バッジ表示（画面表示名は「ラストスパート」。オーナーFBで「クランチ」から変更）
 - [x] ボス文章：クランチ中の文章選択時に `crunch.bossRate` で判定・「⚔BOSS」バッジ表示（レアと同時当選時はボス優先）
 - [x] ボス文章報酬：完走時に FEVERゲージへ `crunch.bossFeverBonus` を加算のみ
 - [x] ボス文章演出：完走時「⚔BOSS撃破！」ポップ・画面シェイク（`LastResult.boss` フラグ経由）
