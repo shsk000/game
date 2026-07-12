@@ -777,9 +777,11 @@ const TeamStatus = ({
 
 /**
  * v0.20 A-2：「入力する文章」（かな表示）に打鍵アクションを付ける（オーナーFB 2026-07-12）。
- * かな進捗は core/kanaProgress のモーラ単位計算で厳密に求める（拗音「じょ」等を1打鍵単位として
- * 扱う。当初はひらがな文字数とローマ字文字数の単純比率で近似していたが、
- * 「zyou まで打ったのに"う"が光っている」という体感のズレが実プレイで見つかり修正した）。
+ * かな進捗は core/kanaProgress のモーラ単位比率計算で求める（拗音「じょ」等を1モーラとして
+ * 扱い、毎打鍵ライブラリが返す実際の残り文字数との比率で近似する）。
+ * 経緯：①ひらがな⇔ローマ字の単純文字数比→「zyouまで打ったのに"う"が光る」ズレ
+ * ②モーラごとの固定打鍵数テーブル→拗音の代替入力（si+小さいゅ 等、日本語入力の正当な仕様）で
+ * 打鍵数が変わり再びズレた（オーナー指摘）。固定長を仮定せずライブの残り長で追従する方式に修正
  * - 消化済みモーラ：ポップして沈む（打つそばから文章が片付いていく手応え）
  * - いま打っているモーラ：バウンス＋発光
  * - 正打のたび：現在モーラの位置でピクセルスパーク（completedLen の変化で再トリガー）
@@ -787,16 +789,18 @@ const TeamStatus = ({
 const KanaActionLine = ({
   hiragana,
   completedLen,
+  remainedLen,
   doneColor,
   currentColor,
 }: {
   hiragana: string;
   completedLen: number;
+  remainedLen: number;
   doneColor: string;
   currentColor: string;
 }) => {
   const morae = useMemo(() => splitMorae(hiragana), [hiragana]);
-  const { doneMorae } = kanaProgressFromRomaji(hiragana, completedLen);
+  const { doneMorae } = kanaProgressFromRomaji(hiragana, completedLen, remainedLen);
   return (
     <>
       {morae.map((m, i) => {
@@ -1048,6 +1052,7 @@ const DevelopCenter = ({
               <KanaActionLine
                 hiragana={view.hiragana}
                 completedLen={view.completed.length}
+                remainedLen={view.remained.length}
                 doneColor="#57703a"
                 currentColor={DEV.white}
               />
@@ -1800,6 +1805,7 @@ const PlanningCenter = ({
               <KanaActionLine
                 hiragana={view.hiragana}
                 completedLen={view.completed.length}
+                remainedLen={view.remained.length}
                 doneColor="#b3a37e"
                 currentColor={accent}
               />
@@ -2486,6 +2492,7 @@ const MissionTyping = ({ phrase, onComplete }: { phrase: string; onComplete: () 
         <KanaActionLine
           hiragana={view.hiragana}
           completedLen={view.completed.length}
+          remainedLen={view.remained.length}
           doneColor="#57703a"
           currentColor={DEV.white}
         />

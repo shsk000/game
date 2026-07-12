@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { kanaProgressFromRomaji, romajiLenFor, splitMorae } from './kanaProgress';
+import { kanaProgressFromRomaji, splitMorae } from './kanaProgress';
 
-describe('splitMorae（かな→打鍵単位の分割）', () => {
+describe('splitMorae（かな→打鍵単位の分割。個数のみ使う）', () => {
   it('通常のかなは1文字1モーラ', () => {
     expect(splitMorae('たのしい')).toEqual(['た', 'の', 'し', 'い']);
   });
@@ -28,56 +28,41 @@ describe('splitMorae（かな→打鍵単位の分割）', () => {
   });
 });
 
-describe('romajiLenFor（モーラ→概算打鍵数）', () => {
-  it('母音単体は1打鍵', () => {
-    expect(romajiLenFor('あ')).toBe(1);
-    expect(romajiLenFor('い')).toBe(1);
-  });
-
-  it('ん・ーは1打鍵、をは2打鍵', () => {
-    expect(romajiLenFor('ん')).toBe(1);
-    expect(romajiLenFor('ー')).toBe(1);
-    expect(romajiLenFor('を')).toBe(2);
-  });
-
-  it('通常の子音+母音は2打鍵', () => {
-    expect(romajiLenFor('か')).toBe(2);
-    expect(romajiLenFor('た')).toBe(2);
-  });
-
-  it('拗音（きゃ等）は3打鍵', () => {
-    expect(romajiLenFor('きゃ')).toBe(3);
-    expect(romajiLenFor('じょ')).toBe(3);
-  });
-
-  it('促音＋Xは (Xの打鍵数 + 1)', () => {
-    expect(romajiLenFor('っこ')).toBe(3); // こ(2) + 1
-    expect(romajiLenFor('っきゃ')).toBe(4); // きゃ(3) + 1
-  });
-});
-
-describe('kanaProgressFromRomaji（ローマ字進捗→モーラ進捗）', () => {
-  it('「じょうたいをかんりする」で zyou（4打鍵）打ち切った時点で3モーラ確定（じょ・う）', () => {
-    // じょ(3)+う(1) = 4 → completedLen=4 でちょうど2モーラ確定
-    const p = kanaProgressFromRomaji('じょうたいをかんりする', 4);
+describe('kanaProgressFromRomaji（ライブなローマ字進捗の比率でモーラ進捗を近似）', () => {
+  it('「じょうたいをかんりする」で zyou（4/19打鍵）打った時点で2モーラ確定（じょ・う）', () => {
+    // 実際のローマ字全体は zyoutaiwokannrisuru（19文字。ん=nn）
+    const p = kanaProgressFromRomaji('じょうたいをかんりする', 4, 19 - 4);
     expect(p.doneMorae).toBe(2);
-    expect(p.totalMorae).toBe(10); // じょ,う,た,い,を,か,ん,り,す,る（じ+ょ が1モーラに畳まれ11→10）
+    expect(p.totalMorae).toBe(10); // じょ,う,た,い,を,か,ん,り,す,る
+  });
+
+  it('「とれんどをぶんせきする」で torenndow（9/22打鍵）打った時点で4モーラ確定し、「を」が現在（オーナー実プレイで発見した回帰：んの打鍵数を1と仮定してズレていた）', () => {
+    // 実測のローマ字全体は torenndowobunnsekisuru（22文字。ん=nn）
+    const p = kanaProgressFromRomaji('とれんどをぶんせきする', 9, 22 - 9);
+    expect(p.doneMorae).toBe(4);
+    expect(splitMorae('とれんどをぶんせきする')[p.doneMorae]).toBe('を');
+  });
+
+  it('拗音の代替入力パターン（si+小さいゅ）でも打鍵数が変わるだけで比率が追従する（オーナー指摘：日本語入力の仕様。しゅうせい＝syuusei でも silyuusei でも打てる）', () => {
+    // 「しゅうせいをあてる」：shu パターンなら全体14文字、si+lyu パターンなら全体16文字。
+    // 「し」まで（1モーラ）打ち終えた時点＝どちらのパターンでも doneMorae は変わらないはず。
+    const viaShu = kanaProgressFromRomaji('しゅうせいをあてる', 1, 14 - 1); // "s" だけ打った直後
+    const viaSplit = kanaProgressFromRomaji('しゅうせいをあてる', 2, 16 - 2); // "si" まで打った直後（1モーラ目「しゅ」の代替入力が確定）
+    expect(viaShu.doneMorae).toBe(0); // "s" だけではまだ「しゅ」は未確定
+    expect(viaSplit.doneMorae).toBe(1); // "si" で1モーラ目が確定（残りは lyuuseiwoateru）
   });
 
   it('1文字も打っていない時は0モーラ', () => {
-    expect(kanaProgressFromRomaji('たのしい', 0).doneMorae).toBe(0);
+    expect(kanaProgressFromRomaji('たのしい', 0, 8).doneMorae).toBe(0);
   });
 
   it('全部打ち終えると全モーラ確定', () => {
     const hira = 'たのしい';
-    const total = romajiLenFor('た') + romajiLenFor('の') + romajiLenFor('し') + romajiLenFor('い');
-    const p = kanaProgressFromRomaji(hira, total);
+    const p = kanaProgressFromRomaji(hira, 8, 0);
     expect(p.doneMorae).toBe(p.totalMorae);
   });
 
-  it('モーラ境界のちょうど手前では確定しない', () => {
-    // 「か」= 2打鍵。1打鍵目では未確定
-    const p = kanaProgressFromRomaji('かき', 1);
-    expect(p.doneMorae).toBe(0);
+  it('remainedLen が 0 でも例外を投げない（防御）', () => {
+    expect(() => kanaProgressFromRomaji('た', 2, 0)).not.toThrow();
   });
 });
