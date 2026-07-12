@@ -3,6 +3,7 @@ import { ads } from '../../ads/AdProvider';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
 import { bugSuppression, bugsClearedByAd, pickBugFixPhrase } from '../../core/bugs';
 import { comboTitleAt, keyPitchStep } from '../../core/juice';
+import { kanaProgressFromRomaji, splitMorae } from '../../core/kanaProgress';
 import { BUG_CONFIG, planWeeksAllowance } from '../../data/balance';
 import { buildLine } from '../../data/codeSnippets';
 import {
@@ -178,6 +179,8 @@ export const DevelopScreen = () => {
   const [comboTitle, setComboTitle] = useState<{ label: string; combo: number; key: number } | null>(
     null,
   );
+  // v0.20 A-2：FEVER 突入バナー（発動の瞬間に1回だけ横切る）
+  const [feverBannerKey, setFeverBannerKey] = useState(0);
 
   // フィーバー：正打で蓄積・ミスで減少、MAX で自動発動
   const [feverGauge, setFeverGauge] = useState(0);
@@ -198,6 +201,7 @@ export const DevelopScreen = () => {
       setFeverGauge(FEVER_MAX);
       sfx.success();
       setFlash((n) => n + 1);
+      setFeverBannerKey((k) => k + 1); // v0.20 A-2：突入バナー
       const t = window.setTimeout(() => {
         setFeverActive(false);
         setFeverGauge(0);
@@ -476,9 +480,19 @@ export const DevelopScreen = () => {
 
       {/* v0.20 A：コンボ節目の称号ポップ（打鍵は止めない。目線の少し上に一瞬出て消える） */}
       {comboTitle && (
-        <div key={`combo-title-${comboTitle.key}`} className="dev-combo-title">
-          <span>{comboTitle.label}</span>
-          <span className="dev-combo-title-sub">{comboTitle.combo} COMBO</span>
+        <>
+          <div key={`goldflash-${comboTitle.key}`} className="dev-gold-flash" />
+          <div key={`combo-title-${comboTitle.key}`} className="dev-combo-title">
+            <span>{comboTitle.label}</span>
+            <span className="dev-combo-title-sub">{comboTitle.combo} COMBO</span>
+          </div>
+        </>
+      )}
+
+      {/* v0.20 A-2：FEVER 突入バナー（発動の瞬間に横切って消える。バッジは既存表示が継続） */}
+      {feverBannerKey > 0 && feverActive && (
+        <div key={`fever-banner-${feverBannerKey}`} className="dev-fever-banner">
+          🔥FEVER!!🔥
         </div>
       )}
 
@@ -761,6 +775,52 @@ const TeamStatus = ({
   );
 };
 
+/**
+ * v0.20 A-2：「入力する文章」（かな表示）に打鍵アクションを付ける（オーナーFB 2026-07-12）。
+ * かな進捗は core/kanaProgress のモーラ単位計算で厳密に求める（拗音「じょ」等を1打鍵単位として
+ * 扱う。当初はひらがな文字数とローマ字文字数の単純比率で近似していたが、
+ * 「zyou まで打ったのに"う"が光っている」という体感のズレが実プレイで見つかり修正した）。
+ * - 消化済みモーラ：ポップして沈む（打つそばから文章が片付いていく手応え）
+ * - いま打っているモーラ：バウンス＋発光
+ * - 正打のたび：現在モーラの位置でピクセルスパーク（completedLen の変化で再トリガー）
+ */
+const KanaActionLine = ({
+  hiragana,
+  completedLen,
+  doneColor,
+  currentColor,
+}: {
+  hiragana: string;
+  completedLen: number;
+  doneColor: string;
+  currentColor: string;
+}) => {
+  const morae = useMemo(() => splitMorae(hiragana), [hiragana]);
+  const { doneMorae } = kanaProgressFromRomaji(hiragana, completedLen);
+  return (
+    <>
+      {morae.map((m, i) => {
+        if (i < doneMorae) {
+          return (
+            <span key={i} className="dev-kana-done" style={{ color: doneColor }}>
+              {m}
+            </span>
+          );
+        }
+        if (i === doneMorae) {
+          return (
+            <span key={i} className="dev-kana-current" style={{ color: currentColor }}>
+              {m}
+              <span key={`spark-${completedLen}`} className="dev-kana-spark" />
+            </span>
+          );
+        }
+        return <span key={i}>{m}</span>;
+      })}
+    </>
+  );
+};
+
 /** 中央：開発フェーズ本体 */
 const DevelopCenter = ({
   phaseLabel,
@@ -958,7 +1018,16 @@ const DevelopCenter = ({
         </div>
 
         {/* ②入力する文章（なにを入力すればいいか）＋ 入力進度/正確さ */}
-        <div style={{ display: 'flex', gap: 8 }}>
+        {/* v0.20 A-2：文完了（ticket 結果）ごとに key 再マウントで PERFECT シェイクと +進捗 フライアウトを再トリガー */}
+        <div
+          key={`inrow-${lastResult?.kind === 'ticket' ? lastResult.ts : 0}`}
+          className={
+            lastResult?.kind === 'ticket' && lastResult.rank === 'PERFECT'
+              ? 'dev-perfect-shake'
+              : undefined
+          }
+          style={{ display: 'flex', gap: 8 }}
+        >
           <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
             <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
               入力する文章
@@ -976,8 +1045,18 @@ const DevelopCenter = ({
                 wordBreak: 'break-word',
               }}
             >
-              {view.hiragana}
+              <KanaActionLine
+                hiragana={view.hiragana}
+                completedLen={view.completed.length}
+                doneColor="#57703a"
+                currentColor={DEV.white}
+              />
             </div>
+            {lastResult?.kind === 'ticket' && (
+              <span key={`fly-${lastResult.ts}`} className="dev-progress-fly">
+                +{lastResult.progress}
+              </span>
+            )}
           </div>
           <div style={{ width: 96, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ ...devBox(), gap: 1, padding: 5 }}>
@@ -1691,7 +1770,16 @@ const PlanningCenter = ({
         </div>
 
         {/* ②入力する文章（企画は紙っぽい明るい入力枠で会議感を出す） */}
-        <div style={{ display: 'flex', gap: 8 }}>
+        {/* v0.20 A-2：文完了ごとに PERFECT シェイクと +💡⭐ フライアウト（開発側と同じ骨格） */}
+        <div
+          key={`inrow-${lastResult?.kind === 'plan' ? lastResult.ts : 0}`}
+          className={
+            lastResult?.kind === 'plan' && lastResult.rank === 'PERFECT'
+              ? 'dev-perfect-shake'
+              : undefined
+          }
+          style={{ display: 'flex', gap: 8 }}
+        >
           <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
             <div style={{ fontSize: 11, color: PLAN.accent, fontWeight: 700, marginBottom: 4 }}>
               入力する文章
@@ -1709,8 +1797,18 @@ const PlanningCenter = ({
                 wordBreak: 'break-word',
               }}
             >
-              {view.hiragana}
+              <KanaActionLine
+                hiragana={view.hiragana}
+                completedLen={view.completed.length}
+                doneColor="#b3a37e"
+                currentColor={accent}
+              />
             </div>
+            {lastResult?.kind === 'plan' && (
+              <span key={`fly-${lastResult.ts}`} className="dev-progress-fly dev-progress-fly-plan">
+                +💡{lastResult.funGain} ⭐{lastResult.hypeGain}
+              </span>
+            )}
           </div>
           <div style={{ width: 96, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ ...devBox(), gap: 1, padding: 5 }}>
@@ -2385,7 +2483,12 @@ const MissionTyping = ({ phrase, onComplete }: { phrase: string; onComplete: () 
           letterSpacing: '0.04em',
         }}
       >
-        {view.hiragana}
+        <KanaActionLine
+          hiragana={view.hiragana}
+          completedLen={view.completed.length}
+          doneColor="#57703a"
+          currentColor={DEV.white}
+        />
       </div>
       <div
         style={{
