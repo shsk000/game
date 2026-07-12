@@ -3,7 +3,7 @@ import { ads } from '../../ads/AdProvider';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
 import { bugSuppression, bugsClearedByAd, pickBugFixPhrase } from '../../core/bugs';
 import { comboTitleAt, keyPitchStep } from '../../core/juice';
-import { kanaProgressFromRomaji, splitMorae } from '../../core/kanaProgress';
+import { splitMorae } from '../../core/kanaProgress';
 import { BUG_CONFIG, planWeeksAllowance } from '../../data/balance';
 import { buildLine } from '../../data/codeSnippets';
 import {
@@ -43,7 +43,7 @@ import { useGameStore } from '../../state/gameStore';
 import { DEV_PHASE_META, DEV_PHASE_ORDER, type DevPhase, dateToWeekIndex } from '../../state/types';
 import { sfx } from '../../utils/sfx';
 import { computeDevImpact, progressGain, toCharsPerMin } from './devImpact';
-import { useTyping } from './useTyping';
+import { type TypingView, useTyping } from './useTyping';
 
 /** v0.15.2 フィーバー定数（叩き台 🔧）：正打 60 打で MAX、15 秒間 進捗×2 */
 const FEVER_MAX = 60;
@@ -748,7 +748,20 @@ const TeamStatus = ({
     pr: CATEGORY_META.design.color,
   };
   return (
-    <div style={{ ...devBox(), gap: 6, flex: 1, minHeight: 0, overflow: 'hidden' }}>
+    <div
+      style={{
+        ...devBox(),
+        gap: 6,
+        // v0.20 A-2 修正：flex:1 で残りスペース全部を占有すると、社員が少ない時に
+        // 下の「開発全体の進捗」ボックスを画面外まで押し出してしまう回帰があった
+        // （オーナー実プレイで発見）。社員数に応じた実測に近い上限で頭打ちし、
+        // それ以上は overflow:hidden でクリップする（MAX_EMPLOYEES=12 想定）
+        flex: '0 1 auto',
+        maxHeight: 210,
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
       <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>チーム状態</span>
       {team.length === 0 && (
         <span style={{ fontSize: 11, color: DEV.sub }}>社員なし（あなた一人で開発中）</span>
@@ -777,11 +790,10 @@ const TeamStatus = ({
 
 /**
  * v0.20 A-2：「入力する文章」（かな表示）に打鍵アクションを付ける（オーナーFB 2026-07-12）。
- * かな進捗は core/kanaProgress のモーラ単位比率計算で求める（拗音「じょ」等を1モーラとして
- * 扱い、毎打鍵ライブラリが返す実際の残り文字数との比率で近似する）。
- * 経緯：①ひらがな⇔ローマ字の単純文字数比→「zyouまで打ったのに"う"が光る」ズレ
- * ②モーラごとの固定打鍵数テーブル→拗音の代替入力（si+小さいゅ 等、日本語入力の正当な仕様）で
- * 打鍵数が変わり再びズレた（オーナー指摘）。固定長を仮定せずライブの残り長で追従する方式に修正
+ * かな進捗は nano-type-jp@0.7 が公開する resolvedUnitCount（何個目の入力単位＝モーラまで
+ * 確定したか）をそのまま使う。近似（文字数比→固定長テーブル→ライブ比率）を3回試して
+ * すべて実プレイで破綻したため、ライブラリ側にAPIを追加してもらい正確な値を取得する形にした
+ * （経緯は core/kanaProgress.ts 参照）。
  * - 消化済みモーラ：ポップして沈む（打つそばから文章が片付いていく手応え）
  * - いま打っているモーラ：バウンス＋発光
  * - 正打のたび：現在モーラの位置でピクセルスパーク（completedLen の変化で再トリガー）
@@ -789,18 +801,18 @@ const TeamStatus = ({
 const KanaActionLine = ({
   hiragana,
   completedLen,
-  remainedLen,
+  resolvedUnitCount,
   doneColor,
   currentColor,
 }: {
   hiragana: string;
   completedLen: number;
-  remainedLen: number;
+  resolvedUnitCount: number;
   doneColor: string;
   currentColor: string;
 }) => {
   const morae = useMemo(() => splitMorae(hiragana), [hiragana]);
-  const { doneMorae } = kanaProgressFromRomaji(hiragana, completedLen, remainedLen);
+  const doneMorae = Math.min(morae.length, resolvedUnitCount);
   return (
     <>
       {morae.map((m, i) => {
@@ -852,7 +864,7 @@ const DevelopCenter = ({
   ticket: ReturnType<typeof getTicketAt>;
   ticketProgressPct: number;
   activeEvent: DevEvent | null;
-  view: { hiragana: string; completed: string; remained: string };
+  view: TypingView;
   failCount: number;
   charsPerMin: number;
   bugCount: number;
@@ -1052,7 +1064,7 @@ const DevelopCenter = ({
               <KanaActionLine
                 hiragana={view.hiragana}
                 completedLen={view.completed.length}
-                remainedLen={view.remained.length}
+                resolvedUnitCount={view.resolvedUnitCount}
                 doneColor="#57703a"
                 currentColor={DEV.white}
               />
@@ -1624,7 +1636,7 @@ const PlanningCenter = ({
   ticket: ReturnType<typeof getPlanTicketAt>;
   ticketProgressPct: number;
   activeEvent: DevEvent | null;
-  view: { hiragana: string; completed: string; remained: string };
+  view: TypingView;
   failCount: number;
   charsPerMin: number;
   bugCount: number;
@@ -1805,7 +1817,7 @@ const PlanningCenter = ({
               <KanaActionLine
                 hiragana={view.hiragana}
                 completedLen={view.completed.length}
-                remainedLen={view.remained.length}
+                resolvedUnitCount={view.resolvedUnitCount}
                 doneColor="#b3a37e"
                 currentColor={accent}
               />
@@ -2492,7 +2504,7 @@ const MissionTyping = ({ phrase, onComplete }: { phrase: string; onComplete: () 
         <KanaActionLine
           hiragana={view.hiragana}
           completedLen={view.completed.length}
-          remainedLen={view.remained.length}
+          resolvedUnitCount={view.resolvedUnitCount}
           doneColor="#57703a"
           currentColor={DEV.white}
         />

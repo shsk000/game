@@ -1852,36 +1852,44 @@ body,
   animation: dev-combo-ring 500ms steps(4) both;
 }
 
-/* v0.20 A-2：FEVER 突入バナー（横切って消える） */
+/* v0.20 A-2：FEVER 突入バナー（横切って中央でしっかり止まって見せてから消える） */
 @keyframes dev-fever-banner-kf {
   0% {
-    transform: translateX(-120%);
+    transform: translateX(-120%) scale(0.8);
+    opacity: 0;
+  }
+  15% {
+    transform: translateX(0) scale(1.15);
     opacity: 1;
   }
-  55% {
-    transform: translateX(0);
+  25% {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+  78% {
+    transform: translateX(0) scale(1);
     opacity: 1;
   }
   100% {
-    transform: translateX(130%);
+    transform: translateX(130%) scale(0.9);
     opacity: 0;
   }
 }
 .dev-fever-banner {
   position: absolute;
-  top: 38%;
+  top: 32%;
   left: 0;
   right: 0;
   text-align: center;
-  font-size: 44px;
+  font-size: 76px;
   font-weight: 700;
   color: #ff9d4d;
   letter-spacing: 0.2em;
   z-index: 39;
   pointer-events: none;
   text-shadow:
-    3px 3px 0 #4a1212,
-    -2px -2px 0 #2c0d0d,
-    0 0 18px rgba(255, 157, 77, 0.8);
-  animation: dev-fever-banner-kf 900ms steps(8) both;
+    4px 4px 0 #4a1212,
+    -3px -3px 0 #2c0d0d,
+    0 0 28px rgba(255, 157, 77, 0.9);
+  animation: dev-fever-banner-kf 2400ms steps(10) both;
 }

@@ -16,7 +16,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@shsk002/nano-type-jp": "^0.6.0",
+    "@shsk002/nano-type-jp": "^0.7.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "zustand": "^5.0.14"
