@@ -642,6 +642,7 @@ export const DevelopScreen = () => {
             <DevelopCenter
               phaseLabel={phaseMeta.label}
               litPhaseDots={litPhaseDots}
+              progressPct={progressPct}
               ticket={currentTicket}
               ticketProgressPct={Math.min(
                 100,
@@ -673,6 +674,7 @@ export const DevelopScreen = () => {
           ) : isPlanning ? (
             <PlanningCenter
               litPhaseDots={planLitDots}
+              progressPct={planProgressPct}
               ticket={currentPlanTicket}
               ticketProgressPct={Math.min(
                 100,
@@ -931,6 +933,7 @@ const KanaActionLine = ({
 const DevelopCenter = ({
   phaseLabel,
   litPhaseDots,
+  progressPct,
   ticket,
   ticketProgressPct,
   activeEvent,
@@ -954,6 +957,8 @@ const DevelopCenter = ({
 }: {
   phaseLabel: string;
   litPhaseDots: number;
+  /** v0.20 D：開発全体の完成度%（左サイドバーと同じ値。ヘッダーに主役として表示する） */
+  progressPct: number;
   ticket: ReturnType<typeof getTicketAt>;
   ticketProgressPct: number;
   activeEvent: DevEvent | null;
@@ -1022,11 +1027,22 @@ const DevelopCenter = ({
               ⏰ラストスパート 進捗×{JUICE_CONFIG.crunch.progressMult}
             </span>
           )}
-          <span style={{ fontSize: 11, color: DEV.sub }}>
-            PHASE {litPhaseDots} / 6
+          {/* v0.20 D：「PHASE X/6」表記は左サイドバーの6段階フェーズ進行リスト（企画→開発→…→完了）
+              と同じ「6」を使っていて紛らわしく、実際は現フェーズ内の完成度を6分割しただけの別物
+              だった（オーナーFB「完成までの進捗があることを理解してなかった」の一因と判断）。
+              パーセンテージを主役に出し、ドットは補助の目盛りとして残す。 */}
+          <span style={{ fontSize: 11, color: DEV.sub, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span
-              style={{ display: 'inline-flex', gap: 3, marginLeft: 6, verticalAlign: 'middle' }}
+              style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: DEV.greenBright,
+                fontVariantNumeric: 'tabular-nums',
+              }}
             >
+              開発 {Math.floor(progressPct)}%
+            </span>
+            <span style={{ display: 'inline-flex', gap: 3, verticalAlign: 'middle' }}>
               {Array.from({ length: 6 }, (_, i) => (
                 <span
                   key={i}
@@ -1738,6 +1754,7 @@ const PLAN = {
 /** 中央：企画フェーズ本体（v0.15.3 企画チケット UI） */
 const PlanningCenter = ({
   litPhaseDots,
+  progressPct,
   ticket,
   ticketProgressPct,
   activeEvent,
@@ -1751,6 +1768,8 @@ const PlanningCenter = ({
   lastResult,
 }: {
   litPhaseDots: number;
+  /** v0.20 D：企画書完成度%（左サイドバーと同じ値。ヘッダーに主役として表示する） */
+  progressPct: number;
   ticket: ReturnType<typeof getPlanTicketAt>;
   ticketProgressPct: number;
   activeEvent: DevEvent | null;
@@ -1794,9 +1813,20 @@ const PlanningCenter = ({
         >
           💡 企画フェーズ
         </span>
-        <span style={{ fontSize: 11, color: DEV.sub }}>
-          PHASE {litPhaseDots} / 6
-          <span style={{ display: 'inline-flex', gap: 3, marginLeft: 6, verticalAlign: 'middle' }}>
+        {/* v0.20 D：「PHASE X/6」表記は左サイドバーの6段階フェーズ進行リストと紛らわしいため撤去し、
+            パーセンテージを主役に出す（DevelopCenter と同じ方針） */}
+        <span style={{ fontSize: 11, color: DEV.sub, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              color: PLAN.accent,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            企画書 {Math.floor(progressPct)}%
+          </span>
+          <span style={{ display: 'inline-flex', gap: 3, verticalAlign: 'middle' }}>
             {Array.from({ length: 6 }, (_, i) => (
               <span
                 key={i}
