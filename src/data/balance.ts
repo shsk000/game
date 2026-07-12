@@ -359,8 +359,12 @@ export const JUICE_CONFIG = {
   crit: { rate: 0.02, feverBonus: 12 },
   /** レア文章：文の差し替え時の出現率・打ち切り時のフィーバーチャージ（クリティカルより大きい） */
   rare: { rate: 0.07, feverBonus: 20 },
-  /** クランチタイム：全体完成度がこの%以上で進捗倍率（自動発動・選択なし） */
-  crunch: { startPct: 80, progressMult: 2 },
+  /**
+   * クランチタイム：全体完成度がこの%以上で進捗倍率（自動発動・選択なし）。
+   * bossRate：クランチ中の文章選択でボス文章（プール2文連結の長文）になる確率。
+   * bossFeverBonus：ボス文章完走時のフィーバーチャージ（rare.feverBonusより大きい）。
+   */
+  crunch: { startPct: 80, progressMult: 2, bossRate: 0.15, bossFeverBonus: 30 },
   /** ギア：入力速度 wpm（打鍵/分）のしきい値。上がるほどフィーバーが溜まりやすい */
   gears: [
     { minWpm: 150, feverGain: 2, label: 'GEAR 2' },

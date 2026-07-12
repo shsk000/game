@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ads } from '../../ads/AdProvider';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
 import { bugSuppression, bugsClearedByAd, pickBugFixPhrase } from '../../core/bugs';
-import { comboTitleAt, keyPitchStep, rollCrit, rollRare } from '../../core/juice';
+import { comboTitleAt, isCrunchActive, keyPitchStep, rollBoss, rollCrit, rollRare } from '../../core/juice';
 import { splitMorae } from '../../core/kanaProgress';
 import { BUG_CONFIG, JUICE_CONFIG, planWeeksAllowance } from '../../data/balance';
 import { buildLine } from '../../data/codeSnippets';
@@ -12,6 +12,7 @@ import {
   comboAttrMultiplier,
   getTicketAt,
   PHRASES_PER_TICKET,
+  pickBossPhrase,
   pickPhrase,
   type SpeedRank,
   speedRank,
@@ -64,6 +65,8 @@ type LastResult =
       bugPct: number;
       /** この 1 文で実際に進んだ完成度（進捗ゲージに入る値そのもの） */
       progress: number;
+      /** v0.20 C：この1文がボス文章の完走だったか（画面シェイクの追加トリガーに使う） */
+      boss?: boolean;
       ts: number;
     }
   | {
@@ -112,6 +115,12 @@ export const DevelopScreen = () => {
   const isDevelopment = phase === 'development';
   const isPlanning = phase === 'planning';
   const genreId = current?.genreId ?? 'action';
+
+  // v0.20 C：クランチタイム（全体完成度が閾値を超えたら自動発動。開発フェーズのみ）
+  const overallProgressPct = current
+    ? Math.max(0, Math.min(100, (current.doneLoC / (current.workTarget || 1)) * 100))
+    : 0;
+  const crunchActive = isDevelopment && isCrunchActive(overallProgressPct);
 
   const wpmRef = useRef(0);
   const accuracyRef = useRef(1);
@@ -186,6 +195,12 @@ export const DevelopScreen = () => {
   // v0.20 B：レア文章（開発フェーズのみ。次の作業チケット文が「当たり」かどうか）
   const [isRarePhrase, setIsRarePhrase] = useState(() => rollRare());
   const [rareHitKey, setRareHitKey] = useState(0);
+  // v0.20 C：クランチ突入バナー（80%到達の瞬間に1回だけ）
+  const [crunchBannerKey, setCrunchBannerKey] = useState(0);
+  const crunchAnnouncedRef = useRef(false);
+  // v0.20 C：ボス文章（クランチ中のみ。次の作業チケット文が「ボス」かどうか）
+  const [isBossPhrase, setIsBossPhrase] = useState(false);
+  const [bossHitKey, setBossHitKey] = useState(0);
 
   // フィーバー：正打で蓄積・ミスで減少、MAX で自動発動
   const [feverGauge, setFeverGauge] = useState(0);
@@ -215,6 +230,15 @@ export const DevelopScreen = () => {
       return () => window.clearTimeout(t);
     }
   }, [feverGauge, feverActive]);
+
+  // v0.20 C：クランチタイム突入（80%到達の瞬間に1回だけ通知。以降 doneLoC は減らないため再発火しない）
+  useEffect(() => {
+    if (crunchActive && !crunchAnnouncedRef.current) {
+      crunchAnnouncedRef.current = true;
+      sfx.crunch();
+      setCrunchBannerKey((k) => k + 1);
+    }
+  }, [crunchActive]);
 
   // イベント抽選：8 秒ごとに 1 回、企画/開発フェーズ中のみ（フェーズごとのイベント表から）
   useEffect(() => {
@@ -316,7 +340,9 @@ export const DevelopScreen = () => {
 
         const impactNow = computeDevImpact({ wpm: wpmRef.current, accuracy: accuracyRef.current });
         const progressNow =
-          progressGain(wpmRef.current, false, comboRef.current) * (feverActiveRef.current ? 2 : 1);
+          progressGain(wpmRef.current, false, comboRef.current) *
+          (feverActiveRef.current ? 2 : 1) *
+          (crunchActive ? JUICE_CONFIG.crunch.progressMult : 1);
         sfx[rank === 'PERFECT' ? 'success' : 'complete']();
         setLastResult({
           kind: 'ticket',
@@ -325,6 +351,7 @@ export const DevelopScreen = () => {
           qualityDelta: impactNow.qualityDelta,
           bugPct: impactNow.bugPct,
           progress: Math.round(progressNow * 10) / 10,
+          boss: isBossPhrase,
           ts: Date.now(),
         });
 
@@ -333,6 +360,12 @@ export const DevelopScreen = () => {
           addFever(JUICE_CONFIG.rare.feverBonus);
           sfx.rare();
           setRareHitKey((k) => k + 1);
+        }
+        // v0.20 C：ボス文章の完走報酬（クランチタイム中のみ。FEVERゲージにのみ加算）
+        if (isBossPhrase) {
+          addFever(JUICE_CONFIG.crunch.bossFeverBonus);
+          sfx.crunch();
+          setBossHitKey((k) => k + 1);
         }
 
         // 実装中の様子：カテゴリごとに違う見え方で反映
@@ -365,12 +398,18 @@ export const DevelopScreen = () => {
           setTicketPhraseCount(nextCount);
         }
         const newCategory = getTicketAt(genreId, ticketIndexRef.current).category;
-        setTicketPhrase(pickPhrase(newCategory));
-        setIsRarePhrase(rollRare());
+        // v0.20 C：クランチタイム中は稀にボス文章（プール2文連結の長文）を出す
+        // レア文章とは独立抽選だが、両方当たった場合はボスを優先（バッジ・報酬の二重表示を避ける）
+        const nextIsBoss = crunchActive && rollBoss();
+        setTicketPhrase(nextIsBoss ? pickBossPhrase(newCategory) : pickPhrase(newCategory));
+        setIsBossPhrase(nextIsBoss);
+        setIsRarePhrase(nextIsBoss ? false : rollRare());
 
         // 進捗（完成度）は従来通り：速度＋コンボ倍率＋フィーバー×2
         const progress =
-          progressGain(wpmRef.current, false, comboRef.current) * (feverActiveRef.current ? 2 : 1);
+          progressGain(wpmRef.current, false, comboRef.current) *
+          (feverActiveRef.current ? 2 : 1) *
+          (crunchActive ? JUICE_CONFIG.crunch.progressMult : 1);
         addDevelopLoC(progress);
 
         // 待機中のイベントがあれば、次の文としてイベント文を投入（途中差し替えしない）
@@ -530,6 +569,20 @@ export const DevelopScreen = () => {
         </div>
       )}
 
+      {/* v0.20 C：クランチタイム突入バナー（80%到達の瞬間に1回だけ横切る） */}
+      {crunchBannerKey > 0 && (
+        <div key={`crunch-${crunchBannerKey}`} className="dev-crunch-banner">
+          ⏰CRUNCH TIME!!⏰
+        </div>
+      )}
+
+      {/* v0.20 C：ボス文章の完走ポップ（画面シェイクは入力行側で付与） */}
+      {bossHitKey > 0 && (
+        <div key={`boss-hit-${bossHitKey}`} className="dev-rare-pop dev-boss-pop">
+          ⚔BOSS撃破！
+        </div>
+      )}
+
       <div
         style={{
           flex: 1,
@@ -600,6 +653,8 @@ export const DevelopScreen = () => {
               )}
               activeEvent={activeEvent}
               isRarePhrase={isRarePhrase}
+              isBossPhrase={isBossPhrase}
+              crunchActive={crunchActive}
               view={view}
               failCount={failCount}
               charsPerMin={charsPerMin}
@@ -880,6 +935,8 @@ const DevelopCenter = ({
   ticketProgressPct,
   activeEvent,
   isRarePhrase,
+  isBossPhrase,
+  crunchActive,
   view,
   failCount,
   charsPerMin,
@@ -902,6 +959,10 @@ const DevelopCenter = ({
   activeEvent: DevEvent | null;
   /** v0.20 B：次に打つ文章が「レア」かどうか（開発フェーズのみ） */
   isRarePhrase: boolean;
+  /** v0.20 C：次に打つ文章が「ボス」かどうか（クランチタイム中のみ） */
+  isBossPhrase: boolean;
+  /** v0.20 C：クランチタイム中かどうか */
+  crunchActive: boolean;
   view: TypingView;
   failCount: number;
   charsPerMin: number;
@@ -954,6 +1015,11 @@ const DevelopCenter = ({
               style={{ fontSize: 12, fontWeight: 700, color: '#ff5a3c' }}
             >
               🔥FEVER 進捗×2
+            </span>
+          )}
+          {crunchActive && (
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#ffb84d' }}>
+              ⏰クランチ 進捗×{JUICE_CONFIG.crunch.progressMult}
             </span>
           )}
           <span style={{ fontSize: 11, color: DEV.sub }}>
@@ -1076,7 +1142,7 @@ const DevelopCenter = ({
         <div
           key={`inrow-${lastResult?.kind === 'ticket' ? lastResult.ts : 0}`}
           className={
-            lastResult?.kind === 'ticket' && lastResult.rank === 'PERFECT'
+            lastResult?.kind === 'ticket' && (lastResult.rank === 'PERFECT' || lastResult.boss)
               ? 'dev-perfect-shake'
               : undefined
           }
@@ -1097,6 +1163,8 @@ const DevelopCenter = ({
               入力する文章
               {/* v0.20 B：レア文章バッジ（打ち始める前から見えるので、打っている間ずっと期待感が続く） */}
               {!activeEvent && isRarePhrase && <span className="dev-rare-badge">★レア</span>}
+              {/* v0.20 C：ボス文章バッジ */}
+              {!activeEvent && isBossPhrase && <span className="dev-boss-badge">⚔BOSS</span>}
             </div>
             <div
               style={{

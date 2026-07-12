@@ -34,9 +34,20 @@
 - [x] 4点セット（build/unit 236/ui 14/e2e 7）＋Playwright MCPでの実打鍵検証（RNGをcrit/rare発生確率未満に固定し、実キー入力で `.dev-crit-pop`/`.dev-rare-badge`/`.dev-rare-pop` のDOM出現とFEVER早期発動を確認。spec §7 チェックリスト消し込み済み）
 - [ ] SE（`sfx.crit()`/`sfx.rare()`）の心地よさ・「間欠サプライズ」としての体感 → オーナー確認待ち
 
+### 4. パターンC: 自動の山場（spec §5）— 完了
+- [x] `JUICE_CONFIG.crunch` に `bossRate: 0.15`・`bossFeverBonus: 30` を追加
+- [x] `data/devPhrases.ts` に `pickBossPhrase(category, rng)` を追加（プールから2文連結）
+- [x] クランチタイム自動発動：`overallProgressPct >= crunch.startPct` で `addDevelopLoC` の乗数に `crunch.progressMult` を追加（feverMultと併用）
+- [x] クランチ突入演出：`sfx.crunch()`・「⏰CRUNCH TIME!!⏰」バナー（1回のみ）・常時バッジ表示
+- [x] ボス文章：クランチ中の文章選択時に `crunch.bossRate` で判定・「⚔BOSS」バッジ表示（レアと同時当選時はボス優先）
+- [x] ボス文章報酬：完走時に FEVERゲージへ `crunch.bossFeverBonus` を加算のみ
+- [x] ボス文章演出：完走時「⚔BOSS撃破！」ポップ・画面シェイク（`LastResult.boss` フラグ経由）
+- [x] unit テスト：クランチ判定・ボス判定の境界値（`core/juice.test.ts`）、`pickBossPhrase` の連結ロジック（`data/devPhrases.test.ts`）
+- [x] 4点セット（build/unit 242/ui 14/e2e 7）＋Playwright MCPでの実打鍵検証（80%到達バナー・ボス文章の誘発と完走報酬・1280×720オーバーフローなしを実機確認。spec §8 チェックリスト消し込み済み）
+- [ ] クランチの高揚感・ボスの「山場」体感 → オーナー確認待ち
+
 ## 積み残し（次版へ）
 
-- **パターンC**（自動の山場：クランチタイム・ボス文章）— `JUICE_CONFIG.crunch` は叩き台のみ、未実装
 - **パターンD**（合計値ライブ表示：積み上げの主役化）— オーナーFB「完成までの進捗を理解してなかった」を受け優先度上昇
 - **パターンE**（ギアシフト＋パーフェクトストリーク）— `JUICE_CONFIG.gears` / `perfect` は叩き台のみ、未実装
-- オーナー実プレイでの作業感の再確認（B実装後）
+- オーナー実プレイでの作業感の再確認（B・C実装後）

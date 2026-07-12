@@ -37,3 +37,16 @@ export const rollCrit = (rng: Rng = Math.random): boolean => rng() < JUICE_CONFI
  * 発動時は文章カードに★表示し、完走時に JUICE_CONFIG.rare.feverBonus をフィーバーに加算する。
  */
 export const rollRare = (rng: Rng = Math.random): boolean => rng() < JUICE_CONFIG.rare.rate;
+
+/**
+ * v0.20 C：クランチタイムの判定（全体完成度%が閾値を超えたか）。
+ * 一度超えたら doneLoC は減らないため、以降ずっと true のまま（時限式ではない）。
+ */
+export const isCrunchActive = (progressPct: number): boolean =>
+  progressPct >= JUICE_CONFIG.crunch.startPct;
+
+/**
+ * v0.20 C：ボス文章の判定（クランチタイム中の文章選択のたびに抽選）。
+ * 発動時は pickBossPhrase で長文を選び、完走時に JUICE_CONFIG.crunch.bossFeverBonus を加算する。
+ */
+export const rollBoss = (rng: Rng = Math.random): boolean => rng() < JUICE_CONFIG.crunch.bossRate;

@@ -368,6 +368,17 @@ export const pickPhrase = (category: TicketCategory, rng: Rng = Math.random): st
   return pool[Math.floor(rng() * pool.length)];
 };
 
+/**
+ * v0.20 C：ボス文章（クランチタイム中に混じる長文）。
+ * 新規コンテンツを追加せず、既存プールから2文を連結して「長め」を作る（最小変更）。
+ */
+export const pickBossPhrase = (category: TicketCategory, rng: Rng = Math.random): string => {
+  const pool = CATEGORY_PHRASE_POOLS[category];
+  const a = pool[Math.floor(rng() * pool.length)];
+  const b = pool[Math.floor(rng() * pool.length)];
+  return a + b;
+};
+
 /** コンボ倍率（数字インフレ）：10 で×1.5、30 で×2、100 で×3（叩き台 🔧） */
 export const comboAttrMultiplier = (combo: number): number =>
   combo >= 100 ? 3 : combo >= 30 ? 2 : combo >= 10 ? 1.5 : 1;

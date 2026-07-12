@@ -1987,3 +1987,67 @@ body,
   letter-spacing: 0.04em;
   animation: dev-rare-badge-pulse 900ms steps(2) infinite;
 }
+
+/* v0.20 C：クランチタイム突入バナー（1回だけ。以降は常時バッジのみ＝演出疲れを避ける） */
+@keyframes dev-crunch-banner-kf {
+  0% {
+    transform: translateX(-120%) scale(0.8);
+    opacity: 0;
+  }
+  15% {
+    transform: translateX(0) scale(1.1);
+    opacity: 1;
+  }
+  25% {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+  78% {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(130%) scale(0.9);
+    opacity: 0;
+  }
+}
+.dev-crunch-banner {
+  position: absolute;
+  top: 32%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 60px;
+  font-weight: 700;
+  color: #ffb84d;
+  letter-spacing: 0.15em;
+  z-index: 39;
+  pointer-events: none;
+  text-shadow:
+    4px 4px 0 #4a2e00,
+    -3px -3px 0 #2c1a00,
+    0 0 24px rgba(255, 184, 77, 0.9);
+  animation: dev-crunch-banner-kf 2200ms steps(10) both;
+}
+
+/* v0.20 C：ボス文章バッジ（レアより強めの色・明滅で「大物」感を出す） */
+.dev-boss-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #3a0d0d;
+  background: #ff9d4d;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+  animation: dev-rare-badge-pulse 700ms steps(2) infinite;
+}
+
+/* v0.20 C：ボス撃破ポップ（dev-rare-pop の位置・タイミングを踏襲し、色だけボス用に上書き） */
+.dev-boss-pop {
+  color: #ff9d4d;
+  text-shadow:
+    2px 2px 0 #3a1a00,
+    -2px -2px 0 #3a1a00,
+    0 0 16px rgba(255, 157, 77, 0.8);
+}

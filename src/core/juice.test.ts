@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { JUICE_CONFIG } from '../data/balance';
-import { comboTitleAt, keyPitchStep, rollCrit, rollRare } from './juice';
+import { comboTitleAt, isCrunchActive, keyPitchStep, rollBoss, rollCrit, rollRare } from './juice';
 
 describe('keyPitchStep（コンボ→打鍵音の音階）', () => {
   it('コンボ 10 ごとに半音 +1 上がる', () => {
@@ -54,5 +54,28 @@ describe('rollRare（v0.20 B：レア文章の判定）', () => {
   it('rng が rate 以上なら不発（境界値）', () => {
     expect(rollRare(() => JUICE_CONFIG.rare.rate)).toBe(false);
     expect(rollRare(() => JUICE_CONFIG.rare.rate + 0.001)).toBe(false);
+  });
+});
+
+describe('isCrunchActive（v0.20 C：クランチタイムの判定）', () => {
+  it('全体完成度が閾値未満なら false', () => {
+    expect(isCrunchActive(JUICE_CONFIG.crunch.startPct - 1)).toBe(false);
+    expect(isCrunchActive(0)).toBe(false);
+  });
+
+  it('全体完成度が閾値ちょうど・以上なら true', () => {
+    expect(isCrunchActive(JUICE_CONFIG.crunch.startPct)).toBe(true);
+    expect(isCrunchActive(100)).toBe(true);
+  });
+});
+
+describe('rollBoss（v0.20 C：ボス文章の判定）', () => {
+  it('rng が bossRate 未満なら発動', () => {
+    expect(rollBoss(() => JUICE_CONFIG.crunch.bossRate - 0.001)).toBe(true);
+  });
+
+  it('rng が bossRate 以上なら不発（境界値）', () => {
+    expect(rollBoss(() => JUICE_CONFIG.crunch.bossRate)).toBe(false);
+    expect(rollBoss(() => JUICE_CONFIG.crunch.bossRate + 0.001)).toBe(false);
   });
 });
