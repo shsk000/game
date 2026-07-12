@@ -1893,3 +1893,97 @@ body,
     0 0 28px rgba(255, 157, 77, 0.9);
   animation: dev-fever-banner-kf 2400ms steps(10) both;
 }
+
+/* v0.20 B：クリティカル打鍵ポップ（発生率2%。小さく速く出て消える＝打鍵を止めない） */
+@keyframes dev-crit-pop-kf {
+  0% {
+    transform: translateX(-50%) scale(1.8);
+    opacity: 0;
+  }
+  25% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+  70% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-50%) scale(1) translateY(-8px);
+    opacity: 0;
+  }
+}
+.dev-crit-pop {
+  position: absolute;
+  left: 50%;
+  top: 26%;
+  z-index: 40;
+  pointer-events: none;
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffe066;
+  letter-spacing: 0.06em;
+  text-shadow:
+    1px 1px 0 #4a2e00,
+    -1px -1px 0 #4a2e00,
+    0 0 10px rgba(255, 224, 102, 0.7);
+  animation: dev-crit-pop-kf 480ms steps(5) both;
+}
+
+/* v0.20 B：レア文章の完走ポップ（発生率7%。コンボ称号より控えめだが色で差別化） */
+@keyframes dev-rare-pop-kf {
+  0% {
+    transform: translateX(-50%) scale(2);
+    opacity: 0;
+  }
+  20% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+  75% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-50%) scale(1) translateY(-12px);
+    opacity: 0;
+  }
+}
+.dev-rare-pop {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  z-index: 40;
+  pointer-events: none;
+  font-size: 28px;
+  font-weight: 700;
+  color: #d8a5ff;
+  letter-spacing: 0.06em;
+  text-shadow:
+    2px 2px 0 #2c0d3a,
+    -2px -2px 0 #2c0d3a,
+    0 0 14px rgba(216, 165, 255, 0.7);
+  animation: dev-rare-pop-kf 900ms steps(7) both;
+}
+
+/* v0.20 B：レア文章バッジ（打ち始める前から見える。目を引くよう軽く明滅） */
+@keyframes dev-rare-badge-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+.dev-rare-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #2c0d3a;
+  background: #d8a5ff;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+  animation: dev-rare-badge-pulse 900ms steps(2) infinite;
+}

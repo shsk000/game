@@ -23,15 +23,16 @@
       （近似ロジック `kanaProgressFromRomaji` を全廃。`splitMorae` のみ表示グルーピング用に残す）
 - [x] 実機バグ修正：FEVERバナーのサイズ/表示時間、TeamStatusのflex制御（画面外押し出し回帰）
 
-### 3. パターンB: 間欠サプライズ（spec §3）— 計画済み・実装はこれから
-- [ ] `JUICE_CONFIG.crit` / `JUICE_CONFIG.rare` の数値見直し（`rare.statMult`→`rare.mult`、適用先を進捗/hypeに変更）
-- [ ] クリティカル打鍵：開発フェーズの正打時に `crit.rate` で判定 → `addFever(crit.feverBonus)`
-- [ ] クリティカル演出：`sfx.crit()`・金色スパーク（`.dev-crit-spark`）・画面フラッシュ
-- [ ] レア文章：`pickPhrase`/`pickPlanPhrase` 呼び出し時に `rare.rate` で判定・文章カードに★レア表示
-- [ ] レア文章報酬：開発＝進捗（`doneLoC`）× `rare.mult`、企画＝期待度（`hype`）× `rare.mult`、両方＋FEVERゲージ
-- [ ] レア文章演出：完走時「★レア達成！」ポップ
-- [ ] unit テスト：crit判定率・rare判定率・報酬計算の境界値（`core/juice.ts` に判定関数を追加）
-- [ ] 4点セット＋実機打鍵で検証（spec §7 チェックリスト消し込み）
+### 3. パターンB: 間欠サプライズ（spec §3）— 完了
+- [x] `JUICE_CONFIG.rare` の数値見直し（`statMult` 撤去・`feverBonus: 20` に統一）
+- [x] クリティカル打鍵：開発フェーズの正打時に `rollCrit()` で判定 → `addFever(crit.feverBonus)`
+- [x] クリティカル演出：`sfx.crit()`・`.dev-crit-pop`ポップ
+- [x] レア文章：`pickPhrase` 呼び出し時に `rollRare()` で判定・文章カードに★レアバッジ表示（開発フェーズのみ）
+- [x] レア文章報酬：完走時に FEVERゲージへ `rare.feverBonus` を加算のみ（devStats/funFactorへの直接倍率は行わない）
+- [x] レア文章演出：完走時「★レア達成！」ポップ（`.dev-rare-pop`）・`sfx.rare()`
+- [x] unit テスト：crit判定・rare判定の境界値（`core/juice.ts` に `rollCrit`/`rollRare` を追加、`core/juice.test.ts` に4件）
+- [x] 4点セット（build/unit 236/ui 14/e2e 7）＋Playwright MCPでの実打鍵検証（RNGをcrit/rare発生確率未満に固定し、実キー入力で `.dev-crit-pop`/`.dev-rare-badge`/`.dev-rare-pop` のDOM出現とFEVER早期発動を確認。spec §7 チェックリスト消し込み済み）
+- [ ] SE（`sfx.crit()`/`sfx.rare()`）の心地よさ・「間欠サプライズ」としての体感 → オーナー確認待ち
 
 ## 積み残し（次版へ）
 

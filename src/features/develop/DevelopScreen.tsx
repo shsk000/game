@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ads } from '../../ads/AdProvider';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
 import { bugSuppression, bugsClearedByAd, pickBugFixPhrase } from '../../core/bugs';
-import { comboTitleAt, keyPitchStep } from '../../core/juice';
+import { comboTitleAt, keyPitchStep, rollCrit, rollRare } from '../../core/juice';
 import { splitMorae } from '../../core/kanaProgress';
-import { BUG_CONFIG, planWeeksAllowance } from '../../data/balance';
+import { BUG_CONFIG, JUICE_CONFIG, planWeeksAllowance } from '../../data/balance';
 import { buildLine } from '../../data/codeSnippets';
 import {
   ATTR_BASE_GAIN,
@@ -181,6 +181,11 @@ export const DevelopScreen = () => {
   );
   // v0.20 A-2：FEVER 突入バナー（発動の瞬間に1回だけ横切る）
   const [feverBannerKey, setFeverBannerKey] = useState(0);
+  // v0.20 B：クリティカル打鍵のポップ（key で CSS アニメを再トリガー）
+  const [critKey, setCritKey] = useState(0);
+  // v0.20 B：レア文章（開発フェーズのみ。次の作業チケット文が「当たり」かどうか）
+  const [isRarePhrase, setIsRarePhrase] = useState(() => rollRare());
+  const [rareHitKey, setRareHitKey] = useState(0);
 
   // フィーバー：正打で蓄積・ミスで減少、MAX で自動発動
   const [feverGauge, setFeverGauge] = useState(0);
@@ -323,6 +328,13 @@ export const DevelopScreen = () => {
           ts: Date.now(),
         });
 
+        // v0.20 B：レア文章の完走報酬（開発フェーズのみ。FEVERゲージにのみ加算＝新しい加点経路を作らない）
+        if (isRarePhrase) {
+          addFever(JUICE_CONFIG.rare.feverBonus);
+          sfx.rare();
+          setRareHitKey((k) => k + 1);
+        }
+
         // 実装中の様子：カテゴリごとに違う見え方で反映
         const nextCount = ticketPhraseCountRef.current + 1;
         const finishing = nextCount >= PHRASES_PER_TICKET;
@@ -354,6 +366,7 @@ export const DevelopScreen = () => {
         }
         const newCategory = getTicketAt(genreId, ticketIndexRef.current).category;
         setTicketPhrase(pickPhrase(newCategory));
+        setIsRarePhrase(rollRare());
 
         // 進捗（完成度）は従来通り：速度＋コンボ倍率＋フィーバー×2
         const progress =
@@ -384,7 +397,14 @@ export const DevelopScreen = () => {
         setComboTitle((t) => ({ label: title, combo: c, key: (t?.key ?? 0) + 1 }));
       }
       if (isDevelopment) {
-        addFever(1); // フィーバー（ノリ）は開発フェーズ専用
+        // v0.20 B：クリティカル打鍵（正打の一定確率でFEVERゲージが大きく跳ねる）
+        if (rollCrit()) {
+          addFever(JUICE_CONFIG.crit.feverBonus);
+          sfx.crit();
+          setCritKey((k) => k + 1);
+        } else {
+          addFever(1); // フィーバー（ノリ）は開発フェーズ専用
+        }
         // v0.17.1：実装の打鍵のたびにバグ抽選（社員能力が高いほど発生率低下）
         if (noteBugOnKeystroke()) {
           sfx.alert();
@@ -496,6 +516,20 @@ export const DevelopScreen = () => {
         </div>
       )}
 
+      {/* v0.20 B：クリティカル打鍵ポップ（打鍵は止めない。小さく速く出て消える） */}
+      {critKey > 0 && (
+        <div key={`crit-${critKey}`} className="dev-crit-pop">
+          ⚡CRITICAL!
+        </div>
+      )}
+
+      {/* v0.20 B：レア文章の完走ポップ */}
+      {rareHitKey > 0 && (
+        <div key={`rare-hit-${rareHitKey}`} className="dev-rare-pop">
+          ★レア達成！
+        </div>
+      )}
+
       <div
         style={{
           flex: 1,
@@ -565,6 +599,7 @@ export const DevelopScreen = () => {
                   100,
               )}
               activeEvent={activeEvent}
+              isRarePhrase={isRarePhrase}
               view={view}
               failCount={failCount}
               charsPerMin={charsPerMin}
@@ -844,6 +879,7 @@ const DevelopCenter = ({
   ticket,
   ticketProgressPct,
   activeEvent,
+  isRarePhrase,
   view,
   failCount,
   charsPerMin,
@@ -864,6 +900,8 @@ const DevelopCenter = ({
   ticket: ReturnType<typeof getTicketAt>;
   ticketProgressPct: number;
   activeEvent: DevEvent | null;
+  /** v0.20 B：次に打つ文章が「レア」かどうか（開発フェーズのみ） */
+  isRarePhrase: boolean;
   view: TypingView;
   failCount: number;
   charsPerMin: number;
@@ -1045,8 +1083,20 @@ const DevelopCenter = ({
           style={{ display: 'flex', gap: 8 }}
         >
           <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-            <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 11,
+                color: DEV.green,
+                fontWeight: 700,
+                marginBottom: 4,
+              }}
+            >
               入力する文章
+              {/* v0.20 B：レア文章バッジ（打ち始める前から見えるので、打っている間ずっと期待感が続く） */}
+              {!activeEvent && isRarePhrase && <span className="dev-rare-badge">★レア</span>}
             </div>
             <div
               style={{

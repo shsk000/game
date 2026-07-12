@@ -1,4 +1,5 @@
 import { JUICE_CONFIG } from '../data/balance';
+import type { Rng } from './ports';
 
 /**
  * v0.20 打鍵ジュース（docs/v20）。純粋関数のみ。
@@ -23,3 +24,16 @@ export const keyPitchStep = (combo: number): number =>
  */
 export const comboTitleAt = (combo: number): string | null =>
   JUICE_CONFIG.comboTitles.find((t) => t.combo === combo)?.label ?? null;
+
+/**
+ * v0.20 B：クリティカル打鍵の判定（正打1打ごとに抽選）。
+ * 発動時は通常の addFever(1) の代わりに JUICE_CONFIG.crit.feverBonus を加算する
+ * （呼び出し側の責務。ここでは判定のみ）。
+ */
+export const rollCrit = (rng: Rng = Math.random): boolean => rng() < JUICE_CONFIG.crit.rate;
+
+/**
+ * v0.20 B：レア文章の判定（次の文章を選ぶたびに抽選）。
+ * 発動時は文章カードに★表示し、完走時に JUICE_CONFIG.rare.feverBonus をフィーバーに加算する。
+ */
+export const rollRare = (rng: Rng = Math.random): boolean => rng() < JUICE_CONFIG.rare.rate;

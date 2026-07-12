@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { JUICE_CONFIG } from '../data/balance';
-import { comboTitleAt, keyPitchStep } from './juice';
+import { comboTitleAt, keyPitchStep, rollCrit, rollRare } from './juice';
 
 describe('keyPitchStep（コンボ→打鍵音の音階）', () => {
   it('コンボ 10 ごとに半音 +1 上がる', () => {
@@ -32,5 +32,27 @@ describe('comboTitleAt（コンボ節目の称号）', () => {
     expect(comboTitleAt(49)).toBeNull();
     expect(comboTitleAt(51)).toBeNull();
     expect(comboTitleAt(151)).toBeNull();
+  });
+});
+
+describe('rollCrit（v0.20 B：クリティカル打鍵の判定）', () => {
+  it('rng が rate 未満なら発動', () => {
+    expect(rollCrit(() => JUICE_CONFIG.crit.rate - 0.001)).toBe(true);
+  });
+
+  it('rng が rate 以上なら不発（境界値）', () => {
+    expect(rollCrit(() => JUICE_CONFIG.crit.rate)).toBe(false);
+    expect(rollCrit(() => JUICE_CONFIG.crit.rate + 0.001)).toBe(false);
+  });
+});
+
+describe('rollRare（v0.20 B：レア文章の判定）', () => {
+  it('rng が rate 未満なら発動', () => {
+    expect(rollRare(() => JUICE_CONFIG.rare.rate - 0.001)).toBe(true);
+  });
+
+  it('rng が rate 以上なら不発（境界値）', () => {
+    expect(rollRare(() => JUICE_CONFIG.rare.rate)).toBe(false);
+    expect(rollRare(() => JUICE_CONFIG.rare.rate + 0.001)).toBe(false);
   });
 });
