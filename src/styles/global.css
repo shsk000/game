@@ -2030,6 +2030,65 @@ body,
   animation: dev-crunch-banner-kf 2200ms steps(10) both;
 }
 
+/* v0.20 G：ボス出現バナー（.dev-crunch-banner のアニメ・位置を継承し、文字サイズ・色だけ上書き。
+   ボス名が長い場合でも1280px幅に収まるよう、通常のラストスパートバナーよりだいぶ小さくする） */
+.dev-boss-appear {
+  font-size: 28px;
+  color: #ff5a3c;
+  letter-spacing: 0.05em;
+  text-shadow:
+    2px 2px 0 #3a0d0d,
+    -2px -2px 0 #1a0505,
+    0 0 16px rgba(255, 90, 60, 0.9);
+}
+
+/* v0.20 G：ボス挿絵のヒットシェイク（正打のたびに再マウントして再トリガー） */
+@keyframes dev-boss-hit-kf {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-2px, 1px);
+  }
+  50% {
+    transform: translate(2px, -1px);
+  }
+  75% {
+    transform: translate(-1px, -1px);
+  }
+}
+.dev-boss-sprite {
+  animation: dev-boss-hit-kf 160ms steps(4) both;
+}
+
+/* v0.20 G：正打のたびにボスへ斬撃が入る演出（実装中の様子パネル内、ボス戦時のみ） */
+@keyframes dev-boss-slash-kf {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(-35deg) scaleX(0.4);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(-35deg) scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(-35deg) scaleX(1.1);
+  }
+}
+.dev-boss-slash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 70px;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #fff, #ff3c3c, transparent);
+  box-shadow: 0 0 6px 1px rgba(255, 60, 60, 0.8);
+  pointer-events: none;
+  animation: dev-boss-slash-kf 180ms steps(3) both;
+}
+
 /* v0.20 C：ボス文章バッジ（レアより強めの色・明滅で「大物」感を出す） */
 .dev-boss-badge {
   display: inline-block;

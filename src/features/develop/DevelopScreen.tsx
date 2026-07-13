@@ -65,6 +65,17 @@ const TOTAL_PHASE_DOTS = 6;
 /** チケットカードの固定高さ（内容の長短で入力欄が上下しないように） */
 const TICKET_CARD_HEIGHT = 76;
 
+/**
+ * v0.20 G：ボス文章の間だけ「RPGの戦闘っぽさ」を出すための挿絵（オーナー発注・PixelLab生成）。
+ * ボス文章が選ばれるたびにランダムに1体選ぶ（表示専用。ゲームロジックには影響しない）。
+ */
+const BOSS_SPRITES = [
+  { name: 'デスマーチゴーレム', url: '/sprites/boss/crunch-golem.png' },
+  { name: '締め切りデーモン', url: '/sprites/boss/deadline-demon.png' },
+  { name: 'バグロボット', url: '/sprites/boss/bug-robot.png' },
+  { name: 'スパゲッティコードモンスター', url: '/sprites/boss/spaghetti-monster.png' },
+] as const;
+
 type LastResult =
   | {
       kind: 'ticket';
@@ -210,6 +221,9 @@ export const DevelopScreen = () => {
   // v0.20 C：ボス文章（クランチ中のみ。次の作業チケット文が「ボス」かどうか）
   const [isBossPhrase, setIsBossPhrase] = useState(false);
   const [bossHitKey, setBossHitKey] = useState(0);
+  // v0.20 G：ボス戦演出（表示専用）。出現時にランダムな1体＋一度きりの出現バナー
+  const [bossSprite, setBossSprite] = useState<(typeof BOSS_SPRITES)[number]>(BOSS_SPRITES[0]);
+  const [bossAppearKey, setBossAppearKey] = useState(0);
   // v0.20 E：ノーミスストリーク（開発フェーズのみ。今の文でミスがあったかを完走まで保持）
   const phraseMissRef = useRef(false);
   const [perfectStreak, setPerfectStreak] = useState(0);
@@ -424,6 +438,12 @@ export const DevelopScreen = () => {
         setTicketPhrase(nextIsBoss ? pickBossPhrase(newCategory) : pickPhrase(newCategory));
         setIsBossPhrase(nextIsBoss);
         setIsRarePhrase(nextIsBoss ? false : rollRare());
+        // v0.20 G：ボス出現時にランダムな1体を選び、出現バナーを一度だけ流す
+        if (nextIsBoss) {
+          setBossSprite(BOSS_SPRITES[Math.floor(Math.random() * BOSS_SPRITES.length)]);
+          setBossAppearKey((k) => k + 1);
+          sfx.crunch();
+        }
 
         // 進捗（完成度）は従来通り：速度＋コンボ倍率＋フィーバー×2
         const progress =
@@ -610,6 +630,13 @@ export const DevelopScreen = () => {
         </div>
       )}
 
+      {/* v0.20 G：ボス出現バナー（ボス文章に切り替わった瞬間だけ横切る） */}
+      {bossAppearKey > 0 && isBossPhrase && (
+        <div key={`boss-appear-${bossAppearKey}`} className="dev-crunch-banner dev-boss-appear">
+          ⚔{bossSprite.name}が立ちはだかる！⚔
+        </div>
+      )}
+
       <div
         style={{
           flex: 1,
@@ -682,6 +709,7 @@ export const DevelopScreen = () => {
               activeEvent={activeEvent}
               isRarePhrase={isRarePhrase}
               isBossPhrase={isBossPhrase}
+              bossSprite={bossSprite}
               crunchActive={crunchActive}
               gear={gearFor(wpm)}
               perfectStreak={perfectStreak}
@@ -968,6 +996,7 @@ const DevelopCenter = ({
   activeEvent,
   isRarePhrase,
   isBossPhrase,
+  bossSprite,
   crunchActive,
   gear,
   perfectStreak,
@@ -997,6 +1026,8 @@ const DevelopCenter = ({
   isRarePhrase: boolean;
   /** v0.20 C：次に打つ文章が「ボス」かどうか（クランチタイム中のみ） */
   isBossPhrase: boolean;
+  /** v0.20 G：出現中のボスの挿絵（表示専用） */
+  bossSprite: { name: string; url: string };
   /** v0.20 C：クランチタイム中かどうか */
   crunchActive: boolean;
   /** v0.20 E：現在の入力速度から求めたギア（feverGain 1 なら未到達） */
@@ -1020,6 +1051,11 @@ const DevelopCenter = ({
 }) => {
   const catMeta = CATEGORY_META[ticket.category];
   const inputColor = activeEvent ? '#ff8a3c' : catMeta.color;
+  // v0.20 G：ボス戦中かどうか（イベント優先。イベント中はボス演出を出さない）
+  const isBossBattle = isBossPhrase && !activeEvent;
+  const bossHpPct = isBossBattle
+    ? Math.max(0, 100 - (view.resolvedUnitCount / Math.max(1, view.totalUnitCount)) * 100)
+    : 0;
   return (
     <div
       style={{
@@ -1110,13 +1146,13 @@ const DevelopCenter = ({
       </div>
 
       <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
-        {/* ①作業チケット／イベント（今なにを作っているか）。内容の長短で下の入力欄が動かないよう高さ固定 */}
+        {/* ①作業チケット／イベント／ボス戦（今なにを作っているか）。内容の長短で下の入力欄が動かないよう高さ固定 */}
         <div
           className={activeEvent ? 'dev-event-active' : undefined}
           style={{
             ...devBox(),
             gap: 4,
-            borderColor: activeEvent ? '#ff8a3c' : DEV.panelBorder,
+            borderColor: isBossBattle ? '#ff3c3c' : activeEvent ? '#ff8a3c' : DEV.panelBorder,
             flexDirection: 'row',
             alignItems: 'flex-start',
             height: TICKET_CARD_HEIGHT,
@@ -1125,20 +1161,20 @@ const DevelopCenter = ({
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
             <span style={{ fontSize: 10, color: DEV.sub }}>
-              {activeEvent ? '⚠ イベント発生' : '作業チケット'}
+              {isBossBattle ? '⚔ ボス戦' : activeEvent ? '⚠ イベント発生' : '作業チケット'}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
               <span
                 style={{
                   fontSize: 18,
                   fontWeight: 700,
-                  color: DEV.cream,
+                  color: isBossBattle ? '#ff9d4d' : DEV.cream,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}
               >
-                {activeEvent ? activeEvent.name : ticket.flavor.title}
+                {isBossBattle ? bossSprite.name : activeEvent ? activeEvent.name : ticket.flavor.title}
               </span>
               <span
                 style={{
@@ -1152,7 +1188,11 @@ const DevelopCenter = ({
                   flexShrink: 0,
                 }}
               >
-                {activeEvent ? '⚡ イベント作業' : `${catMeta.icon} ${catMeta.label}作業`}
+                {isBossBattle
+                  ? '⚔ 渾身の一撃'
+                  : activeEvent
+                    ? '⚡ イベント作業'
+                    : `${catMeta.icon} ${catMeta.label}作業`}
               </span>
             </div>
             <span
@@ -1164,10 +1204,15 @@ const DevelopCenter = ({
                 textOverflow: 'ellipsis',
               }}
             >
-              {activeEvent ? activeEvent.flavor : ticket.flavor.desc}
+              {isBossBattle
+                ? '長文を打ち切って撃破しろ！'
+                : activeEvent
+                  ? activeEvent.flavor
+                  : ticket.flavor.desc}
             </span>
           </div>
-          {!activeEvent && (
+          {/* v0.20 G：ボス戦の挿絵・HPバーは下の「実装中の様子」パネルに表示する（ここはテキストのみ） */}
+          {!activeEvent && !isBossBattle && (
             <div
               style={{
                 width: 84,
@@ -1196,7 +1241,7 @@ const DevelopCenter = ({
         </div>
         {/* ゲージ枠も常設（イベント中に消えると下が動くため） */}
         <div style={{ height: 6 }}>
-          {!activeEvent && (
+          {!activeEvent && !isBossBattle && (
             <SegGauge pct={ticketProgressPct} color={catMeta.color} track="#0c1207" height={6} />
           )}
         </div>
@@ -1342,6 +1387,10 @@ const DevelopCenter = ({
           soundBeatKey={soundBeatKey}
           genre={genre}
           ticketTitle={ticket.flavor.title}
+          isBossBattle={isBossBattle}
+          bossSprite={bossSprite}
+          bossHpPct={bossHpPct}
+          bossHitKey={view.completed.length}
         />
 
         {/* ③今回の結果（入力した結果どう変わったか） */}
@@ -1362,8 +1411,17 @@ const WorkInProgressPanel = (props: {
   soundBeatKey: number;
   genre: { id: GenreId; emoji: string; bgColor: string } | undefined;
   ticketTitle: string;
+  /** v0.20 G：ボス戦中は担当カテゴリに関わらずこのパネルを表示する */
+  isBossBattle: boolean;
+  bossSprite: { name: string; url: string };
+  bossHpPct: number;
+  bossHitKey: number;
 }) => {
   const { category } = props;
+  if (props.isBossBattle)
+    return (
+      <BossBattlePanel sprite={props.bossSprite} hpPct={props.bossHpPct} hitKey={props.bossHitKey} />
+    );
   if (category === 'program')
     return <ProgramLogPanel lines={props.programLog} liveLine={props.liveCodeLine} />;
   if (category === 'graphics')
@@ -1380,6 +1438,57 @@ const WorkInProgressPanel = (props: {
 };
 
 const WIP_HEIGHT = 74;
+
+/**
+ * v0.20 G：ボス戦パネル（オーナー指示：「実装中の様子」欄をボス戦の表示に差し替え、
+ * 打つたびに斬撃が入ってHPが削れるイメージ）。担当カテゴリに関わらずこの見た目で統一する。
+ */
+const BossBattlePanel = ({
+  sprite,
+  hpPct,
+  hitKey,
+}: {
+  sprite: { name: string; url: string };
+  hpPct: number;
+  hitKey: number;
+}) => (
+  <div style={{ ...devBox(), gap: 4 }}>
+    <span style={{ fontSize: 11, color: '#ff5a3c', fontWeight: 700 }}>⚔ ボス戦：{sprite.name}</span>
+    <div
+      style={{
+        background: `linear-gradient(rgba(4, 6, 10, 0.45), rgba(4, 6, 10, 0.45)), url(/sprites/boss/battle-bg.png)`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        imageRendering: 'pixelated',
+        border: '1px solid #ff3c3c',
+        padding: '5px 8px',
+        height: WIP_HEIGHT,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{ position: 'relative', width: 48, height: 48 }}>
+        <img
+          // v0.20 G：正打のたびに再マウントしてヒットシェイクを再トリガー（.dev-kana-spark と同じ手法）
+          key={`boss-battle-sprite-${hitKey}`}
+          src={sprite.url}
+          alt={sprite.name}
+          className="dev-boss-sprite"
+          style={{ width: 48, height: 48, imageRendering: 'pixelated' }}
+        />
+        {hitKey > 0 && <div key={`boss-slash-${hitKey}`} className="dev-boss-slash" />}
+      </div>
+      <div style={{ width: '70%' }}>
+        <SegGauge pct={hpPct} color="#ff3c3c" track="#2a0d0d" height={6} />
+      </div>
+    </div>
+  </div>
+);
 
 /** 疑似シンタックスハイライト：IDE風に予約語/関数名/クラス名/文字列/数値/記号を色分け */
 const CODE_KEYWORDS = new Set([
