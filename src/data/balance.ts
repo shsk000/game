@@ -365,14 +365,10 @@ export const JUICE_CONFIG = {
    * bossFeverBonus：ボス文章完走時のフィーバーチャージ（rare.feverBonusより大きい）。
    */
   crunch: { startPct: 80, progressMult: 2, bossRate: 0.15, bossFeverBonus: 30 },
-  /**
-   * ギア：入力速度 wpm（打鍵/分）のしきい値。上がるほどフィーバーが溜まりやすい。
-   * label は画面表示にそのまま使う（「クランチ」が伝わらなかった教訓で英語ジャーゴンを避け、
-   * 日本語にしている）。
-   */
+  /** ギア：入力速度 wpm（打鍵/分）のしきい値。上がるほどフィーバーが溜まりやすい */
   gears: [
-    { minWpm: 150, feverGain: 2, label: '高速' },
-    { minWpm: 230, feverGain: 3, label: '超高速' },
+    { minWpm: 150, feverGain: 2 },
+    { minWpm: 230, feverGain: 3 },
   ],
   /**
    * ノーミスで1文完走した時のフィーバーボーナス。

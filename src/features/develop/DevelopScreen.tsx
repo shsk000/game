@@ -580,17 +580,19 @@ export const DevelopScreen = () => {
         </div>
       )}
 
-      {/* v0.20 B：クリティカル打鍵ポップ（打鍵は止めない。小さく速く出て消える） */}
+      {/* v0.20 B：クリティカル打鍵ポップ（打鍵は止めない。小さく速く出て消える）
+          v0.20 F：オーナーFB「feverが溜まりやすくなったことが分かる仕組みが欲しい（ゲージ以外で）」
+          を受け、実際にFEVERへ入った量を🔥+Nとして数字で見せる（新しいゲージは作らない） */}
       {critKey > 0 && (
         <div key={`crit-${critKey}`} className="dev-crit-pop">
-          ⚡CRITICAL!
+          ⚡CRITICAL! 🔥+{JUICE_CONFIG.crit.feverBonus}
         </div>
       )}
 
       {/* v0.20 B：レア文章の完走ポップ */}
       {rareHitKey > 0 && (
         <div key={`rare-hit-${rareHitKey}`} className="dev-rare-pop">
-          ★レア達成！
+          ★レア達成！ 🔥+{JUICE_CONFIG.rare.feverBonus}
         </div>
       )}
 
@@ -604,7 +606,7 @@ export const DevelopScreen = () => {
       {/* v0.20 C：ボス文章の完走ポップ（画面シェイクは入力行側で付与） */}
       {bossHitKey > 0 && (
         <div key={`boss-hit-${bossHitKey}`} className="dev-rare-pop dev-boss-pop">
-          ⚔BOSS撃破！
+          ⚔BOSS撃破！ 🔥+{JUICE_CONFIG.crunch.bossFeverBonus}
         </div>
       )}
 
@@ -1060,10 +1062,11 @@ const DevelopCenter = ({
               ⏰ラストスパート 進捗×{JUICE_CONFIG.crunch.progressMult}
             </span>
           )}
-          {/* v0.20 E：ギアバッジ（wpmがgears閾値未満のときはfeverGain 1でlabelが空になり非表示） */}
+          {/* v0.20 F：ギアバッジ。オーナーFB「feverが溜まりやすくなったことが分かる仕組みが欲しい
+              （ゲージ以外で）」を受け、「たまりやすい」と直接言葉にする（wpmがgears閾値未満なら非表示） */}
           {gear.feverGain > 1 && (
             <span style={{ fontSize: 12, fontWeight: 700, color: '#4de1ff' }}>
-              ⚡{gear.label} ×{gear.feverGain}
+              🔥たまりやすい ×{gear.feverGain}
             </span>
           )}
           {/* v0.20 E：ノーミスストリーク（1文だけでは目立たせず、2文目以降で表示） */}
