@@ -4,6 +4,7 @@ import type { Employee } from '../state/types';
 import {
   BUG_FIX_PHRASES,
   bugSuppression,
+  bugsClearedByAd,
   debugWorkFor,
   ensureMinBugsOnDevComplete,
   pickBugFixPhrase,
@@ -67,6 +68,19 @@ describe('debugWorkFor（バグが多いほどデバッグが大変）', () => {
     expect(debugWorkFor(0)).toBe(0);
     expect(debugWorkFor(3)).toBe(3 * BUG_CONFIG.phrasesPerBug);
     expect(debugWorkFor(10)).toBe(10 * BUG_CONFIG.phrasesPerBug);
+  });
+});
+
+describe('bugsClearedByAd（v0.19 広告でバグ半減・切り上げ）', () => {
+  it('残数の 50% を切り上げで駆除する', () => {
+    expect(bugsClearedByAd(5)).toBe(3);
+    expect(bugsClearedByAd(4)).toBe(2);
+    expect(bugsClearedByAd(1)).toBe(1);
+  });
+
+  it('バグ 0（または負値の防御）なら駆除 0', () => {
+    expect(bugsClearedByAd(0)).toBe(0);
+    expect(bugsClearedByAd(-3)).toBe(0);
   });
 });
 

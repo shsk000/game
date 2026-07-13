@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { ensureMinBugsOnDevComplete, rollBugOnKeystroke, rollBugOnMiss } from '../core/bugs';
+import {
+  bugsClearedByAd,
+  ensureMinBugsOnDevComplete,
+  rollBugOnKeystroke,
+  rollBugOnMiss,
+} from '../core/bugs';
 import { computeBorrow, computeMonthlyTick, computeRepay } from '../core/economy';
 import type { LevelUp } from '../core/growth';
 import { type Deps, defaultDeps } from '../core/ports';
@@ -122,6 +127,11 @@ type Actions = {
   noteBugOnKeystroke: () => boolean;
   /** v0.17：デバッグフェーズでバグを 1 匹修正 */
   fixBug: () => void;
+  /**
+   * v0.19：広告「デバッグ応援」。バグ残数の 50%（切り上げ）を即駆除する。
+   * 1開発1回。使用済み・バグ 0・プロジェクト無しのときは false。
+   */
+  adDebugAssist: () => boolean;
   hireCandidate: () => boolean;
   refreshCandidate: () => boolean;
   fireEmployee: (id: string) => void;
@@ -236,6 +246,7 @@ export const useGameStore = create<GameState>()(
         maxCombo: 0,
         devBoostRemainingSec: 0,
         bugCount: 0,
+        adDebugUsed: false,
         startedAt: performance.now(),
         finishedAt: null,
         adBoostActive: false,
@@ -511,6 +522,14 @@ export const useGameStore = create<GameState>()(
       const cur = get().current;
       if (!cur) return;
       set({ current: { ...cur, bugCount: Math.max(0, cur.bugCount - 1) } });
+    },
+
+    adDebugAssist: () => {
+      const cur = get().current;
+      if (!cur || cur.adDebugUsed || cur.bugCount <= 0) return false;
+      const cleared = bugsClearedByAd(cur.bugCount);
+      set({ current: { ...cur, bugCount: cur.bugCount - cleared, adDebugUsed: true } });
+      return true;
     },
 
     hireCandidate: () => {

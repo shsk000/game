@@ -6,6 +6,14 @@ export type TypingView = {
   hiragana: string;
   completed: string;
   remained: string;
+  /**
+   * v0.20 A-2：何個目の入力単位（モーラ）まで確定したか（nano-type-jp@0.7 の
+   * resolvedUnitCount をそのまま反映。totalUnitCount と合わせて、かな表示の
+   * 現在位置を打鍵数からの近似ではなく厳密に求められる）。
+   */
+  resolvedUnitCount: number;
+  /** 入力単位（モーラ）の総数 */
+  totalUnitCount: number;
 };
 
 type Options = {
@@ -43,7 +51,13 @@ export const useTyping = ({
   if (engineRef.current === null) engineRef.current = new NanoTypeJp();
 
   const [idx, setIdx] = useState(0);
-  const [view, setView] = useState<TypingView>({ hiragana: '', completed: '', remained: '' });
+  const [view, setView] = useState<TypingView>({
+    hiragana: '',
+    completed: '',
+    remained: '',
+    resolvedUnitCount: 0,
+    totalUnitCount: 0,
+  });
   const [failCount, setFailCount] = useState(0);
   const [combo, setCombo] = useState(0);
   const [wpm, setWpm] = useState(0);
@@ -76,6 +90,8 @@ export const useTyping = ({
       hiragana: phrase,
       completed: reg.inputAlphabet.completedInputAlphabet,
       remained: reg.inputAlphabet.remainedAlphabet,
+      resolvedUnitCount: 0,
+      totalUnitCount: reg.totalUnitCount,
     });
   }, [idx, phrases]);
 
@@ -103,6 +119,7 @@ export const useTyping = ({
           ...v,
           completed: r.inputAlphabet.completedInputAlphabet,
           remained: r.inputAlphabet.remainedAlphabet,
+          resolvedUnitCount: r.resolvedUnitCount,
         }));
         onCorrectRef.current?.(applied.stats.combo);
         if (applied.wpmUpdated) onWpmRef.current?.(applied.stats.wpm);

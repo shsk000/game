@@ -44,8 +44,44 @@ const beep = (
 };
 
 export const sfx = {
-  /** 正打：短い高音チッ（音程を揺らして機械感を消す） */
-  key: () => beep(840 + Math.random() * 120, 0.035, { gain: 0.02 }),
+  /**
+   * 正打：短い高音チッ（音程を揺らして機械感を消す）。
+   * v0.20：pitchStep（半音数。コンボ 10 ごとに +1 目安）で音階が上がる＝
+   * コンボが伸びるほど打鍵音が高揚する（リズムゲー的ジュース）。
+   */
+  key: (pitchStep = 0) => {
+    const mult = 2 ** (Math.min(12, Math.max(0, pitchStep)) / 12);
+    beep((840 + Math.random() * 120) * mult, 0.035, { gain: 0.02 });
+  },
+  /** v0.20 クリティカル打鍵：キラッと2音（高速アルペジオ） */
+  crit: () => {
+    beep(1319, 0.05, { gain: 0.05 });
+    beep(1760, 0.1, { gain: 0.05, delaySec: 0.05 });
+  },
+  /** v0.20 コンボ称号：決めの3音（打鍵を止めずに耳で分かる） */
+  combo: () => {
+    beep(784, 0.06, { gain: 0.05 });
+    beep(988, 0.06, { gain: 0.05, delaySec: 0.06 });
+    beep(1319, 0.14, { gain: 0.06, delaySec: 0.12 });
+  },
+  /** v0.20 レア文章出現：神秘的な3音 */
+  rare: () => {
+    beep(880, 0.08, { type: 'triangle', gain: 0.06 });
+    beep(1109, 0.08, { type: 'triangle', gain: 0.06, delaySec: 0.08 });
+    beep(1319, 0.14, { type: 'triangle', gain: 0.06, delaySec: 0.16 });
+  },
+  /** v0.20 クランチタイム突入：ドラムロール風の低音連打 */
+  crunch: () => {
+    beep(220, 0.06, { type: 'sawtooth', gain: 0.05 });
+    beep(220, 0.06, { type: 'sawtooth', gain: 0.05, delaySec: 0.08 });
+    beep(330, 0.06, { type: 'sawtooth', gain: 0.05, delaySec: 0.16 });
+    beep(440, 0.12, { type: 'sawtooth', gain: 0.06, delaySec: 0.24 });
+  },
+  /** v0.20 ギアアップ：シフトチェンジ2音 */
+  gear: () => {
+    beep(587, 0.06, { gain: 0.05 });
+    beep(880, 0.12, { gain: 0.05, delaySec: 0.06 });
+  },
   /** ミス：低いブザー */
   miss: () => beep(110, 0.16, { type: 'sawtooth', gain: 0.05 }),
   /** フレーズ完了：上昇 2 音 */

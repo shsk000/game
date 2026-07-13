@@ -1359,6 +1359,41 @@ body,
   animation: dev-rating-fade 600ms steps(4) both;
 }
 
+/* v0.19 デバッグ画面：残バグ列の虫がもぞもぞ待機（離散） */
+@keyframes debug-bug-wiggle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+.debug-bug {
+  display: inline-block;
+  animation: debug-bug-wiggle 800ms steps(2) infinite;
+}
+
+/* v0.19 デバッグ画面：駆除の瞬間 💥 が潰れて消える（消えると列が詰まる） */
+@keyframes debug-bug-squash {
+  0% {
+    transform: scale(2);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+.debug-bug-squash {
+  display: inline-block;
+  animation: debug-bug-squash 400ms steps(2) both;
+}
+
 /* v0.14 0.1 秒ジュース：正打で最後の文字が光る（key 再生） */
 /* v0.14 0.1 秒ジュース：ミスで入力枠が揺れる（failCount の key 再生） */
 @keyframes dev-miss-shake {
@@ -1625,4 +1660,453 @@ body,
 }
 .funds-loss {
   animation: g-flash-loss 400ms steps(2) both;
+}
+
+/* v0.20 A：コンボ節目の称号ポップ（50/150/300。打鍵を止めず視界の上部に一瞬） */
+@keyframes dev-combo-title-kf {
+  0% {
+    transform: translateX(-50%) scale(2.4);
+    opacity: 0;
+  }
+  18% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+  72% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-50%) scale(1) translateY(-12px);
+    opacity: 0;
+  }
+}
+.dev-combo-title {
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  z-index: 40;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  animation: dev-combo-title-kf 1200ms steps(8) both;
+}
+.dev-combo-title > span:first-child {
+  font-size: 32px;
+  font-weight: 700;
+  color: #ffd54a;
+  letter-spacing: 0.08em;
+  text-shadow:
+    2px 2px 0 #4a2e00,
+    -2px 2px 0 #4a2e00,
+    2px -2px 0 #4a2e00,
+    -2px -2px 0 #4a2e00,
+    0 0 14px rgba(255, 213, 74, 0.55);
+}
+.dev-combo-title-sub {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ff9d4d;
+  text-shadow: 1px 1px 0 #331a00;
+}
+
+/* v0.20 A-2：かな表示のアクション（消化ポップ・現在かなバウンス・打鍵スパーク） */
+@keyframes dev-kana-pop {
+  0% {
+    transform: scale(1.7) translateY(-4px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+  }
+}
+.dev-kana-done {
+  display: inline-block;
+  animation: dev-kana-pop 200ms steps(2) both;
+}
+@keyframes dev-kana-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+.dev-kana-current {
+  display: inline-block;
+  position: relative;
+  animation: dev-kana-bounce 400ms steps(2) infinite;
+  text-shadow: 0 0 8px currentColor;
+}
+@keyframes dev-kana-spark {
+  0% {
+    opacity: 1;
+    box-shadow:
+      0 -3px 0 0 #ffd54a,
+      3px -2px 0 0 #ff9d4d,
+      -3px -2px 0 0 #ffffff,
+      0 3px 0 0 #ffd54a;
+  }
+  100% {
+    opacity: 0;
+    box-shadow:
+      0 -12px 0 0 #ffd54a,
+      11px -7px 0 0 #ff9d4d,
+      -11px -7px 0 0 #ffffff,
+      0 10px 0 0 #ffd54a;
+  }
+}
+.dev-kana-spark {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 3px;
+  height: 3px;
+  pointer-events: none;
+  animation: dev-kana-spark 240ms steps(3) both;
+}
+
+/* v0.20 A-2：文完了の +進捗 フライアウト（ダメージ数字風） */
+@keyframes dev-progress-fly {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-26px);
+    opacity: 0;
+  }
+}
+.dev-progress-fly {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #d8a5ff;
+  pointer-events: none;
+  text-shadow: 1px 1px 0 #000;
+  z-index: 5;
+  animation: dev-progress-fly 800ms steps(6) both;
+}
+.dev-progress-fly-plan {
+  color: #ffd166;
+}
+
+/* v0.20 A-2：PERFECT 完了の入力行シェイク */
+@keyframes dev-perfect-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(2px, -2px);
+  }
+  50% {
+    transform: translate(-2px, 1px);
+  }
+  75% {
+    transform: translate(1px, 2px);
+  }
+}
+.dev-perfect-shake {
+  animation: dev-perfect-shake 220ms steps(4) both;
+}
+
+/* v0.20 A-2：コンボ称号の金フラッシュ＋衝撃波リング */
+.dev-gold-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 38;
+  pointer-events: none;
+  background: radial-gradient(circle, transparent 55%, rgba(255, 213, 74, 0.3) 100%);
+  animation: dev-flash-vignette-kf 600ms steps(4) both;
+}
+@keyframes dev-combo-ring {
+  0% {
+    width: 10px;
+    height: 10px;
+    opacity: 1;
+  }
+  100% {
+    width: 240px;
+    height: 100px;
+    opacity: 0;
+  }
+}
+.dev-combo-title::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: 3px solid #ffd54a;
+  animation: dev-combo-ring 500ms steps(4) both;
+}
+
+/* v0.20 A-2：FEVER 突入バナー（横切って中央でしっかり止まって見せてから消える） */
+@keyframes dev-fever-banner-kf {
+  0% {
+    transform: translateX(-120%) scale(0.8);
+    opacity: 0;
+  }
+  15% {
+    transform: translateX(0) scale(1.15);
+    opacity: 1;
+  }
+  25% {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+  78% {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(130%) scale(0.9);
+    opacity: 0;
+  }
+}
+.dev-fever-banner {
+  position: absolute;
+  top: 32%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 76px;
+  font-weight: 700;
+  color: #ff9d4d;
+  letter-spacing: 0.2em;
+  z-index: 39;
+  pointer-events: none;
+  text-shadow:
+    4px 4px 0 #4a1212,
+    -3px -3px 0 #2c0d0d,
+    0 0 28px rgba(255, 157, 77, 0.9);
+  animation: dev-fever-banner-kf 2400ms steps(10) both;
+}
+
+/* v0.20 B：クリティカル打鍵ポップ（発生率2%。小さく速く出て消える＝打鍵を止めない） */
+@keyframes dev-crit-pop-kf {
+  0% {
+    transform: translateX(-50%) scale(1.8);
+    opacity: 0;
+  }
+  25% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+  70% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-50%) scale(1) translateY(-8px);
+    opacity: 0;
+  }
+}
+.dev-crit-pop {
+  position: absolute;
+  left: 50%;
+  top: 26%;
+  z-index: 40;
+  pointer-events: none;
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffe066;
+  letter-spacing: 0.06em;
+  text-shadow:
+    1px 1px 0 #4a2e00,
+    -1px -1px 0 #4a2e00,
+    0 0 10px rgba(255, 224, 102, 0.7);
+  animation: dev-crit-pop-kf 480ms steps(5) both;
+}
+
+/* v0.20 B：レア文章の完走ポップ（発生率7%。コンボ称号より控えめだが色で差別化） */
+@keyframes dev-rare-pop-kf {
+  0% {
+    transform: translateX(-50%) scale(2);
+    opacity: 0;
+  }
+  20% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+  75% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-50%) scale(1) translateY(-12px);
+    opacity: 0;
+  }
+}
+.dev-rare-pop {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  z-index: 40;
+  pointer-events: none;
+  font-size: 28px;
+  font-weight: 700;
+  color: #d8a5ff;
+  letter-spacing: 0.06em;
+  text-shadow:
+    2px 2px 0 #2c0d3a,
+    -2px -2px 0 #2c0d3a,
+    0 0 14px rgba(216, 165, 255, 0.7);
+  animation: dev-rare-pop-kf 900ms steps(7) both;
+}
+
+/* v0.20 B：レア文章バッジ（打ち始める前から見える。目を引くよう軽く明滅） */
+@keyframes dev-rare-badge-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+.dev-rare-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #2c0d3a;
+  background: #d8a5ff;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+  animation: dev-rare-badge-pulse 900ms steps(2) infinite;
+}
+
+/* v0.20 C：クランチタイム突入バナー（1回だけ。以降は常時バッジのみ＝演出疲れを避ける） */
+@keyframes dev-crunch-banner-kf {
+  0% {
+    transform: translateX(-120%) scale(0.8);
+    opacity: 0;
+  }
+  15% {
+    transform: translateX(0) scale(1.1);
+    opacity: 1;
+  }
+  25% {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+  78% {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(130%) scale(0.9);
+    opacity: 0;
+  }
+}
+.dev-crunch-banner {
+  position: absolute;
+  top: 32%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 60px;
+  font-weight: 700;
+  color: #ffb84d;
+  letter-spacing: 0.15em;
+  z-index: 39;
+  pointer-events: none;
+  text-shadow:
+    4px 4px 0 #4a2e00,
+    -3px -3px 0 #2c1a00,
+    0 0 24px rgba(255, 184, 77, 0.9);
+  animation: dev-crunch-banner-kf 2200ms steps(10) both;
+}
+
+/* v0.20 G：ボス出現バナー（.dev-crunch-banner のアニメ・位置を継承し、文字サイズ・色だけ上書き。
+   ボス名が長い場合でも1280px幅に収まるよう、通常のラストスパートバナーよりだいぶ小さくする） */
+.dev-boss-appear {
+  font-size: 28px;
+  color: #ff5a3c;
+  letter-spacing: 0.05em;
+  text-shadow:
+    2px 2px 0 #3a0d0d,
+    -2px -2px 0 #1a0505,
+    0 0 16px rgba(255, 90, 60, 0.9);
+}
+
+/* v0.20 G：ボス挿絵のヒットシェイク（正打のたびに再マウントして再トリガー） */
+@keyframes dev-boss-hit-kf {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-2px, 1px);
+  }
+  50% {
+    transform: translate(2px, -1px);
+  }
+  75% {
+    transform: translate(-1px, -1px);
+  }
+}
+.dev-boss-sprite {
+  animation: dev-boss-hit-kf 160ms steps(4) both;
+}
+
+/* v0.20 G：正打のたびにボスへ斬撃が入る演出（実装中の様子パネル内、ボス戦時のみ） */
+@keyframes dev-boss-slash-kf {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(-35deg) scaleX(0.4);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(-35deg) scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(-35deg) scaleX(1.1);
+  }
+}
+.dev-boss-slash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 70px;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #fff, #ff3c3c, transparent);
+  box-shadow: 0 0 6px 1px rgba(255, 60, 60, 0.8);
+  pointer-events: none;
+  animation: dev-boss-slash-kf 180ms steps(3) both;
+}
+
+/* v0.20 C：ボス文章バッジ（レアより強めの色・明滅で「大物」感を出す） */
+.dev-boss-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #3a0d0d;
+  background: #ff9d4d;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+  animation: dev-rare-badge-pulse 700ms steps(2) infinite;
+}
+
+/* v0.20 C：ボス撃破ポップ（dev-rare-pop の位置・タイミングを踏襲し、色だけボス用に上書き） */
+.dev-boss-pop {
+  color: #ff9d4d;
+  text-shadow:
+    2px 2px 0 #3a1a00,
+    -2px -2px 0 #3a1a00,
+    0 0 16px rgba(255, 157, 77, 0.8);
 }

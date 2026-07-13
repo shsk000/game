@@ -37,6 +37,12 @@ export const rollBugOnKeystroke = (employees: Employee[], rng: Rng): boolean =>
 export const ensureMinBugsOnDevComplete = (bugCount: number): number =>
   Math.max(BUG_CONFIG.minBugsOnDevComplete, bugCount);
 
+/**
+ * v0.19 出口①：広告視聴でバグ残数の 50% を即駆除（切り上げ。spec v19 §2-2）。
+ * 例：5 匹 → 3 匹駆除 / 1 匹 → 1 匹駆除 / 0 匹 → 0（駆除するものがない）
+ */
+export const bugsClearedByAd = (bugCount: number): number => Math.ceil(Math.max(0, bugCount) / 2);
+
 /** デバッグフェーズの作業量（修正フレーズ数）＝ バグが多いほど大変（線形） */
 export const debugWorkFor = (bugCount: number): number =>
   Math.max(0, bugCount) * BUG_CONFIG.phrasesPerBug;
