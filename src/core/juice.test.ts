@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { JUICE_CONFIG } from '../data/balance';
-import { comboTitleAt, isCrunchActive, keyPitchStep, rollBoss, rollCrit, rollRare } from './juice';
+import {
+  comboTitleAt,
+  gearFor,
+  isCrunchActive,
+  keyPitchStep,
+  rollBoss,
+  rollCrit,
+  rollRare,
+} from './juice';
 
 describe('keyPitchStep（コンボ→打鍵音の音階）', () => {
   it('コンボ 10 ごとに半音 +1 上がる', () => {
@@ -77,5 +85,24 @@ describe('rollBoss（v0.20 C：ボス文章の判定）', () => {
   it('rng が bossRate 以上なら不発（境界値）', () => {
     expect(rollBoss(() => JUICE_CONFIG.crunch.bossRate)).toBe(false);
     expect(rollBoss(() => JUICE_CONFIG.crunch.bossRate + 0.001)).toBe(false);
+  });
+});
+
+describe('gearFor（v0.20 E：入力速度→ギア）', () => {
+  it('1段目の閾値未満は最低ギア（feverGain 1）', () => {
+    expect(gearFor(0).feverGain).toBe(1);
+    expect(gearFor(JUICE_CONFIG.gears[0].minWpm - 1).feverGain).toBe(1);
+  });
+
+  it('1段目の閾値ちょうど・以上で1段目のギアになる', () => {
+    const g1 = JUICE_CONFIG.gears[0];
+    expect(gearFor(g1.minWpm)).toEqual(g1);
+    expect(gearFor(g1.minWpm + 1).feverGain).toBe(g1.feverGain);
+  });
+
+  it('2段目の閾値以上で2段目のギアになる（最高段が残る）', () => {
+    const g2 = JUICE_CONFIG.gears[1];
+    expect(gearFor(g2.minWpm)).toEqual(g2);
+    expect(gearFor(9999)).toEqual(g2);
   });
 });

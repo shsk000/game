@@ -50,3 +50,21 @@ export const isCrunchActive = (progressPct: number): boolean =>
  * 発動時は pickBossPhrase で長文を選び、完走時に JUICE_CONFIG.crunch.bossFeverBonus を加算する。
  */
 export const rollBoss = (rng: Rng = Math.random): boolean => rng() < JUICE_CONFIG.crunch.bossRate;
+
+/** v0.20 E：ギア未到達時の既定値（通常の addFever(1) と同じ） */
+const BASE_GEAR = { feverGain: 1, label: '' } as const;
+
+export type Gear = { feverGain: number; label: string };
+
+/**
+ * v0.20 E：入力速度wpmから現在のギアを求める（正打1打ごとに呼ぶ）。
+ * JUICE_CONFIG.gears は wpm昇順なので、閾値を満たすたびに上書きすれば最高段が残る。
+ * 発動時は通常の addFever(1) の代わりに gear.feverGain を加算する（呼び出し側の責務）。
+ */
+export const gearFor = (wpm: number): Gear => {
+  let gear: Gear = BASE_GEAR;
+  for (const g of JUICE_CONFIG.gears) {
+    if (wpm >= g.minWpm) gear = g;
+  }
+  return gear;
+};

@@ -2,7 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ads } from '../../ads/AdProvider';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
 import { bugSuppression, bugsClearedByAd, pickBugFixPhrase } from '../../core/bugs';
-import { comboTitleAt, isCrunchActive, keyPitchStep, rollBoss, rollCrit, rollRare } from '../../core/juice';
+import {
+  comboTitleAt,
+  type Gear,
+  gearFor,
+  isCrunchActive,
+  keyPitchStep,
+  rollBoss,
+  rollCrit,
+  rollRare,
+} from '../../core/juice';
 import { splitMorae } from '../../core/kanaProgress';
 import { BUG_CONFIG, JUICE_CONFIG, planWeeksAllowance } from '../../data/balance';
 import { buildLine } from '../../data/codeSnippets';
@@ -201,6 +210,9 @@ export const DevelopScreen = () => {
   // v0.20 C：ボス文章（クランチ中のみ。次の作業チケット文が「ボス」かどうか）
   const [isBossPhrase, setIsBossPhrase] = useState(false);
   const [bossHitKey, setBossHitKey] = useState(0);
+  // v0.20 E：ノーミスストリーク（開発フェーズのみ。今の文でミスがあったかを完走まで保持）
+  const phraseMissRef = useRef(false);
+  const [perfectStreak, setPerfectStreak] = useState(0);
 
   // フィーバー：正打で蓄積・ミスで減少、MAX で自動発動
   const [feverGauge, setFeverGauge] = useState(0);
@@ -367,6 +379,14 @@ export const DevelopScreen = () => {
           sfx.crunch();
           setBossHitKey((k) => k + 1);
         }
+        // v0.20 E：ノーミスストリーク（ミスがあった文の完走で0に戻す。ノーミスなら+1しFEVERに加算）
+        if (phraseMissRef.current) {
+          setPerfectStreak(0);
+        } else {
+          setPerfectStreak((s) => s + 1);
+          addFever(JUICE_CONFIG.perfect.feverBonus);
+        }
+        phraseMissRef.current = false;
 
         // 実装中の様子：カテゴリごとに違う見え方で反映
         const nextCount = ticketPhraseCountRef.current + 1;
@@ -442,7 +462,8 @@ export const DevelopScreen = () => {
           sfx.crit();
           setCritKey((k) => k + 1);
         } else {
-          addFever(1); // フィーバー（ノリ）は開発フェーズ専用
+          // v0.20 E：クリティカルでない打鍵は入力速度に応じたギアでフィーバーが溜まる
+          addFever(gearFor(wpmRef.current).feverGain); // フィーバー（ノリ）は開発フェーズ専用
         }
         // v0.17.1：実装の打鍵のたびにバグ抽選（社員能力が高いほど発生率低下）
         if (noteBugOnKeystroke()) {
@@ -459,9 +480,13 @@ export const DevelopScreen = () => {
     },
     // v0.17.1：バグの種はコンボ切れではなく「毎ミス」で判定（連続ミスも漏らさない）
     onFail: () => {
-      if (isDevelopment && noteBugOnMiss()) {
-        sfx.alert();
-        setFlash((n) => n + 1);
+      if (isDevelopment) {
+        // v0.20 E：ノーミスストリークの判定用（この文でミスがあったことを完走時まで保持）
+        phraseMissRef.current = true;
+        if (noteBugOnMiss()) {
+          sfx.alert();
+          setFlash((n) => n + 1);
+        }
       }
     },
     onWpm: (w) => {
@@ -656,6 +681,8 @@ export const DevelopScreen = () => {
               isRarePhrase={isRarePhrase}
               isBossPhrase={isBossPhrase}
               crunchActive={crunchActive}
+              gear={gearFor(wpm)}
+              perfectStreak={perfectStreak}
               view={view}
               failCount={failCount}
               charsPerMin={charsPerMin}
@@ -940,6 +967,8 @@ const DevelopCenter = ({
   isRarePhrase,
   isBossPhrase,
   crunchActive,
+  gear,
+  perfectStreak,
   view,
   failCount,
   charsPerMin,
@@ -968,6 +997,10 @@ const DevelopCenter = ({
   isBossPhrase: boolean;
   /** v0.20 C：クランチタイム中かどうか */
   crunchActive: boolean;
+  /** v0.20 E：現在の入力速度から求めたギア（feverGain 1 なら未到達） */
+  gear: Gear;
+  /** v0.20 E：ノーミスで連続完走した文数 */
+  perfectStreak: number;
   view: TypingView;
   failCount: number;
   charsPerMin: number;
@@ -1025,6 +1058,18 @@ const DevelopCenter = ({
           {crunchActive && (
             <span style={{ fontSize: 12, fontWeight: 700, color: '#ffb84d' }}>
               ⏰ラストスパート 進捗×{JUICE_CONFIG.crunch.progressMult}
+            </span>
+          )}
+          {/* v0.20 E：ギアバッジ（wpmがgears閾値未満のときはfeverGain 1でlabelが空になり非表示） */}
+          {gear.feverGain > 1 && (
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#4de1ff' }}>
+              ⚡{gear.label} ×{gear.feverGain}
+            </span>
+          )}
+          {/* v0.20 E：ノーミスストリーク（1文だけでは目立たせず、2文目以降で表示） */}
+          {perfectStreak >= 2 && (
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#8fd02a' }}>
+              🎯ノーミス継続 {perfectStreak}文
             </span>
           )}
           {/* v0.20 D：「PHASE X/6」表記は左サイドバーの6段階フェーズ進行リスト（企画→開発→…→完了）

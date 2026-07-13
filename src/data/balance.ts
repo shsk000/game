@@ -365,12 +365,20 @@ export const JUICE_CONFIG = {
    * bossFeverBonus：ボス文章完走時のフィーバーチャージ（rare.feverBonusより大きい）。
    */
   crunch: { startPct: 80, progressMult: 2, bossRate: 0.15, bossFeverBonus: 30 },
-  /** ギア：入力速度 wpm（打鍵/分）のしきい値。上がるほどフィーバーが溜まりやすい */
+  /**
+   * ギア：入力速度 wpm（打鍵/分）のしきい値。上がるほどフィーバーが溜まりやすい。
+   * label は画面表示にそのまま使う（「クランチ」が伝わらなかった教訓で英語ジャーゴンを避け、
+   * 日本語にしている）。
+   */
   gears: [
-    { minWpm: 150, feverGain: 2, label: 'GEAR 2' },
-    { minWpm: 230, feverGain: 3, label: 'GEAR 3' },
+    { minWpm: 150, feverGain: 2, label: '高速' },
+    { minWpm: 230, feverGain: 3, label: '超高速' },
   ],
-  /** パーフェクト文（ノーミスで1文完走）のフィーバーボーナス */
+  /**
+   * ノーミスで1文完走した時のフィーバーボーナス。
+   * 画面表示は「ノーミス継続」。speedRank の 'PERFECT'（1文の速度ランク）と紛らわしいため
+   * 「パーフェクト」という語は画面には出さない（設定キー名のみ perfect のまま）。
+   */
   perfect: { feverBonus: 10 },
 } as const;
 
