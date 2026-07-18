@@ -21,9 +21,11 @@
 | 6 | `src/data/titleGenerator.ts` `PREFIX_BY_GENRE` | タイトル接頭語4〜5個（日本語） | ✅ TSエラー |
 | 7 | `src/state/gameStore.ts` `MISSION_FLAVORS`（56行目） | ミッション見出し4個（日本語、v0.11レガシー演出） | ⚠️ **TSエラーにならない**（`Record<string,...>`＋`.action`にフォールバック）。忘れると新ジャンルが無言でaction味になる |
 | 8 | `public/sprites/genre/foo.png` | PixelLab生成の代表スプライト（64×64・背景透過・genre-theme-content §3参照） | ⚠️ **エラーにならない**。`<img>`が404であるべき箇所が壊れて見えるだけ |
+| 8b | `public/sprites/genre_bg/foo.png` | 開発フェーズ「デザイン画面」の背景（320×96・**§3-2 の全面充填ルール必読**） | ⚠️ **エラーにならない**。左右が透明だとジャンルの`bgColor`が透けて「帯」になる |
 | 9（任意） | `src/data/compatibility.ts` `DIVINE`/`BOMB` | `'foo\|theme'`の特別相性（無くても`tags`ベースの相性計算は機能する） | 任意。無くても動く |
 
-**TSエラーになる項目（1〜6）は`npm run build`を通せば機械的に埋め漏れが分かる。⚠️の7・8だけは目視でチェックする。**
+**TSエラーになる項目（1〜6）は`npm run build`を通せば機械的に埋め漏れが分かる。⚠️の7・8・8bだけは目視でチェックする。**
+**8・8bの目視は `/admin/images`（開発ツール）を使う**：本編と同一コンポーネント・同一幅で27ジャンルを一覧できる。生画像のサムネイルで判断すると必ず失敗する（§3-2）。
 
 ---
 
@@ -75,6 +77,49 @@
 - 発注前に必ず[`pixelart-prompting`](../pixelart-prompting/SKILL.md)を確認（PixelLab全般の失敗パターン・コスト管理はそちらが本体）。このスキルの§3は「このプロジェクトのジャンルスプライトという用途に絞った」確定仕様の記録。
 - **生成したら組み込み（配置・コード反映）前に必ずオーナー承認を取る**（プロジェクト共通ルール。1枚だけ先出し→OKなら残りをまとめて発注、の順が安全）。
 
+### 3-1. スプライトの表示サイズと解像度（2026-07-16 確定）
+
+- 表示は `GENRE_SPRITE_PX = 64`（`DevelopScreen.tsx`）。**この値は勝手に変えない。**
+- 理由：素材の解像度が **既存12種=64×64 / v0.21新規15種=128×128** と混在している。64 表示なら
+  両方が整数倍（等倍／1/2）に収まり、`imageRendering: pixelated`（最近傍補間）でドットが崩れない。
+- **非整数倍にすると絵が潰れる**：40px 時代は 0.625倍／0.3125倍で、オーナーから「小さくてよく見えない」
+  という指摘を受けた（原因はサイズだけでなくこのボケ）。次に大きくするなら 128（整数倍）だが、
+  既存64×64素材が2倍に伸びて新規128×128と粒の細かさが揃わなくなるので要相談。
+- 新規スプライトを発注するなら **64×64 に揃える**のが無難（§3 の確定仕様どおり）。
+
+### 3-2. 背景（`public/sprites/genre_bg/*.png`）の発注（2026-07-16 確定）
+
+開発フェーズ「🎨デザイン画面」パネルの背景。`genreBackgroundUrl(genreId)` が
+`/sprites/genre_bg/${genreId}.png` を自動で指すので**ファイルを置くだけでコード変更は不要**。
+
+- ツール：`create_map_object`（基本モード）／サイズ **320×96**／`view: 'side'`／
+  `detail: 'high detail'`／`shading: 'detailed shading'`
+- **最重要：`create_map_object` の基本モードは公式ドキュメント上も「standalone object（背景透過の単体
+  オブジェクト）」を作るツールであり、背景生成用ではない。** 素直に頼むと必ず「中央に小さな物体、
+  左右は透明」が返り、パネル上ではジャンルの`bgColor`が透けて**左右に帯**ができる。
+- **効く構図＝風景（ヴィスタ）**。これだけが安定して全面を埋めた：
+  ```
+  下半分を地面/水面が「completely filling the entire lower half from the far left edge to the far right edge」、
+  上半分を空が「completely filling the entire upper half from edge to edge」、
+  末尾に no empty or transparent areas anywhere, wide horizontal landscape scene,
+  not a single small object, not a floating blob
+  ```
+  例（一発成功）：fishing=夕暮れの湖／shooter=星雲／fps=夕暮れの戦場／horror=夜の墓地
+- 「回廊＋奥に消失点」（roguelike=ダンジョン、fighting=道場）も埋まるが**成否がぶれる**。
+- **効かなかった仮説（全部試して全滅。繰り返さないこと）**：
+  1. プロンプトに "full-bleed" "edge to edge" を足すだけ → 中央寄せのまま
+  2. リング/ステージ/塹壕など**主役になりうる題材**を指定 → 必ず物体として中央に描かれる
+  3. キャンバスを 320×32 にする → **真っ白**が返る
+  4. `outline: 'lineless'` にする → 中央寄せのまま
+- **合否はサムネイル目視で判断しない**（2回誤判定した）。機械的に判定する：
+  ```bash
+  magick out.png -trim +repage t.png && identify -format "%wx%h" t.png
+  ```
+  **トリム後の幅が 320 のままなら横は全面**。88px や 166px なら失敗（拡大するとドットが粗くなるので
+  トリムして使うのも不可）。最後は必ず `/admin/images` の実パネルで確認する。
+- パネル側には「左右端が塗り切れていない場合に備えた」グラデーション馴染ませが既にあるが、
+  効くのは端18%まで。それ以上空くと帯として見える。
+
 ## 4. `tags` は既存の語彙を再利用する
 
 `GenreTag`（`fast`/`logic`/`epic`/`scary`/`chill`/`wild`/`story`）と`ThemeTag`（`epic`/`tech`/`classic`/`daily`/`gourmet`/`cute`/`scary`/`cool`/`chill`）は`compatibility.ts`の`TAG_AFFINITY`が参照する固定語彙。新ジャンル/テーマの`tags`はこの**既存の語彙から選ぶ**（新しいタグ値を増やすと`TAG_AFFINITY`にペア加点ルールが無いため何の効果も持たない＝相性計算に反映されない）。
@@ -113,3 +158,15 @@
 - 企画チケット制導入（v0.15.3）に伴い `planTickets.ts` の `GENRE_PLAN_CONTENT` を新ジャンル追加チェックリストに追記（#3b）。
   企画カテゴリ7種のうちジャンル別執筆が必要なのは concept/world/core の3種のみ
   （genre/target/title/sales の4種は汎用＋バリアントで自動解決）
+
+### 2026-07-16（v0.21 で15ジャンル・13テーマを一括追加した際の学び）
+- **§3-2 背景の発注仕様を新設**。従来このスキルはスプライト（`genre/`）しか扱っておらず、
+  背景（`genre_bg/`）の規約が無かったため、20回以上の生成失敗を重ねた。効く構図・効かない仮説・
+  機械的な合否判定（`magick -trim` 後の幅）を記録。チェックリストにも #8b として追加
+- **§3-1 スプライト表示サイズを明文化**。素材が 64×64 と 128×128 で混在しており、
+  非整数倍の表示（40px）で絵が潰れていた問題と、`GENRE_SPRITE_PX = 64` の根拠を記録
+- **`/admin/images` を新設**（`src/admin/`）。本編と同一コンポーネント・同一幅（実測588px）で
+  全ジャンルの背景＋スプライトを一覧できる。素材の見え方の検証は必ずここで行う
+  （生画像のサムネイルで判断して2回誤判定した）。相性の一覧は `/admin/compat`
+- 参考：`create_map_object` の基本モードは「背景透過の単体オブジェクト」を作るツールという
+  公式ドキュメントの記述を、失敗を重ねてから読み直して気づいた。**発注前にツールの説明を読む**

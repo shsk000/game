@@ -13,7 +13,20 @@ export type ThemeId =
   | 'pirate'
   | 'alien'
   | 'zombie'
-  | 'animal';
+  | 'animal'
+  | 'school'
+  | 'idol'
+  | 'samurai'
+  | 'camping'
+  | 'detective'
+  | 'amusementpark'
+  | 'resort'
+  | 'library'
+  | 'hauntedhouse'
+  | 'circus'
+  | 'urbanlegend'
+  | 'cyberpunk'
+  | 'musicfestival';
 
 export type ThemeTag =
   | 'epic'
@@ -58,6 +71,19 @@ export const THEMES: Theme[] = [
   { id: 'zombie', name: 'ゾンビ', emoji: '🧟', tags: ['scary'], unlockStage: 4 },
   { id: 'pirate', name: '海賊', emoji: '🏴‍☠️', tags: ['cool', 'epic'], unlockStage: 4 },
   { id: 'alien', name: '宇宙人', emoji: '👽', tags: ['tech', 'cute'], unlockStage: 4 },
+  { id: 'camping', name: 'キャンプ', emoji: '⛺', tags: ['chill', 'daily'], unlockStage: 1 },
+  { id: 'library', name: '図書館', emoji: '📚', tags: ['daily', 'classic'], unlockStage: 1 },
+  { id: 'school', name: '学校', emoji: '🏫', tags: ['daily', 'cute'], unlockStage: 2 },
+  { id: 'amusementpark', name: '遊園地', emoji: '🎡', tags: ['cute', 'gourmet'], unlockStage: 2 },
+  { id: 'resort', name: '南国リゾート', emoji: '🏖️', tags: ['gourmet', 'cool'], unlockStage: 2 },
+  { id: 'idol', name: 'アイドル', emoji: '🎤', tags: ['cute', 'cool'], unlockStage: 3 },
+  { id: 'detective', name: '探偵', emoji: '🔍', tags: ['classic', 'scary'], unlockStage: 3 },
+  { id: 'hauntedhouse', name: '幽霊屋敷', emoji: '🏚️', tags: ['scary'], unlockStage: 3 },
+  { id: 'circus', name: 'サーカス', emoji: '🎪', tags: ['cute', 'cool'], unlockStage: 3 },
+  { id: 'urbanlegend', name: '都市伝説', emoji: '👹', tags: ['scary', 'tech'], unlockStage: 3 },
+  { id: 'musicfestival', name: '音楽フェス', emoji: '🎸', tags: ['cool', 'epic'], unlockStage: 3 },
+  { id: 'samurai', name: '侍', emoji: '🗡️', tags: ['classic', 'epic'], unlockStage: 4 },
+  { id: 'cyberpunk', name: 'サイバーパンク', emoji: '🌆', tags: ['tech', 'cool'], unlockStage: 4 },
 ];
 
 export const THEME_BY_ID: Record<ThemeId, Theme> = THEMES.reduce(

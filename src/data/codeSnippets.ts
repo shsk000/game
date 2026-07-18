@@ -28,6 +28,21 @@ export const GENRE_VERBS: Record<GenreId, string[]> = {
   roguelike: ['descend', 'reroll', 'loot', 'spawn', 'perish'],
   rhythm: ['tap', 'hold', 'sync', 'beat', 'groove'],
   sandbox: ['mine', 'craft', 'place', 'harvest', 'sculpt'],
+  strategy: ['command', 'scout', 'fortify', 'ally', 'conquer', 'deploy'],
+  sports: ['kick', 'pass', 'sprint', 'score', 'train', 'cheer'],
+  survival: ['scavenge', 'craft', 'hunt', 'shelter', 'endure', 'forage'],
+  cardgame: ['draw', 'shuffle', 'summon', 'combo', 'bluff', 'deal'],
+  towerdefense: ['place', 'upgrade', 'defend', 'intercept', 'repel'],
+  partygame: ['jump', 'race', 'tag', 'shuffle', 'celebrate'],
+  escapegame: ['unlock', 'solve', 'search', 'decode', 'escape'],
+  romanceadventure: ['confess', 'blush', 'meet', 'remember', 'choose'],
+  boardgame: ['roll', 'move', 'trade', 'build', 'collect'],
+  quiz: ['answer', 'buzz', 'guess', 'study', 'score'],
+  platformer: ['jump', 'dash', 'climb', 'bounce', 'glide', 'land'],
+  visualnovel: ['narrate', 'choose', 'branch', 'recall', 'unfold'],
+  raisingsim: ['feed', 'nurture', 'evolve', 'pet', 'hatch'],
+  fishing: ['cast', 'reel', 'wait', 'hook', 'release'],
+  fps: ['aim', 'reload', 'cover', 'breach', 'suppress', 'advance'],
 };
 
 export const GENRE_CLASSES: Record<GenreId, string[]> = {
@@ -43,6 +58,21 @@ export const GENRE_CLASSES: Record<GenreId, string[]> = {
   roguelike: ['Dungeon', 'Run', 'Item', 'Floor'],
   rhythm: ['Note', 'Track', 'Player', 'Beat'],
   sandbox: ['Block', 'World', 'Tool', 'Builder'],
+  strategy: ['Commander', 'Army', 'Territory', 'Tactic'],
+  sports: ['Player', 'Team', 'Stadium', 'Match'],
+  survival: ['Survivor', 'Shelter', 'Resource', 'Threat'],
+  cardgame: ['Card', 'Deck', 'Hand', 'Duelist'],
+  towerdefense: ['Tower', 'Wave', 'Path', 'Core'],
+  partygame: ['Player', 'Minigame', 'Party', 'Confetti'],
+  escapegame: ['Room', 'Puzzle', 'Key', 'Clock'],
+  romanceadventure: ['Heroine', 'Letter', 'Memory', 'Ending'],
+  boardgame: ['Pawn', 'Board', 'Dice', 'Piece'],
+  quiz: ['Question', 'Buzzer', 'Score', 'Panel'],
+  platformer: ['Hero', 'Platform', 'Coin', 'Goal'],
+  visualnovel: ['Story', 'Choice', 'Chapter', 'Route'],
+  raisingsim: ['Creature', 'Egg', 'Habitat', 'Bond'],
+  fishing: ['Rod', 'Fish', 'Lake', 'Bait'],
+  fps: ['Soldier', 'Weapon', 'Squad', 'Objective'],
 };
 
 export const THEME_NOUNS: Record<ThemeId, string[]> = {
@@ -61,6 +91,19 @@ export const THEME_NOUNS: Record<ThemeId, string[]> = {
   alien: ['ufo', 'tentacle', 'beam', 'probe', 'mothership'],
   zombie: ['brain', 'horde', 'shelter', 'survivor', 'virus'],
   animal: ['cat', 'puppy', 'paw', 'feather', 'tail'],
+  camping: ['tent', 'campfire', 'lantern', 'sleepingBag', 'trail'],
+  library: ['bookshelf', 'archive', 'quill', 'index', 'silence'],
+  school: ['classroom', 'chalk', 'locker', 'notebook', 'recess'],
+  amusementpark: ['ferrisWheel', 'ticket', 'parade', 'balloon', 'coaster'],
+  resort: ['palm', 'cocktail', 'poolside', 'sunset', 'lagoon'],
+  idol: ['spotlight', 'mic', 'fanClub', 'encore', 'glowStick'],
+  detective: ['clue', 'magnifier', 'alibi', 'suspect', 'fog'],
+  hauntedhouse: ['cobweb', 'creak', 'candle', 'portrait', 'attic'],
+  circus: ['tightrope', 'juggler', 'tent', 'clown', 'trapeze'],
+  urbanlegend: ['rumor', 'shadow', 'whisper', 'phone', 'alley'],
+  musicfestival: ['stage', 'crowd', 'speaker', 'setlist', 'encore'],
+  samurai: ['katana', 'dojo', 'honor', 'scroll', 'lantern'],
+  cyberpunk: ['neon', 'implant', 'hacker', 'drone', 'megacity'],
 };
 
 export const THEME_PROPS: Record<ThemeId, string[]> = {
@@ -79,6 +122,19 @@ export const THEME_PROPS: Record<ThemeId, string[]> = {
   alien: ['energy', 'signal', 'mass', 'dna'],
   zombie: ['hunger', 'rot', 'panic', 'count'],
   animal: ['cuteness', 'energy', 'hunger', 'mood'],
+  camping: ['warmth', 'supplies', 'quiet', 'smoke'],
+  library: ['silence', 'dust', 'knowledge', 'order'],
+  school: ['grade', 'friendship', 'schedule', 'nostalgia'],
+  amusementpark: ['excitement', 'queue', 'joy', 'lights'],
+  resort: ['relaxation', 'breeze', 'tan', 'leisure'],
+  idol: ['charisma', 'fame', 'sweat', 'applause'],
+  detective: ['tension', 'logic', 'doubt', 'evidence'],
+  hauntedhouse: ['fear', 'chill', 'dust', 'silence'],
+  circus: ['balance', 'wonder', 'risk', 'applause'],
+  urbanlegend: ['dread', 'mystery', 'static', 'unease'],
+  musicfestival: ['hype', 'volume', 'unity', 'fatigue'],
+  samurai: ['honor', 'discipline', 'resolve', 'silence'],
+  cyberpunk: ['signal', 'implantRate', 'grime', 'voltage'],
 };
 
 const BASES = ['Entity', 'Component', 'Node', 'Actor', 'Sprite', 'Controller'];

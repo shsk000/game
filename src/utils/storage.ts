@@ -3,8 +3,10 @@ import { computeMonthlyWage, INITIAL_FUNDS, SCALE_BALANCE } from '../data/balanc
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import type { GenreId } from '../data/genres';
+import { INITIAL_GENRE_IDS } from '../data/genres';
 import type { Scale } from '../data/scales';
 import type { ThemeId } from '../data/themes';
+import { INITIAL_THEME_IDS } from '../data/themes';
 import type { Trend } from '../data/trend';
 import type { Achievement, Employee, GameDate, Work, WorkBreakdown } from '../state/types';
 import { INITIAL_GAME_DATE } from '../state/types';
@@ -87,8 +89,8 @@ export const defaults = (): Persisted => ({
   unlockedScales: ['mini'],
   // v0.10 仕上げ：初期解放は「人気無い・単純」ジャンル / テーマのみ。
   // ファンタジー・SF・忍者などの人気テーマは終盤解放。
-  unlockedGenres: ['puzzle', 'adventure', 'simulation'],
-  unlockedThemes: ['sushi', 'onsen', 'farming'],
+  unlockedGenres: [...INITIAL_GENRE_IDS],
+  unlockedThemes: [...INITIAL_THEME_IDS],
   unlockedCategories: [...INITIAL_CATEGORY_IDS],
   ghosts: emptyGhostsRecord(),
   library: [],

@@ -31,15 +31,17 @@ type Cell = {
 };
 
 // 相性ランクに応じた背景色（ピクセル風単色のみ）
-const compatBg = (c: number): string => {
-  if (c >= 1.7) return '#f0c020'; // 神（金）
+// v0.16でgetCompatの実効上限を2.0→1.6に圧縮した際、この閾値(1.7)を下げ忘れており
+// 「神」が理論上出せなくなっていた（2026-07-16 発見・修正）。上限と同じ1.6に揃える。
+export const compatBg = (c: number): string => {
+  if (c >= 1.6) return '#f0c020'; // 神（金）
   if (c >= 1.3) return '#5aa84a'; // good（緑）
   if (c >= 0.9) return '#a0b85a'; // 普通（薄緑）
   return '#a83a3a'; // 地雷（赤）
 };
 
-const compatFg = (c: number): string => {
-  if (c >= 1.7) return '#1a0f08';
+export const compatFg = (c: number): string => {
+  if (c >= 1.6) return '#1a0f08';
   if (c >= 1.3) return '#1a0f08';
   if (c >= 0.9) return '#1a0f08';
   return '#fff8e0';
