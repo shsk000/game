@@ -1,7 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ads } from '../../ads/AdProvider';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
-import { pickBugFixPhrase } from '../../core/bugs';
-import { BUG_CONFIG, planWeeksAllowance } from '../../data/balance';
+import { bugSuppression, bugsClearedByAd, pickBugFixPhrase } from '../../core/bugs';
+import {
+  comboTitleAt,
+  type Gear,
+  gearFor,
+  isCrunchActive,
+  keyPitchStep,
+  rollBoss,
+  rollCrit,
+  rollRare,
+} from '../../core/juice';
+import { splitMorae } from '../../core/kanaProgress';
+import { BUG_CONFIG, JUICE_CONFIG, planWeeksAllowance } from '../../data/balance';
 import { buildLine } from '../../data/codeSnippets';
 import {
   ATTR_BASE_GAIN,
@@ -9,6 +21,7 @@ import {
   comboAttrMultiplier,
   getTicketAt,
   PHRASES_PER_TICKET,
+  pickBossPhrase,
   pickPhrase,
   type SpeedRank,
   speedRank,
@@ -40,7 +53,7 @@ import { useGameStore } from '../../state/gameStore';
 import { DEV_PHASE_META, DEV_PHASE_ORDER, type DevPhase, dateToWeekIndex } from '../../state/types';
 import { sfx } from '../../utils/sfx';
 import { computeDevImpact, progressGain, toCharsPerMin } from './devImpact';
-import { useTyping } from './useTyping';
+import { type TypingView, useTyping } from './useTyping';
 
 /** v0.15.2 フィーバー定数（叩き台 🔧）：正打 60 打で MAX、15 秒間 進捗×2 */
 const FEVER_MAX = 60;
@@ -52,6 +65,17 @@ const TOTAL_PHASE_DOTS = 6;
 /** チケットカードの固定高さ（内容の長短で入力欄が上下しないように） */
 const TICKET_CARD_HEIGHT = 76;
 
+/**
+ * v0.20 G：ボス文章の間だけ「RPGの戦闘っぽさ」を出すための挿絵（オーナー発注・PixelLab生成）。
+ * ボス文章が選ばれるたびにランダムに1体選ぶ（表示専用。ゲームロジックには影響しない）。
+ */
+const BOSS_SPRITES = [
+  { name: 'デスマーチゴーレム', url: '/sprites/boss/crunch-golem.png' },
+  { name: '締め切りデーモン', url: '/sprites/boss/deadline-demon.png' },
+  { name: 'バグロボット', url: '/sprites/boss/bug-robot.png' },
+  { name: 'スパゲッティコードモンスター', url: '/sprites/boss/spaghetti-monster.png' },
+] as const;
+
 type LastResult =
   | {
       kind: 'ticket';
@@ -61,6 +85,8 @@ type LastResult =
       bugPct: number;
       /** この 1 文で実際に進んだ完成度（進捗ゲージに入る値そのもの） */
       progress: number;
+      /** v0.20 C：この1文がボス文章の完走だったか（画面シェイクの追加トリガーに使う） */
+      boss?: boolean;
       ts: number;
     }
   | {
@@ -109,6 +135,12 @@ export const DevelopScreen = () => {
   const isDevelopment = phase === 'development';
   const isPlanning = phase === 'planning';
   const genreId = current?.genreId ?? 'action';
+
+  // v0.20 C：クランチタイム（全体完成度が閾値を超えたら自動発動。開発フェーズのみ）
+  const overallProgressPct = current
+    ? Math.max(0, Math.min(100, (current.doneLoC / (current.workTarget || 1)) * 100))
+    : 0;
+  const crunchActive = isDevelopment && isCrunchActive(overallProgressPct);
 
   const wpmRef = useRef(0);
   const accuracyRef = useRef(1);
@@ -172,6 +204,29 @@ export const DevelopScreen = () => {
   activeRef.current = activeEvent;
 
   const [flash, setFlash] = useState(0);
+  // v0.20 A：コンボ節目の称号ポップ（50/150/300。key で CSS アニメを再トリガー）
+  const [comboTitle, setComboTitle] = useState<{ label: string; combo: number; key: number } | null>(
+    null,
+  );
+  // v0.20 A-2：FEVER 突入バナー（発動の瞬間に1回だけ横切る）
+  const [feverBannerKey, setFeverBannerKey] = useState(0);
+  // v0.20 B：クリティカル打鍵のポップ（key で CSS アニメを再トリガー）
+  const [critKey, setCritKey] = useState(0);
+  // v0.20 B：レア文章（開発フェーズのみ。次の作業チケット文が「当たり」かどうか）
+  const [isRarePhrase, setIsRarePhrase] = useState(() => rollRare());
+  const [rareHitKey, setRareHitKey] = useState(0);
+  // v0.20 C：クランチ突入バナー（80%到達の瞬間に1回だけ）
+  const [crunchBannerKey, setCrunchBannerKey] = useState(0);
+  const crunchAnnouncedRef = useRef(false);
+  // v0.20 C：ボス文章（クランチ中のみ。次の作業チケット文が「ボス」かどうか）
+  const [isBossPhrase, setIsBossPhrase] = useState(false);
+  const [bossHitKey, setBossHitKey] = useState(0);
+  // v0.20 G：ボス戦演出（表示専用）。出現時にランダムな1体＋一度きりの出現バナー
+  const [bossSprite, setBossSprite] = useState<(typeof BOSS_SPRITES)[number]>(BOSS_SPRITES[0]);
+  const [bossAppearKey, setBossAppearKey] = useState(0);
+  // v0.20 E：ノーミスストリーク（開発フェーズのみ。今の文でミスがあったかを完走まで保持）
+  const phraseMissRef = useRef(false);
+  const [perfectStreak, setPerfectStreak] = useState(0);
 
   // フィーバー：正打で蓄積・ミスで減少、MAX で自動発動
   const [feverGauge, setFeverGauge] = useState(0);
@@ -192,6 +247,7 @@ export const DevelopScreen = () => {
       setFeverGauge(FEVER_MAX);
       sfx.success();
       setFlash((n) => n + 1);
+      setFeverBannerKey((k) => k + 1); // v0.20 A-2：突入バナー
       const t = window.setTimeout(() => {
         setFeverActive(false);
         setFeverGauge(0);
@@ -200,6 +256,15 @@ export const DevelopScreen = () => {
       return () => window.clearTimeout(t);
     }
   }, [feverGauge, feverActive]);
+
+  // v0.20 C：クランチタイム突入（80%到達の瞬間に1回だけ通知。以降 doneLoC は減らないため再発火しない）
+  useEffect(() => {
+    if (crunchActive && !crunchAnnouncedRef.current) {
+      crunchAnnouncedRef.current = true;
+      sfx.crunch();
+      setCrunchBannerKey((k) => k + 1);
+    }
+  }, [crunchActive]);
 
   // イベント抽選：8 秒ごとに 1 回、企画/開発フェーズ中のみ（フェーズごとのイベント表から）
   useEffect(() => {
@@ -301,7 +366,9 @@ export const DevelopScreen = () => {
 
         const impactNow = computeDevImpact({ wpm: wpmRef.current, accuracy: accuracyRef.current });
         const progressNow =
-          progressGain(wpmRef.current, false, comboRef.current) * (feverActiveRef.current ? 2 : 1);
+          progressGain(wpmRef.current, false, comboRef.current) *
+          (feverActiveRef.current ? 2 : 1) *
+          (crunchActive ? JUICE_CONFIG.crunch.progressMult : 1);
         sfx[rank === 'PERFECT' ? 'success' : 'complete']();
         setLastResult({
           kind: 'ticket',
@@ -310,8 +377,30 @@ export const DevelopScreen = () => {
           qualityDelta: impactNow.qualityDelta,
           bugPct: impactNow.bugPct,
           progress: Math.round(progressNow * 10) / 10,
+          boss: isBossPhrase,
           ts: Date.now(),
         });
+
+        // v0.20 B：レア文章の完走報酬（開発フェーズのみ。FEVERゲージにのみ加算＝新しい加点経路を作らない）
+        if (isRarePhrase) {
+          addFever(JUICE_CONFIG.rare.feverBonus);
+          sfx.rare();
+          setRareHitKey((k) => k + 1);
+        }
+        // v0.20 C：ボス文章の完走報酬（クランチタイム中のみ。FEVERゲージにのみ加算）
+        if (isBossPhrase) {
+          addFever(JUICE_CONFIG.crunch.bossFeverBonus);
+          sfx.crunch();
+          setBossHitKey((k) => k + 1);
+        }
+        // v0.20 E：ノーミスストリーク（ミスがあった文の完走で0に戻す。ノーミスなら+1しFEVERに加算）
+        if (phraseMissRef.current) {
+          setPerfectStreak(0);
+        } else {
+          setPerfectStreak((s) => s + 1);
+          addFever(JUICE_CONFIG.perfect.feverBonus);
+        }
+        phraseMissRef.current = false;
 
         // 実装中の様子：カテゴリごとに違う見え方で反映
         const nextCount = ticketPhraseCountRef.current + 1;
@@ -343,11 +432,24 @@ export const DevelopScreen = () => {
           setTicketPhraseCount(nextCount);
         }
         const newCategory = getTicketAt(genreId, ticketIndexRef.current).category;
-        setTicketPhrase(pickPhrase(newCategory));
+        // v0.20 C：クランチタイム中は稀にボス文章（プール2文連結の長文）を出す
+        // レア文章とは独立抽選だが、両方当たった場合はボスを優先（バッジ・報酬の二重表示を避ける）
+        const nextIsBoss = crunchActive && rollBoss();
+        setTicketPhrase(nextIsBoss ? pickBossPhrase(newCategory) : pickPhrase(newCategory));
+        setIsBossPhrase(nextIsBoss);
+        setIsRarePhrase(nextIsBoss ? false : rollRare());
+        // v0.20 G：ボス出現時にランダムな1体を選び、出現バナーを一度だけ流す
+        if (nextIsBoss) {
+          setBossSprite(BOSS_SPRITES[Math.floor(Math.random() * BOSS_SPRITES.length)]);
+          setBossAppearKey((k) => k + 1);
+          sfx.crunch();
+        }
 
         // 進捗（完成度）は従来通り：速度＋コンボ倍率＋フィーバー×2
         const progress =
-          progressGain(wpmRef.current, false, comboRef.current) * (feverActiveRef.current ? 2 : 1);
+          progressGain(wpmRef.current, false, comboRef.current) *
+          (feverActiveRef.current ? 2 : 1) *
+          (crunchActive ? JUICE_CONFIG.crunch.progressMult : 1);
         addDevelopLoC(progress);
 
         // 待機中のイベントがあれば、次の文としてイベント文を投入（途中差し替えしない）
@@ -366,9 +468,23 @@ export const DevelopScreen = () => {
     },
     onCorrect: (c) => {
       comboRef.current = c;
-      sfx.key();
+      // v0.20 A：コンボが乗るほど打鍵音の音階が上がる（切れると元に戻る）
+      sfx.key(keyPitchStep(c));
+      const title = comboTitleAt(c);
+      if (title) {
+        sfx.combo();
+        setComboTitle((t) => ({ label: title, combo: c, key: (t?.key ?? 0) + 1 }));
+      }
       if (isDevelopment) {
-        addFever(1); // フィーバー（ノリ）は開発フェーズ専用
+        // v0.20 B：クリティカル打鍵（正打の一定確率でFEVERゲージが大きく跳ねる）
+        if (rollCrit()) {
+          addFever(JUICE_CONFIG.crit.feverBonus);
+          sfx.crit();
+          setCritKey((k) => k + 1);
+        } else {
+          // v0.20 E：クリティカルでない打鍵は入力速度に応じたギアでフィーバーが溜まる
+          addFever(gearFor(wpmRef.current).feverGain); // フィーバー（ノリ）は開発フェーズ専用
+        }
         // v0.17.1：実装の打鍵のたびにバグ抽選（社員能力が高いほど発生率低下）
         if (noteBugOnKeystroke()) {
           sfx.alert();
@@ -384,9 +500,13 @@ export const DevelopScreen = () => {
     },
     // v0.17.1：バグの種はコンボ切れではなく「毎ミス」で判定（連続ミスも漏らさない）
     onFail: () => {
-      if (isDevelopment && noteBugOnMiss()) {
-        sfx.alert();
-        setFlash((n) => n + 1);
+      if (isDevelopment) {
+        // v0.20 E：ノーミスストリークの判定用（この文でミスがあったことを完走時まで保持）
+        phraseMissRef.current = true;
+        if (noteBugOnMiss()) {
+          sfx.alert();
+          setFlash((n) => n + 1);
+        }
       }
     },
     onWpm: (w) => {
@@ -462,6 +582,61 @@ export const DevelopScreen = () => {
 
       {flash > 0 && <div key={`flash-${flash}`} className="dev-flash-vignette" />}
 
+      {/* v0.20 A：コンボ節目の称号ポップ（打鍵は止めない。目線の少し上に一瞬出て消える） */}
+      {comboTitle && (
+        <>
+          <div key={`goldflash-${comboTitle.key}`} className="dev-gold-flash" />
+          <div key={`combo-title-${comboTitle.key}`} className="dev-combo-title">
+            <span>{comboTitle.label}</span>
+            <span className="dev-combo-title-sub">{comboTitle.combo} COMBO</span>
+          </div>
+        </>
+      )}
+
+      {/* v0.20 A-2：FEVER 突入バナー（発動の瞬間に横切って消える。バッジは既存表示が継続） */}
+      {feverBannerKey > 0 && feverActive && (
+        <div key={`fever-banner-${feverBannerKey}`} className="dev-fever-banner">
+          🔥FEVER!!🔥
+        </div>
+      )}
+
+      {/* v0.20 B：クリティカル打鍵ポップ（打鍵は止めない。小さく速く出て消える）
+          v0.20 F：オーナーFB「feverが溜まりやすくなったことが分かる仕組みが欲しい（ゲージ以外で）」
+          を受け、実際にFEVERへ入った量を🔥+Nとして数字で見せる（新しいゲージは作らない） */}
+      {critKey > 0 && (
+        <div key={`crit-${critKey}`} className="dev-crit-pop">
+          ⚡CRITICAL! 🔥+{JUICE_CONFIG.crit.feverBonus}
+        </div>
+      )}
+
+      {/* v0.20 B：レア文章の完走ポップ */}
+      {rareHitKey > 0 && (
+        <div key={`rare-hit-${rareHitKey}`} className="dev-rare-pop">
+          ★レア達成！ 🔥+{JUICE_CONFIG.rare.feverBonus}
+        </div>
+      )}
+
+      {/* v0.20 C：クランチタイム突入バナー（80%到達の瞬間に1回だけ横切る） */}
+      {crunchBannerKey > 0 && (
+        <div key={`crunch-${crunchBannerKey}`} className="dev-crunch-banner">
+          ⏰ラストスパート！！⏰
+        </div>
+      )}
+
+      {/* v0.20 C：ボス文章の完走ポップ（画面シェイクは入力行側で付与） */}
+      {bossHitKey > 0 && (
+        <div key={`boss-hit-${bossHitKey}`} className="dev-rare-pop dev-boss-pop">
+          ⚔BOSS撃破！ 🔥+{JUICE_CONFIG.crunch.bossFeverBonus}
+        </div>
+      )}
+
+      {/* v0.20 G：ボス出現バナー（ボス文章に切り替わった瞬間だけ横切る） */}
+      {bossAppearKey > 0 && isBossPhrase && (
+        <div key={`boss-appear-${bossAppearKey}`} className="dev-crunch-banner dev-boss-appear">
+          ⚔{bossSprite.name}が立ちはだかる！⚔
+        </div>
+      )}
+
       <div
         style={{
           flex: 1,
@@ -521,6 +696,7 @@ export const DevelopScreen = () => {
             <DevelopCenter
               phaseLabel={phaseMeta.label}
               litPhaseDots={litPhaseDots}
+              progressPct={progressPct}
               ticket={currentTicket}
               ticketProgressPct={Math.min(
                 100,
@@ -531,6 +707,12 @@ export const DevelopScreen = () => {
                   100,
               )}
               activeEvent={activeEvent}
+              isRarePhrase={isRarePhrase}
+              isBossPhrase={isBossPhrase}
+              bossSprite={bossSprite}
+              crunchActive={crunchActive}
+              gear={gearFor(wpm)}
+              perfectStreak={perfectStreak}
               view={view}
               failCount={failCount}
               charsPerMin={charsPerMin}
@@ -549,6 +731,7 @@ export const DevelopScreen = () => {
           ) : isPlanning ? (
             <PlanningCenter
               litPhaseDots={planLitDots}
+              progressPct={planProgressPct}
               ticket={currentPlanTicket}
               ticketProgressPct={Math.min(
                 100,
@@ -714,7 +897,20 @@ const TeamStatus = ({
     pr: CATEGORY_META.design.color,
   };
   return (
-    <div style={{ ...devBox(), gap: 6, flex: 1, minHeight: 0, overflow: 'hidden' }}>
+    <div
+      style={{
+        ...devBox(),
+        gap: 6,
+        // v0.20 A-2 修正：flex:1 で残りスペース全部を占有すると、社員が少ない時に
+        // 下の「開発全体の進捗」ボックスを画面外まで押し出してしまう回帰があった
+        // （オーナー実プレイで発見）。社員数に応じた実測に近い上限で頭打ちし、
+        // それ以上は overflow:hidden でクリップする（MAX_EMPLOYEES=12 想定）
+        flex: '0 1 auto',
+        maxHeight: 210,
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
       <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>チーム状態</span>
       {team.length === 0 && (
         <span style={{ fontSize: 11, color: DEV.sub }}>社員なし（あなた一人で開発中）</span>
@@ -741,13 +937,69 @@ const TeamStatus = ({
   );
 };
 
+/**
+ * v0.20 A-2：「入力する文章」（かな表示）に打鍵アクションを付ける（オーナーFB 2026-07-12）。
+ * かな進捗は nano-type-jp@0.7 が公開する resolvedUnitCount（何個目の入力単位＝モーラまで
+ * 確定したか）をそのまま使う。近似（文字数比→固定長テーブル→ライブ比率）を3回試して
+ * すべて実プレイで破綻したため、ライブラリ側にAPIを追加してもらい正確な値を取得する形にした
+ * （経緯は core/kanaProgress.ts 参照）。
+ * - 消化済みモーラ：ポップして沈む（打つそばから文章が片付いていく手応え）
+ * - いま打っているモーラ：バウンス＋発光
+ * - 正打のたび：現在モーラの位置でピクセルスパーク（completedLen の変化で再トリガー）
+ */
+const KanaActionLine = ({
+  hiragana,
+  completedLen,
+  resolvedUnitCount,
+  doneColor,
+  currentColor,
+}: {
+  hiragana: string;
+  completedLen: number;
+  resolvedUnitCount: number;
+  doneColor: string;
+  currentColor: string;
+}) => {
+  const morae = useMemo(() => splitMorae(hiragana), [hiragana]);
+  const doneMorae = Math.min(morae.length, resolvedUnitCount);
+  return (
+    <>
+      {morae.map((m, i) => {
+        if (i < doneMorae) {
+          return (
+            <span key={i} className="dev-kana-done" style={{ color: doneColor }}>
+              {m}
+            </span>
+          );
+        }
+        if (i === doneMorae) {
+          return (
+            <span key={i} className="dev-kana-current" style={{ color: currentColor }}>
+              {m}
+              <span key={`spark-${completedLen}`} className="dev-kana-spark" />
+            </span>
+          );
+        }
+        return <span key={i}>{m}</span>;
+      })}
+    </>
+  );
+};
+
 /** 中央：開発フェーズ本体 */
 const DevelopCenter = ({
   phaseLabel,
   litPhaseDots,
+  progressPct,
   ticket,
   ticketProgressPct,
   activeEvent,
+  isRarePhrase,
+  isBossPhrase,
+  bossSprite,
+  crunchActive,
+  gear,
+  perfectStreak,
   view,
   failCount,
   charsPerMin,
@@ -765,10 +1017,24 @@ const DevelopCenter = ({
 }: {
   phaseLabel: string;
   litPhaseDots: number;
+  /** v0.20 D：開発全体の完成度%（左サイドバーと同じ値。ヘッダーに主役として表示する） */
+  progressPct: number;
   ticket: ReturnType<typeof getTicketAt>;
   ticketProgressPct: number;
   activeEvent: DevEvent | null;
-  view: { hiragana: string; completed: string; remained: string };
+  /** v0.20 B：次に打つ文章が「レア」かどうか（開発フェーズのみ） */
+  isRarePhrase: boolean;
+  /** v0.20 C：次に打つ文章が「ボス」かどうか（クランチタイム中のみ） */
+  isBossPhrase: boolean;
+  /** v0.20 G：出現中のボスの挿絵（表示専用） */
+  bossSprite: { name: string; url: string };
+  /** v0.20 C：クランチタイム中かどうか */
+  crunchActive: boolean;
+  /** v0.20 E：現在の入力速度から求めたギア（feverGain 1 なら未到達） */
+  gear: Gear;
+  /** v0.20 E：ノーミスで連続完走した文数 */
+  perfectStreak: number;
+  view: TypingView;
   failCount: number;
   charsPerMin: number;
   bugCount: number;
@@ -785,6 +1051,11 @@ const DevelopCenter = ({
 }) => {
   const catMeta = CATEGORY_META[ticket.category];
   const inputColor = activeEvent ? '#ff8a3c' : catMeta.color;
+  // v0.20 G：ボス戦中かどうか（イベント優先。イベント中はボス演出を出さない）
+  const isBossBattle = isBossPhrase && !activeEvent;
+  const bossHpPct = isBossBattle
+    ? Math.max(0, 100 - (view.resolvedUnitCount / Math.max(1, view.totalUnitCount)) * 100)
+    : 0;
   return (
     <div
       style={{
@@ -822,11 +1093,40 @@ const DevelopCenter = ({
               🔥FEVER 進捗×2
             </span>
           )}
-          <span style={{ fontSize: 11, color: DEV.sub }}>
-            PHASE {litPhaseDots} / 6
+          {crunchActive && (
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#ffb84d' }}>
+              ⏰ラストスパート 進捗×{JUICE_CONFIG.crunch.progressMult}
+            </span>
+          )}
+          {/* v0.20 F：ギアバッジ。オーナーFB「feverが溜まりやすくなったことが分かる仕組みが欲しい
+              （ゲージ以外で）」を受け、「たまりやすい」と直接言葉にする（wpmがgears閾値未満なら非表示） */}
+          {gear.feverGain > 1 && (
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#4de1ff' }}>
+              🔥たまりやすい ×{gear.feverGain}
+            </span>
+          )}
+          {/* v0.20 E：ノーミスストリーク（1文だけでは目立たせず、2文目以降で表示） */}
+          {perfectStreak >= 2 && (
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#8fd02a' }}>
+              🎯ノーミス継続 {perfectStreak}文
+            </span>
+          )}
+          {/* v0.20 D：「PHASE X/6」表記は左サイドバーの6段階フェーズ進行リスト（企画→開発→…→完了）
+              と同じ「6」を使っていて紛らわしく、実際は現フェーズ内の完成度を6分割しただけの別物
+              だった（オーナーFB「完成までの進捗があることを理解してなかった」の一因と判断）。
+              パーセンテージを主役に出し、ドットは補助の目盛りとして残す。 */}
+          <span style={{ fontSize: 11, color: DEV.sub, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span
-              style={{ display: 'inline-flex', gap: 3, marginLeft: 6, verticalAlign: 'middle' }}
+              style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: DEV.greenBright,
+                fontVariantNumeric: 'tabular-nums',
+              }}
             >
+              開発 {Math.floor(progressPct)}%
+            </span>
+            <span style={{ display: 'inline-flex', gap: 3, verticalAlign: 'middle' }}>
               {Array.from({ length: 6 }, (_, i) => (
                 <span
                   key={i}
@@ -846,13 +1146,13 @@ const DevelopCenter = ({
       </div>
 
       <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
-        {/* ①作業チケット／イベント（今なにを作っているか）。内容の長短で下の入力欄が動かないよう高さ固定 */}
+        {/* ①作業チケット／イベント／ボス戦（今なにを作っているか）。内容の長短で下の入力欄が動かないよう高さ固定 */}
         <div
           className={activeEvent ? 'dev-event-active' : undefined}
           style={{
             ...devBox(),
             gap: 4,
-            borderColor: activeEvent ? '#ff8a3c' : DEV.panelBorder,
+            borderColor: isBossBattle ? '#ff3c3c' : activeEvent ? '#ff8a3c' : DEV.panelBorder,
             flexDirection: 'row',
             alignItems: 'flex-start',
             height: TICKET_CARD_HEIGHT,
@@ -861,20 +1161,20 @@ const DevelopCenter = ({
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
             <span style={{ fontSize: 10, color: DEV.sub }}>
-              {activeEvent ? '⚠ イベント発生' : '作業チケット'}
+              {isBossBattle ? '⚔ ボス戦' : activeEvent ? '⚠ イベント発生' : '作業チケット'}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
               <span
                 style={{
                   fontSize: 18,
                   fontWeight: 700,
-                  color: DEV.cream,
+                  color: isBossBattle ? '#ff9d4d' : DEV.cream,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}
               >
-                {activeEvent ? activeEvent.name : ticket.flavor.title}
+                {isBossBattle ? bossSprite.name : activeEvent ? activeEvent.name : ticket.flavor.title}
               </span>
               <span
                 style={{
@@ -888,7 +1188,11 @@ const DevelopCenter = ({
                   flexShrink: 0,
                 }}
               >
-                {activeEvent ? '⚡ イベント作業' : `${catMeta.icon} ${catMeta.label}作業`}
+                {isBossBattle
+                  ? '⚔ 渾身の一撃'
+                  : activeEvent
+                    ? '⚡ イベント作業'
+                    : `${catMeta.icon} ${catMeta.label}作業`}
               </span>
             </div>
             <span
@@ -900,10 +1204,15 @@ const DevelopCenter = ({
                 textOverflow: 'ellipsis',
               }}
             >
-              {activeEvent ? activeEvent.flavor : ticket.flavor.desc}
+              {isBossBattle
+                ? '長文を打ち切って撃破しろ！'
+                : activeEvent
+                  ? activeEvent.flavor
+                  : ticket.flavor.desc}
             </span>
           </div>
-          {!activeEvent && (
+          {/* v0.20 G：ボス戦の挿絵・HPバーは下の「実装中の様子」パネルに表示する（ここはテキストのみ） */}
+          {!activeEvent && !isBossBattle && (
             <div
               style={{
                 width: 84,
@@ -932,16 +1241,39 @@ const DevelopCenter = ({
         </div>
         {/* ゲージ枠も常設（イベント中に消えると下が動くため） */}
         <div style={{ height: 6 }}>
-          {!activeEvent && (
+          {!activeEvent && !isBossBattle && (
             <SegGauge pct={ticketProgressPct} color={catMeta.color} track="#0c1207" height={6} />
           )}
         </div>
 
         {/* ②入力する文章（なにを入力すればいいか）＋ 入力進度/正確さ */}
-        <div style={{ display: 'flex', gap: 8 }}>
+        {/* v0.20 A-2：文完了（ticket 結果）ごとに key 再マウントで PERFECT シェイクと +進捗 フライアウトを再トリガー */}
+        <div
+          key={`inrow-${lastResult?.kind === 'ticket' ? lastResult.ts : 0}`}
+          className={
+            lastResult?.kind === 'ticket' && (lastResult.rank === 'PERFECT' || lastResult.boss)
+              ? 'dev-perfect-shake'
+              : undefined
+          }
+          style={{ display: 'flex', gap: 8 }}
+        >
           <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-            <div style={{ fontSize: 11, color: DEV.green, fontWeight: 700, marginBottom: 4 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 11,
+                color: DEV.green,
+                fontWeight: 700,
+                marginBottom: 4,
+              }}
+            >
               入力する文章
+              {/* v0.20 B：レア文章バッジ（打ち始める前から見えるので、打っている間ずっと期待感が続く） */}
+              {!activeEvent && isRarePhrase && <span className="dev-rare-badge">★レア</span>}
+              {/* v0.20 C：ボス文章バッジ */}
+              {!activeEvent && isBossPhrase && <span className="dev-boss-badge">⚔BOSS</span>}
             </div>
             <div
               style={{
@@ -956,8 +1288,19 @@ const DevelopCenter = ({
                 wordBreak: 'break-word',
               }}
             >
-              {view.hiragana}
+              <KanaActionLine
+                hiragana={view.hiragana}
+                completedLen={view.completed.length}
+                resolvedUnitCount={view.resolvedUnitCount}
+                doneColor="#57703a"
+                currentColor={DEV.white}
+              />
             </div>
+            {lastResult?.kind === 'ticket' && (
+              <span key={`fly-${lastResult.ts}`} className="dev-progress-fly">
+                +{lastResult.progress}
+              </span>
+            )}
           </div>
           <div style={{ width: 96, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ ...devBox(), gap: 1, padding: 5 }}>
@@ -1044,6 +1387,10 @@ const DevelopCenter = ({
           soundBeatKey={soundBeatKey}
           genre={genre}
           ticketTitle={ticket.flavor.title}
+          isBossBattle={isBossBattle}
+          bossSprite={bossSprite}
+          bossHpPct={bossHpPct}
+          bossHitKey={view.completed.length}
         />
 
         {/* ③今回の結果（入力した結果どう変わったか） */}
@@ -1064,8 +1411,17 @@ const WorkInProgressPanel = (props: {
   soundBeatKey: number;
   genre: { id: GenreId; emoji: string; bgColor: string } | undefined;
   ticketTitle: string;
+  /** v0.20 G：ボス戦中は担当カテゴリに関わらずこのパネルを表示する */
+  isBossBattle: boolean;
+  bossSprite: { name: string; url: string };
+  bossHpPct: number;
+  bossHitKey: number;
 }) => {
   const { category } = props;
+  if (props.isBossBattle)
+    return (
+      <BossBattlePanel sprite={props.bossSprite} hpPct={props.bossHpPct} hitKey={props.bossHitKey} />
+    );
   if (category === 'program')
     return <ProgramLogPanel lines={props.programLog} liveLine={props.liveCodeLine} />;
   if (category === 'graphics')
@@ -1082,6 +1438,57 @@ const WorkInProgressPanel = (props: {
 };
 
 const WIP_HEIGHT = 74;
+
+/**
+ * v0.20 G：ボス戦パネル（オーナー指示：「実装中の様子」欄をボス戦の表示に差し替え、
+ * 打つたびに斬撃が入ってHPが削れるイメージ）。担当カテゴリに関わらずこの見た目で統一する。
+ */
+const BossBattlePanel = ({
+  sprite,
+  hpPct,
+  hitKey,
+}: {
+  sprite: { name: string; url: string };
+  hpPct: number;
+  hitKey: number;
+}) => (
+  <div style={{ ...devBox(), gap: 4 }}>
+    <span style={{ fontSize: 11, color: '#ff5a3c', fontWeight: 700 }}>⚔ ボス戦：{sprite.name}</span>
+    <div
+      style={{
+        background: `linear-gradient(rgba(4, 6, 10, 0.45), rgba(4, 6, 10, 0.45)), url(/sprites/boss/battle-bg.png)`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        imageRendering: 'pixelated',
+        border: '1px solid #ff3c3c',
+        padding: '5px 8px',
+        height: WIP_HEIGHT,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{ position: 'relative', width: 48, height: 48 }}>
+        <img
+          // v0.20 G：正打のたびに再マウントしてヒットシェイクを再トリガー（.dev-kana-spark と同じ手法）
+          key={`boss-battle-sprite-${hitKey}`}
+          src={sprite.url}
+          alt={sprite.name}
+          className="dev-boss-sprite"
+          style={{ width: 48, height: 48, imageRendering: 'pixelated' }}
+        />
+        {hitKey > 0 && <div key={`boss-slash-${hitKey}`} className="dev-boss-slash" />}
+      </div>
+      <div style={{ width: '70%' }}>
+        <SegGauge pct={hpPct} color="#ff3c3c" track="#2a0d0d" height={6} />
+      </div>
+    </div>
+  </div>
+);
 
 /** 疑似シンタックスハイライト：IDE風に予約語/関数名/クラス名/文字列/数値/記号を色分け */
 const CODE_KEYWORDS = new Set([
@@ -1504,6 +1911,7 @@ const PLAN = {
 /** 中央：企画フェーズ本体（v0.15.3 企画チケット UI） */
 const PlanningCenter = ({
   litPhaseDots,
+  progressPct,
   ticket,
   ticketProgressPct,
   activeEvent,
@@ -1517,10 +1925,12 @@ const PlanningCenter = ({
   lastResult,
 }: {
   litPhaseDots: number;
+  /** v0.20 D：企画書完成度%（左サイドバーと同じ値。ヘッダーに主役として表示する） */
+  progressPct: number;
   ticket: ReturnType<typeof getPlanTicketAt>;
   ticketProgressPct: number;
   activeEvent: DevEvent | null;
-  view: { hiragana: string; completed: string; remained: string };
+  view: TypingView;
   failCount: number;
   charsPerMin: number;
   bugCount: number;
@@ -1560,9 +1970,20 @@ const PlanningCenter = ({
         >
           💡 企画フェーズ
         </span>
-        <span style={{ fontSize: 11, color: DEV.sub }}>
-          PHASE {litPhaseDots} / 6
-          <span style={{ display: 'inline-flex', gap: 3, marginLeft: 6, verticalAlign: 'middle' }}>
+        {/* v0.20 D：「PHASE X/6」表記は左サイドバーの6段階フェーズ進行リストと紛らわしいため撤去し、
+            パーセンテージを主役に出す（DevelopCenter と同じ方針） */}
+        <span style={{ fontSize: 11, color: DEV.sub, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              color: PLAN.accent,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            企画書 {Math.floor(progressPct)}%
+          </span>
+          <span style={{ display: 'inline-flex', gap: 3, verticalAlign: 'middle' }}>
             {Array.from({ length: 6 }, (_, i) => (
               <span
                 key={i}
@@ -1671,7 +2092,16 @@ const PlanningCenter = ({
         </div>
 
         {/* ②入力する文章（企画は紙っぽい明るい入力枠で会議感を出す） */}
-        <div style={{ display: 'flex', gap: 8 }}>
+        {/* v0.20 A-2：文完了ごとに PERFECT シェイクと +💡⭐ フライアウト（開発側と同じ骨格） */}
+        <div
+          key={`inrow-${lastResult?.kind === 'plan' ? lastResult.ts : 0}`}
+          className={
+            lastResult?.kind === 'plan' && lastResult.rank === 'PERFECT'
+              ? 'dev-perfect-shake'
+              : undefined
+          }
+          style={{ display: 'flex', gap: 8 }}
+        >
           <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
             <div style={{ fontSize: 11, color: PLAN.accent, fontWeight: 700, marginBottom: 4 }}>
               入力する文章
@@ -1689,8 +2119,19 @@ const PlanningCenter = ({
                 wordBreak: 'break-word',
               }}
             >
-              {view.hiragana}
+              <KanaActionLine
+                hiragana={view.hiragana}
+                completedLen={view.completed.length}
+                resolvedUnitCount={view.resolvedUnitCount}
+                doneColor="#b3a37e"
+                currentColor={accent}
+              />
             </div>
+            {lastResult?.kind === 'plan' && (
+              <span key={`fly-${lastResult.ts}`} className="dev-progress-fly dev-progress-fly-plan">
+                +💡{lastResult.funGain} ⭐{lastResult.hypeGain}
+              </span>
+            )}
           </div>
           <div style={{ width: 96, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ ...devBox(), gap: 1, padding: 5 }}>
@@ -1978,6 +2419,9 @@ const buildMissionQueue = (phase: DevPhase): DevEvent[] =>
  * バグが多いほど打つ量が線形に増える。全部潰すと「バグゼロ」ボーナス（noBugs +5）、
  * [このまま発売] で残バグ 1 匹につき 品質−2・炎上リスク+2 を背負って先へ進める。
  */
+/** バグ列の表示上限（1280×720 内・折返し 2 行まで。超過分は +N 表記） */
+const BUG_ROW_MAX = 30;
+
 const DebugFlow = ({
   bugCount,
   onFix,
@@ -1987,10 +2431,36 @@ const DebugFlow = ({
   onFix: () => void;
   onAllDone: () => void;
 }) => {
+  const employees = useGameStore((s) => s.employees);
+  const adDebugUsed = useGameStore((s) => s.current?.adDebugUsed ?? false);
+  const adDebugAssist = useGameStore((s) => s.adDebugAssist);
+
+  // マウント時（デバッグ突入時）の総バグ数。以降は減る一方なので「駆除 N/M」の分母になる
+  const totalRef = useRef(bugCount);
+  const total = totalRef.current;
+  const killed = Math.max(0, total - bugCount);
+
   // バグ 1 匹 = PHRASES_PER_BUG 文。打ち切るごとに progress、満了で駆除
   const [phraseInBug, setPhraseInBug] = useState(0);
-  const [fixedCount, setFixedCount] = useState(0);
   const [phrase, setPhrase] = useState(() => pickBugFixPhrase());
+  /** 修正ログ（直近3件） */
+  const [fixLog, setFixLog] = useState<string[]>([]);
+  /** 駆除演出：💥 を n 個、key で再トリガー。時間切れで消えて列が詰まる */
+  const [squash, setSquash] = useState<{ n: number; key: number } | null>(null);
+  const squashTimer = useRef<number | null>(null);
+  const [adRunning, setAdRunning] = useState(false);
+
+  const triggerSquash = (n: number) => {
+    setSquash((s) => ({ n, key: (s?.key ?? 0) + 1 }));
+    if (squashTimer.current !== null) window.clearTimeout(squashTimer.current);
+    squashTimer.current = window.setTimeout(() => setSquash(null), 500);
+  };
+  useEffect(
+    () => () => {
+      if (squashTimer.current !== null) window.clearTimeout(squashTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (bugCount > 0) return;
@@ -1998,6 +2468,28 @@ const DebugFlow = ({
     const t = window.setTimeout(onAllDone, 1200);
     return () => window.clearTimeout(t);
   }, [bugCount]);
+
+  const suppressionPct = Math.round(bugSuppression(employees) * 100);
+
+  const runDebugAssistAd = () => {
+    if (adRunning || adDebugUsed || bugCount <= 0) return;
+    setAdRunning(true);
+    ads.showRewarded({
+      label: 'debug-assist-ad',
+      onComplete: () => {
+        const before = useGameStore.getState().current?.bugCount ?? 0;
+        if (adDebugAssist()) {
+          const cleared = bugsClearedByAd(before);
+          sfx.success();
+          setFixLog((l) => [`✓ 広告応援 — ${cleared}匹まとめて駆除`, ...l].slice(0, 3));
+          triggerSquash(Math.min(cleared, BUG_ROW_MAX));
+          setPhraseInBug(0);
+        }
+        setAdRunning(false);
+      },
+      onFail: () => setAdRunning(false),
+    });
+  };
 
   if (bugCount <= 0) {
     return (
@@ -2007,8 +2499,8 @@ const DebugFlow = ({
             ✓ バグゼロ！
           </span>
           <span style={{ fontSize: 13, color: DEV.cream }}>
-            {fixedCount > 0
-              ? `${fixedCount} 匹すべて駆除した。品質ボーナスを獲得（バグゼロ +5）`
+            {total > 0
+              ? `${total} 匹すべて駆除した。品質ボーナスを獲得（バグゼロ +5）`
               : 'もともとバグが無かった。品質ボーナスを獲得（バグゼロ +5）'}
           </span>
         </div>
@@ -2016,29 +2508,90 @@ const DebugFlow = ({
     );
   }
 
+  const shownBugs = Math.min(bugCount, BUG_ROW_MAX);
+
   return (
     <PhaseShell label="デバッグ">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ fontSize: 12, color: DEV.sub }}>
-          残りバグ <span style={{ color: DEV.orange, fontWeight: 700 }}>🐛×{bugCount}</span>
-          <span style={{ marginLeft: 8 }}>
-            （修正 {phraseInBug}/{BUG_CONFIG.phrasesPerBug} 文）
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* 進捗バー「駆除 N/M」＋ バグ抑制（プログラマー育成の効果をここでも見せる） */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 12, color: DEV.cream, fontWeight: 700 }}>
+              駆除 <span style={{ color: DEV.greenBright }}>{killed}</span>/{total}
+            </span>
+            <SegGauge
+              pct={(killed / Math.max(1, total)) * 100}
+              color={DEV.greenBright}
+              track="#0c1207"
+              height={8}
+            />
+          </div>
+          <span
+            style={{ fontSize: 11, color: DEV.sub, whiteSpace: 'nowrap' }}
+            title="プログラマーの能力が高いほど開発中のバグ発生が抑えられる"
+          >
+            🧑‍💻 バグ抑制{' '}
+            <span style={{ color: DEV.greenBright, fontWeight: 700 }}>{suppressionPct}%</span>
+            （プログラマー）
           </span>
         </div>
-        <div style={{ fontSize: 20, color: DEV.cream, fontWeight: 700 }}>
-          🐛 バグを修正する（{fixedCount + 1} 匹目）
+
+        {/* 残バグの列：1匹駆除で 💥 → 消えて列が詰まる */}
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 2,
+            minHeight: 22,
+            padding: '4px 8px',
+            background: '#0a0f08',
+            border: `1px solid ${DEV.panelBorder}`,
+            fontSize: 16,
+            lineHeight: 1,
+          }}
+        >
+          {squash &&
+            Array.from({ length: squash.n }, (_, i) => (
+              <span key={`squash-${squash.key}-${i}`} className="debug-bug-squash">
+                💥
+              </span>
+            ))}
+          {Array.from({ length: shownBugs }, (_, i) => (
+            <span
+              key={`bug-${i}`}
+              className="debug-bug"
+              style={{ animationDelay: `${(i % 5) * 160}ms` }}
+            >
+              🐛
+            </span>
+          ))}
+          {bugCount > BUG_ROW_MAX && (
+            <span style={{ fontSize: 11, color: DEV.orange, fontWeight: 700 }}>
+              +{bugCount - BUG_ROW_MAX}
+            </span>
+          )}
+        </div>
+
+        <div style={{ fontSize: 16, color: DEV.cream, fontWeight: 700 }}>
+          🐛 バグを修正する（{killed + 1} 匹目）
+          <span style={{ fontSize: 12, color: DEV.sub, fontWeight: 400, marginLeft: 8 }}>
+            修正 {phraseInBug}/{BUG_CONFIG.phrasesPerBug} 文
+          </span>
         </div>
 
         <MissionTyping
-          key={`${fixedCount}-${phraseInBug}`}
+          key={`${killed}-${phraseInBug}`}
           phrase={phrase}
           onComplete={() => {
+            const done = phrase;
             const next = phraseInBug + 1;
             if (next >= BUG_CONFIG.phrasesPerBug) {
               onFix();
               sfx.success();
-              setFixedCount((n) => n + 1);
               setPhraseInBug(0);
+              setFixLog((l) => [`✓ ${done} — 1匹駆除`, ...l].slice(0, 3));
+              triggerSquash(1);
             } else {
               setPhraseInBug(next);
             }
@@ -2046,7 +2599,43 @@ const DebugFlow = ({
           }}
         />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* 修正ログ（直近3件・高さ固定でレイアウトを揺らさない） */}
+        <div style={{ ...devBox(), gap: 2, minHeight: 52 }}>
+          <span style={{ fontSize: 10, color: DEV.green, fontWeight: 700 }}>修正ログ</span>
+          {fixLog.length === 0 ? (
+            <span style={{ fontSize: 11, color: '#5a6e3a' }}>（まだ駆除していない）</span>
+          ) : (
+            fixLog.map((line, idx) => (
+              <span
+                key={idx}
+                style={{ fontSize: 11, color: idx === 0 ? DEV.greenBright : DEV.cream }}
+              >
+                {line}
+              </span>
+            ))
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {!adDebugUsed && (
+            <button
+              type="button"
+              onClick={runDebugAssistAd}
+              disabled={adRunning}
+              style={{
+                fontFamily: 'inherit',
+                fontSize: 11,
+                fontWeight: 700,
+                padding: '4px 10px',
+                background: '#12240f',
+                color: adRunning ? DEV.sub : DEV.greenBright,
+                border: `1px solid ${adRunning ? DEV.sub : DEV.greenBright}`,
+                cursor: adRunning ? 'wait' : 'pointer',
+              }}
+            >
+              {adRunning ? '📺 広告を再生中…' : '📺 広告を見てデバッグ応援（バグ半減）'}
+            </button>
+          )}
           <button
             type="button"
             onClick={onAllDone}
@@ -2217,7 +2806,13 @@ const MissionTyping = ({ phrase, onComplete }: { phrase: string; onComplete: () 
           letterSpacing: '0.04em',
         }}
       >
-        {view.hiragana}
+        <KanaActionLine
+          hiragana={view.hiragana}
+          completedLen={view.completed.length}
+          resolvedUnitCount={view.resolvedUnitCount}
+          doneColor="#57703a"
+          currentColor={DEV.white}
+        />
       </div>
       <div
         style={{

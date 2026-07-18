@@ -23,6 +23,7 @@ const project = (over: Partial<CurrentProject> = {}): CurrentProject => ({
   maxCombo: 50,
   devBoostRemainingSec: 0,
   bugCount: 0,
+  adDebugUsed: false,
   startedAt: 0,
   finishedAt: 60_000, // 60 秒開発
   adBoostActive: false,

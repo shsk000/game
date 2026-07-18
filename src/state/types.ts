@@ -254,6 +254,11 @@ export type CurrentProject = {
    * （旧 bugPhrase（v0.14 の15%抽選）はこのシステムに一本化して廃止）
    */
   bugCount: number;
+  /**
+   * v0.19：広告「デバッグ応援（バグ半減）」を今回の開発で使ったか（1開発1回）。
+   * 旧セーブは undefined ＝ 未使用扱い（falsy 防御）。
+   */
+  adDebugUsed: boolean;
   startedAt: number;
   finishedAt: number | null;
   /** 旧フィールド（互換のため残置）：従業員モック広告 */

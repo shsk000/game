@@ -18,6 +18,7 @@ const devProject = (over: Partial<CurrentProject> = {}): CurrentProject => ({
   maxCombo: 0,
   devBoostRemainingSec: 0,
   bugCount: 0,
+  adDebugUsed: false,
   startedAt: 0,
   finishedAt: null,
   adBoostActive: false,
@@ -54,5 +55,36 @@ describe('advancePhase（v0.17.1 バグ最低保証）', () => {
     const cur = useGameStore.getState().current;
     expect(cur?.phase).toBe('debugging');
     expect(cur?.bugCount).toBe(2);
+  });
+});
+
+describe('adDebugAssist（v0.19 広告でバグ半減・1開発1回）', () => {
+  beforeEach(() => resetStore());
+
+  it('バグ残数の 50%（切り上げ）を即駆除し、使用済みになる', () => {
+    resetStore({ current: devProject({ phase: 'debugging', bugCount: 5 }) });
+    expect(useGameStore.getState().adDebugAssist()).toBe(true);
+    const cur = useGameStore.getState().current;
+    expect(cur?.bugCount).toBe(2); // 5 - ceil(5/2)=3
+    expect(cur?.adDebugUsed).toBe(true);
+  });
+
+  it('1開発1回：2回目は false でバグは減らない', () => {
+    resetStore({ current: devProject({ phase: 'debugging', bugCount: 8 }) });
+    expect(useGameStore.getState().adDebugAssist()).toBe(true);
+    expect(useGameStore.getState().current?.bugCount).toBe(4);
+    expect(useGameStore.getState().adDebugAssist()).toBe(false);
+    expect(useGameStore.getState().current?.bugCount).toBe(4);
+  });
+
+  it('バグ 0 のときは false（使用済みにもならない）', () => {
+    resetStore({ current: devProject({ phase: 'debugging', bugCount: 0 }) });
+    expect(useGameStore.getState().adDebugAssist()).toBe(false);
+    expect(useGameStore.getState().current?.adDebugUsed).toBe(false);
+  });
+
+  it('プロジェクトが無ければ false', () => {
+    resetStore({ current: null });
+    expect(useGameStore.getState().adDebugAssist()).toBe(false);
   });
 });

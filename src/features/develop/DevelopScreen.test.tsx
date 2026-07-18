@@ -21,6 +21,7 @@ const devProject: CurrentProject = {
   maxCombo: 0,
   devBoostRemainingSec: 0,
   bugCount: 0,
+  adDebugUsed: false,
   startedAt: 0,
   finishedAt: null,
   adBoostActive: false,
