@@ -388,7 +388,6 @@ export function PropEditorTool() {
               // 席どうしの前後は OfficeView と同じく y 順（南＝手前）。
               const baseZ = Math.round(s.y);
               return (
-                // biome-ignore lint/suspicious/noArrayIndexKey: 座席は固定配列で並び替わらない
                 <Fragment key={i}>
                   {showChar && (
                     <Sprite
