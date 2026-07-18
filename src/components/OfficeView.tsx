@@ -1,240 +1,244 @@
-import { type ReactNode, useEffect, useState } from 'react';
-import type { Scale } from '../data/scales';
+import { useMemo, useState } from 'react';
 import {
-  cellPx,
-  footprintCenterOffset,
-  makeGeometry,
-  ROOM,
-  SPRITE_BASE,
-} from '../lib/officeGeometry';
+  chairSprite,
+  laptopSprite,
+  NATIVE_H,
+  NATIVE_W,
+  OFFICE_LAYOUT,
+  officeBgSrc,
+  PROP_TRANSFORMS,
+  sitFootOffset,
+  sittingSprite,
+  spriteFolderFor,
+} from '../data/officeLayout';
+import type { Employee } from '../state/types';
 import {
-  DEFAULT_DECOR_CATALOG,
-  DEFAULT_DECOR_PLACEMENTS,
-  DEFAULT_DOOR,
-  DEFAULT_WALL_CATALOG,
-  DEFAULT_WALL_PLACEMENTS,
-  DEFAULT_WORKSTATIONS,
-  decorGeom,
-  decorImg,
-  wallImg,
-  wallOffset,
-  wallSkewDeg,
-} from '../lib/officeLayout';
-import { Workstation } from './Workstation';
+  buildOccluderLookup,
+  type OccluderLookup,
+  OccluderMask,
+  renderBandedSprite,
+} from './bandedSprite';
 
 /**
- * オフィスの床ビュー（v0.13）。
- * office-visual-design §2 準拠：視点はアイソメ 30°×30°（2:1 dimetric）。
- * ジオメトリ・ワークステーション描画は src/lib/officeGeometry + Workstation に一元化。
- * 配置（机/ドア）は src/lib/officeLayout のコード定数（=配信される確定レイアウト）。
- * 調整は OfficeLayoutTool(?layout) で行い、出力値を officeLayout.ts の DEFAULT_* に転記してコミットする。
+ * オフィスの床ビュー（v0.19・正面向き素材）。
+ * 世界観・座標系・素材規約は docs/v17/notes/office-front-facing-plan.md を参照。
+ *
+ * 背景は 1 枚絵（office_bg.png、机・壁・床・装飾を内蔵）。座標はすべて背景のネイティブ座標
+ * （NATIVE_W×NATIVE_H）。表示コンポーネントはこの div をネイティブサイズのまま返し、
+ * 呼び出し側（OfficeScreen）が既存の stageScale ロジックで 1280×720 に収まるよう縮小する。
+ *
+ * 座席（OFFICE_LAYOUT.seats）は「机の南側・北向き（背中が見える）」で確定。
+ * 空席には机だけが背景として見える（社員なし＝椅子・PC・人を描画しないだけ）。
+ * レイアウト調整は office-layout-tool.html で行い、出力 JSON を
+ * src/data/officeLayoutData.json に転記する。
  */
 
-/** スプライト存在チェック（Vite dev は存在しないパスにも index.html を返すため content-type で判定） */
-const spriteCache = new Map<string, boolean>();
-const checkSprite = async (path: string): Promise<boolean> => {
-  if (spriteCache.has(path)) return spriteCache.get(path) ?? false;
-  try {
-    const res = await fetch(path, { method: 'HEAD' });
-    const contentType = res.headers.get('content-type') ?? '';
-    const ok = res.ok && !contentType.includes('text/html');
-    spriteCache.set(path, ok);
-    return ok;
-  } catch {
-    spriteCache.set(path, false);
-    return false;
-  }
-};
-const useSprite = (path: string) => {
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    checkSprite(path).then(setLoaded);
-  }, [path]);
-  return { loaded, path: loaded ? path : null };
-};
-
 type Props = {
-  scale: Scale;
-  /** 在籍社員数。席はこの数だけ埋まる（最大 = 席数）。未指定なら全席表示（ツール/プレビュー用）。 */
-  employeeCount?: number;
-  working?: boolean;
-  deskId?: string;
-  chairId?: string;
-  monitorId?: string;
+  /** 在籍社員。座席数ぶんだけ手前から着席させる（未指定なら誰も座らない）。 */
+  employees?: Employee[];
 };
 
-export const OfficeView = ({ scale, employeeCount }: Props) => {
-  const floor = useSprite(`${SPRITE_BASE}/floor_iso.png`);
-  const { cols, rows } = ROOM[scale] ?? ROOM.mini;
-  const geo = makeGeometry(cols, rows);
-  const { w, h } = geo;
-  // 配置（配信される確定レイアウト。officeLayout.ts のコード定数）
-  // 在籍社員数だけ席を埋める（最大 = 席数）。employeeCount 未指定なら全席。
-  const seatCount =
-    employeeCount == null
-      ? DEFAULT_WORKSTATIONS.length
-      : Math.min(employeeCount, DEFAULT_WORKSTATIONS.length);
-  const workstations = DEFAULT_WORKSTATIONS.slice(0, seatCount);
-  const door = DEFAULT_DOOR;
-  const decorCatalog = DEFAULT_DECOR_CATALOG;
-  const decorPlacements = DEFAULT_DECOR_PLACEMENTS;
-  const wallCatalog = DEFAULT_WALL_CATALOG;
-  const wallPlacements = DEFAULT_WALL_PLACEMENTS;
-
-  // 床：アイソメひし形タイルを菱形グリッドで敷く
-  const renderFloor = (): ReactNode => {
-    if (!floor.loaded) {
-      return (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'repeating-conic-gradient(#cfc6b3 0% 25%, #c2b8a3 0% 50%) 50% / 32px 32px',
-            imageRendering: 'pixelated',
-          }}
-        />
-      );
-    }
-    const tiles: ReactNode[] = [];
-    for (let s = 0; s <= cols + rows - 2; s++) {
-      for (let i = 0; i < cols; i++) {
-        const j = s - i;
-        if (j < 0 || j >= rows) continue;
-        const { left, top } = geo.tileTopLeft(i, j);
-        tiles.push(
-          <img
-            key={`floor-${i}-${j}`}
-            src={floor.path ?? ''}
-            alt=""
-            width={cellPx}
-            height={cellPx}
-            style={{
-              position: 'absolute',
-              left,
-              top,
-              imageRendering: 'pixelated',
-              display: 'block',
-            }}
-          />,
-        );
-      }
-    }
-    return tiles;
-  };
-
-  // 壁：配置（WallPlacement）駆動。向き SW/SE（鏡面）＋ 縦積み stack 段を上にリピート。
-  const dW = cellPx;
-  const dH = cellPx / 2;
-  const renderWalls = (): ReactNode => {
-    const panels: ReactNode[] = [];
-    wallPlacements.forEach((p, idx) => {
-      const item = wallCatalog.find((c) => c.id === p.catalogId);
-      if (!item) return;
-      const { x, y } = geo.cellAnchor(p.i, p.j);
-      // SW=奥右辺, SE=奥左辺。SW は ox 符号反転（鏡面）。
-      const edx = p.dir === 'SW' ? dW / 4 : -dW / 4;
-      const edy = -dH / 4;
-      const off = wallOffset(item, p.dir);
-      const sdy = item.stackDy ?? 90;
-      const base = geo.baseZ(p.i, p.j);
-      for (let k = 0; k < (p.stack ?? 1); k++) {
-        panels.push(
-          <img
-            key={`wall-${idx}-${k}`}
-            src={`${SPRITE_BASE}/${wallImg(item.imgBase, p.dir)}`}
-            alt=""
-            width={item.w}
-            height={item.h}
-            style={{
-              position: 'absolute',
-              left: x + edx + off.ox - item.w / 2,
-              top: y + edy + off.oy - item.h - k * sdy,
-              imageRendering: 'pixelated',
-              transform: item.rot ? `rotate(${item.rot}deg)` : undefined,
-              zIndex: base + k,
-            }}
-          />,
-        );
-      }
-    });
-    return <>{panels}</>;
-  };
+export const OfficeView = ({ employees = [] }: Props) => {
+  const seated = employees.slice(0, OFFICE_LAYOUT.seats.length);
+  // 背景の家具（机・ソファ等）に手前を横切られた時に隠れるための遮蔽物。データは
+  // officeLayoutData.json（配置ツール④で作成）。レイアウトは不変なので一度だけ構築する。
+  const occluderLookup = useMemo(() => buildOccluderLookup(OFFICE_LAYOUT.occluders), []);
 
   return (
     <div
       className="office-view"
       style={{
-        width: w,
-        height: h,
         position: 'relative',
-        imageRendering: 'pixelated',
+        width: NATIVE_W,
+        height: NATIVE_H,
         overflow: 'hidden',
       }}
     >
-      {renderWalls()}
-      {renderFloor()}
-      {workstations.map((c) => {
-        const { x, y } = geo.cellAnchor(c.i, c.j);
-        return (
-          <Workstation
-            key={`ws-${c.i}-${c.j}`}
-            x={x}
-            y={y}
-            baseZ={geo.baseZ(c.i, c.j)}
-            dir={c.dir}
-          />
-        );
-      })}
-      {(() => {
-        const { x, y } = geo.cellAnchor(door.i, door.j);
-        return (
-          <img
-            key="se-door"
-            src={`${SPRITE_BASE}/${door.img}`}
-            alt=""
-            width={door.w}
-            height={door.w}
-            style={{
-              position: 'absolute',
-              left: x + door.ox - door.w / 2,
-              top: y + door.oy - door.w,
-              imageRendering: 'pixelated',
-              zIndex: geo.baseZ(door.i, door.j) + 50,
-            }}
-          />
-        );
-      })()}
-      {decorPlacements.map((p, idx) => {
-        const item = decorCatalog.find((c) => c.id === p.catalogId);
-        if (!item) return null;
-        const { x, y } = geo.cellAnchor(p.i, p.j);
-        // 向きで実効ジオメトリを得る（SW は鏡映）。footprint 中心をアンカーに。
-        const g = decorGeom(item, p.dir);
-        const off = footprintCenterOffset(g.cw, g.ch);
-        const cx = x + off.dx;
-        const cy = y + off.dy;
-        return (
-          <img
-            key={`decor-${p.catalogId}-${idx}`}
-            src={`${SPRITE_BASE}/${decorImg(item.imgBase, p.dir)}`}
-            alt=""
-            width={item.w}
-            height={item.w}
-            style={{
-              position: 'absolute',
-              left: cx + g.ox - item.w / 2,
-              top: cy + g.oy - item.w,
-              imageRendering: 'pixelated',
-              // 壁掛け（窓）は壁面 slope 0.5 へ skew して同一平面に載せる。
-              transform: item.onWall ? `skewY(${wallSkewDeg(p.dir)}deg)` : undefined,
-              // 壁掛けは壁の奥行き（壁パネルの上・手前の家具の背後）。それ以外は footprint 最前セル基準。
-              zIndex: item.onWall
-                ? geo.baseZ(p.i, p.j) + 2
-                : geo.baseZ(p.i, p.j) + (g.cw + g.ch - 2) * 10 + 5,
-            }}
-          />
-        );
-      })}
+      <img
+        src={officeBgSrc}
+        alt=""
+        width={NATIVE_W}
+        height={NATIVE_H}
+        style={{ position: 'absolute', left: 0, top: 0, imageRendering: 'pixelated' }}
+      />
+      {/* 家具の画素を baseline の z で描き直す。これが無いと帯の z を下げても背景（最背面の1枚絵）
+          より手前のままで何にも隠されない。renderBandedSprite と必ず対で使う。 */}
+      {OFFICE_LAYOUT.occluders.map((o) => (
+        <OccluderMask key={`${o.baseline}-${o.cells[0]}`} cells={o.cells} bgSrc={officeBgSrc} />
+      ))}
+      {seated.map((employee, idx) => (
+        <SeatedEmployee
+          key={employee.id}
+          employee={employee}
+          seat={OFFICE_LAYOUT.seats[idx]}
+          occluderLookup={occluderLookup}
+        />
+      ))}
     </div>
   );
 };
+
+const CHAR_SCALE = OFFICE_LAYOUT.charScale;
+
+/**
+ * 遮蔽物を考慮して1枚のスプライトを描く。
+ *
+ * PixelLab 出力は要求サイズより大きいキャンバス（余白込み）で返るため、表示サイズは
+ * 「実ピクセル数 × scale」で決める必要がある（固定値の決め打ち厳禁）。まず不可視の img で
+ * naturalWidth/Height を実測し、確定してから帯分割して描く。
+ *
+ * 帯分割（部分遮蔽）の本体は bandedSprite.tsx。配置ツール⑤検証と同じ実装を共有していて、
+ * 「検証ページの見え方＝本番の見え方」になる。
+ */
+function BandedSprite({
+  spriteKey,
+  src,
+  x,
+  trueFootY,
+  marginNative,
+  z,
+  scale,
+  occluderLookup,
+}: {
+  spriteKey: string;
+  src: string;
+  x: number;
+  /** 接地点のワールドY。遮蔽物の baseline と比較して前後を決める。 */
+  trueFootY: number;
+  /** 接地点より下のキャンバス余白。 */
+  marginNative: number;
+  /** 遮蔽されない帯の z（同じ座席内の重ね順を決め打ちするため明示する）。 */
+  z: number;
+  scale: number;
+  occluderLookup: OccluderLookup;
+}) {
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+
+  if (!natural) {
+    // 実測用。読み込み前に等倍サイズがちらつかないよう不可視で置く。
+    return (
+      <img
+        src={src}
+        alt=""
+        style={{ position: 'absolute', width: 0, height: 0, opacity: 0 }}
+        onLoad={(e) =>
+          setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
+        }
+      />
+    );
+  }
+  const width = natural.w * scale;
+  const height = natural.h * scale;
+  return (
+    <>
+      {renderBandedSprite(
+        spriteKey,
+        x,
+        trueFootY,
+        marginNative,
+        width,
+        height,
+        src,
+        0,
+        width,
+        occluderLookup,
+        z,
+      )}
+    </>
+  );
+}
+
+function SeatedEmployee({
+  employee,
+  seat,
+  occluderLookup,
+}: {
+  employee: Employee;
+  seat: (typeof OFFICE_LAYOUT.seats)[number];
+  occluderLookup: OccluderLookup;
+}) {
+  const folder = spriteFolderFor(employee);
+  const dir = seat.dir;
+  // z-order（painter's algorithm）: y が大きい（南＝手前）ほど前面。
+  const baseZ = Math.round(seat.y);
+  const laptop = PROP_TRANSFORMS.laptop[dir];
+  const chair = PROP_TRANSFORMS.chair[dir];
+
+  // 遮蔽の判定に使う接地点は座席で1つ（seat.y）。人も椅子もPCも「同じ床位置に居る」ので、
+  // どれも seat.y を基準に前後を決め、スプライトごとの下端の違いは marginNative で表す
+  // （canvasBottom = seat.y + marginNative）。物体の下端を接地点にすると、椅子は seat.y より
+  // 南に沈んで手前の机より手前と誤判定され、机の上に描かれてしまう（実機で発覚）。
+  const propMargin = (p: { y: number }) => sitFootOffset(dir) + p.y;
+
+  const laptopSprite_ = (
+    <BandedSprite
+      spriteKey={`${employee.id}-laptop`}
+      src={laptopSprite(dir)}
+      x={seat.x + laptop.x}
+      trueFootY={seat.y}
+      marginNative={propMargin(laptop)}
+      z={baseZ + laptop.z}
+      scale={laptop.scale}
+      occluderLookup={occluderLookup}
+    />
+  );
+  const chairSprite_ = (
+    <BandedSprite
+      spriteKey={`${employee.id}-chair`}
+      src={chairSprite(dir)}
+      x={seat.x + chair.x}
+      trueFootY={seat.y}
+      marginNative={propMargin(chair)}
+      z={baseZ + chair.z}
+      scale={chair.scale}
+      occluderLookup={occluderLookup}
+    />
+  );
+  const person = (
+    <BandedSprite
+      spriteKey={`${employee.id}-sit`}
+      src={sittingSprite(folder, dir)}
+      x={seat.x}
+      trueFootY={seat.y}
+      marginNative={sitFootOffset(dir)}
+      z={baseZ}
+      scale={CHAR_SCALE}
+      occluderLookup={occluderLookup}
+    />
+  );
+
+  if (dir === 'north') {
+    // 背面向き：机は奥（北）。PC(奥)→人→椅子(手前、脚を隠す)の順（順序は z が決める）。
+    return (
+      <>
+        {laptopSprite_}
+        {person}
+        {chairSprite_}
+      </>
+    );
+  }
+
+  // 正面向き：机は手前（南）。椅子(奥)→人→机オーバーレイ(手前、脚を隠す)→PC(最前面)の順。
+  return (
+    <>
+      {chairSprite_}
+      {person}
+      {seat.overlay && (
+        <div
+          style={{
+            position: 'absolute',
+            left: seat.overlay[0],
+            top: seat.overlay[1],
+            width: seat.overlay[2],
+            height: seat.overlay[3],
+            backgroundImage: `url(${officeBgSrc})`,
+            backgroundPosition: `${-seat.overlay[0]}px ${-seat.overlay[1]}px`,
+            imageRendering: 'pixelated',
+            zIndex: baseZ + 1,
+          }}
+        />
+      )}
+      {laptopSprite_}
+    </>
+  );
+}

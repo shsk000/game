@@ -15,9 +15,9 @@ import { ACHIEVEMENTS } from '../../data/achievements';
 import { computeBorrowingLimit, DEBT_CONFIG, ROLE_EFFECT } from '../../data/balance';
 import { REFRESH_COST, roleLabel, sumMonthlySalaries } from '../../data/employees';
 import { GENRE_BY_ID } from '../../data/genres';
+import { MAX_EMPLOYEES, NATIVE_H, NATIVE_W } from '../../data/officeLayout';
 import { nextLockedScale, SCALE_BY_ID, SCALES } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
-import { MAX_EMPLOYEES } from '../../lib/officeLayout';
 import { useGameStore } from '../../state/gameStore';
 import { formatYen } from '../../utils/format';
 
@@ -161,9 +161,8 @@ export const OfficeScreen = () => {
   ];
 
   // v0.17.1：オフィスの見た目は規模で変えない（オーナー指示「大きさは変わらなくていい」）。
-  // 常に mini 部屋（768×672）で固定。机レイアウトは元々全規模共通。
-  const stageSize = { w: 768, h: 672 };
-  const stageScale = Math.min(1, 1280 / stageSize.w, 720 / stageSize.h);
+  // v0.19：正面向き背景（1枚絵、ネイティブ 1445×1088）に刷新。机レイアウトは元々全規模共通。
+  const stageScale = Math.min(1, 1280 / NATIVE_W, 720 / NATIVE_H);
 
   // G5：お知らせ（リファレンスの左上窓）。store の状態から直近の出来事を導出
   const news: { icon: string; text: string; tone?: 'warn' | 'good' }[] = [];
@@ -193,7 +192,7 @@ export const OfficeScreen = () => {
       {/* ── 世界ステージ：オフィスが画面全体（HUD の裏まで広がる） ── */}
       <div className="office-stage">
         <div style={{ transform: `scale(${stageScale})`, transformOrigin: 'center center' }}>
-          <OfficeView scale="mini" employeeCount={employees.length} />
+          <OfficeView employees={employees} />
         </div>
       </div>
 
@@ -690,8 +689,10 @@ export const OfficeScreen = () => {
                   >
                     {roleLabel(e.role)}
                   </span>
-                  <span style={{ fontWeight: 700, fontSize: 13, flex: 1 }}>{e.name}</span>
-                  <span style={{ fontSize: 11, color: '#3a4452' }}>
+                  <span style={{ fontWeight: 700, fontSize: 13, flex: 1, color: '#f0f3f8' }}>
+                    {e.name}
+                  </span>
+                  <span style={{ fontSize: 11, color: '#aab8cc' }}>
                     Lv{e.level}（次まで exp {Math.max(0, nextExpFor(e.level) - e.exp)}）／{' '}
                     {formatPower(e.role, e.power)}
                   </span>
