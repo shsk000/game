@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeMonthlyWage, INITIAL_FUNDS } from '../data/balance';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
+import { INITIAL_GENRE_IDS } from '../data/genres';
+import { INITIAL_THEME_IDS } from '../data/themes';
 import * as storage from './storage';
 
 /** node 環境用のインメモリ localStorage（testing-rules：storage はスタブで差し替える） */
@@ -34,8 +36,8 @@ describe('defaults', () => {
     const d = storage.defaults();
     expect(d.funds).toBe(INITIAL_FUNDS);
     expect(d.unlockedScales).toEqual(['mini']);
-    expect(d.unlockedGenres).toEqual(['puzzle', 'adventure', 'simulation']);
-    expect(d.unlockedThemes).toEqual(['sushi', 'onsen', 'farming']);
+    expect(d.unlockedGenres).toEqual([...INITIAL_GENRE_IDS]);
+    expect(d.unlockedThemes).toEqual([...INITIAL_THEME_IDS]);
     expect(d.unlockedCategories).toEqual([...INITIAL_CATEGORY_IDS]);
     expect(d.version).toBe(7);
   });

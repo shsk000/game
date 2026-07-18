@@ -1437,7 +1437,14 @@ const WorkInProgressPanel = (props: {
   return <DesignMemoPanel notes={props.designNotes} />;
 };
 
-const WIP_HEIGHT = 74;
+export const WIP_HEIGHT = 110;
+
+/**
+ * ジャンル代表スプライトの表示サイズ。素材は 64×64（v0.15 の既存12種）と 128×128（v0.21 の新規15種）が
+ * 混在するため、64 にすると両方が整数倍（等倍／1/2）になり imageRendering:pixelated でドットが崩れない。
+ * 40px 時代は 0.625倍／0.3125倍の非整数倍で絵が潰れていた（オーナー指摘 2026-07-16）。
+ */
+const GENRE_SPRITE_PX = 64;
 
 /**
  * v0.20 G：ボス戦パネル（オーナー指示：「実装中の様子」欄をボス戦の表示に差し替え、
@@ -1472,14 +1479,14 @@ const BossBattlePanel = ({
         overflow: 'hidden',
       }}
     >
-      <div style={{ position: 'relative', width: 48, height: 48 }}>
+      <div style={{ position: 'relative', width: GENRE_SPRITE_PX, height: GENRE_SPRITE_PX }}>
         <img
           // v0.20 G：正打のたびに再マウントしてヒットシェイクを再トリガー（.dev-kana-spark と同じ手法）
           key={`boss-battle-sprite-${hitKey}`}
           src={sprite.url}
           alt={sprite.name}
           className="dev-boss-sprite"
-          style={{ width: 48, height: 48, imageRendering: 'pixelated' }}
+          style={{ width: GENRE_SPRITE_PX, height: GENRE_SPRITE_PX, imageRendering: 'pixelated' }}
         />
         {hitKey > 0 && <div key={`boss-slash-${hitKey}`} className="dev-boss-slash" />}
       </div>
@@ -1610,7 +1617,7 @@ const ProgramLogPanel = ({ lines, liveLine }: { lines: string[]; liveLine: strin
 
 const GRAPHICS_FRAME_TOTAL = 4;
 
-const GraphicsCanvasPanel = ({
+export const GraphicsCanvasPanel = ({
   frame,
   stage,
   genre,
@@ -1701,8 +1708,8 @@ const GraphicsCanvasPanel = ({
               src={genreSpriteUrl(genre.id)}
               alt={genre.emoji}
               style={{
-                width: 40,
-                height: 40,
+                width: GENRE_SPRITE_PX,
+                height: GENRE_SPRITE_PX,
                 imageRendering: 'pixelated',
                 filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.5))',
               }}
@@ -2935,7 +2942,7 @@ const BottomBar = ({ phase }: { phase: DevPhase }) => {
 };
 
 /** v0.14 開発フェーズのダークパレット（ターミナル風）。 */
-const DEV = {
+export const DEV = {
   panelBg: '#06090e',
   panelBorder: '#2b3a1c',
   greenLine: '#3a5020',
@@ -2948,7 +2955,7 @@ const DEV = {
   sub: '#7f9a52',
 } as const;
 
-const devBox = (): React.CSSProperties => ({
+export const devBox = (): React.CSSProperties => ({
   background: '#0a0f08',
   border: `1px solid ${DEV.panelBorder}`,
   padding: 7,
