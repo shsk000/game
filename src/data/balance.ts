@@ -121,19 +121,52 @@ export const ROLE_EFFECT = {
 
 export type GachaRank = 'B' | 'A' | 'S';
 
+/** 採用ガチャの種類（v0.22.1 で 2 種に分割）。normal＝安価・S 無し／premium＝高額・S 源 */
+export type GachaKind = 'normal' | 'premium';
+
 /**
  * 採用ガチャの確定テーブル（spec v22 §4。数値は全て叩き台 🔧）。
  *
- * - rates: 排出率（合計 1.0）。S 5% は「引きの快感」の核
- * - powerRange: ランク別 basePower 帯。S 上限 0.7 は旧上限 0.6 より高いが、
- *   charPower は POWER_CAP × powerBonus 上限 70 で天井固定＝S は「天井に早く着く」だけ
- * - specialty: ランク別の得意分野構成。A は旧仕様（3-10 ＋ 40% で 1-4）と同じ
- * - priceByScale: 単発価格。解放済み最高規模に連動（アンカー ≒ devCost × 1/6。
- *   S 期待 20 連 ≒ devCost × 3）。固定額だと中盤以降に実質無料化するため規模スケール制
- * - pityThreshold: 天井。この回数連続で S 非排出なら次の 1 回は S 確定
+ * v0.22.1：オーナー指示で **ノーマル / プレミアム** の 2 種に分割。
+ * - **normal**：安価（規模連動・現行テーブル）。**S を出さない**（B/A のみ）。天井なし。
+ *   序盤の主力採用。A（power 0.4〜0.55）までは出るので普通に戦力になる。
+ * - **premium**：高額（mini ¥500 万＝初期資金と同額で**序盤はほぼ引けない**）。S の唯一の入手源。
+ *   天井 pityThreshold 連続 S 非排出で次を S 確定。中盤以降に手が届く設計。
+ *   → S を序盤から引けなくすることで v16 の早期分布ガード（序盤メタ70+＝0%）を
+ *     経済面から自然に守る（premium が高すぎて序盤は S を揃えられない）。
+ *
+ * 共通：
+ * - powerRange: ランク別 basePower 帯。S 上限 0.7 は旧候補上限 0.6 より高いが、charPower は
+ *   POWER_CAP × powerBonus 上限 70 で天井固定＝S は「天井に早く着く」だけ。
+ * - specialty: ランク別の得意分野構成。A は旧仕様（3-10 ＋ 40% で 1-4）と同じ。
  */
 export const GACHA_CONFIG = {
-  rates: { B: 0.7, A: 0.25, S: 0.05 },
+  normal: {
+    // S 無し。S の 5% 分を A に寄せて B70/A30（🔧）
+    rates: { B: 0.7, A: 0.3, S: 0 },
+    priceByScale: {
+      mini: 50_000, // ¥5 万
+      mobile: 500_000, // ¥50 万
+      indie: 8_000_000, // ¥800 万
+      hit: 150_000_000, // ¥1.5 億
+      aaa: 1_500_000_000, // ¥15 億
+    },
+    // S を出さないので天井は無い（0＝ピティ無効）
+    pityThreshold: 0,
+  },
+  premium: {
+    // A/S に寄せた高級枠。B も残してガチャの緊張を維持（🔧）
+    rates: { B: 0.4, A: 0.45, S: 0.15 },
+    priceByScale: {
+      mini: 6_000_000, // ¥600 万（初期資金 ¥500 万を上回る＝序盤は 1 発も引けない）
+      mobile: 30_000_000, // ¥3000 万
+      indie: 300_000_000, // ¥3 億
+      hit: 3_000_000_000, // ¥30 億
+      aaa: 15_000_000_000, // ¥150 億
+    },
+    // S 率 15%（期待 ≒6.7 連）に対する救済天井。10 連連続 S 非排出で次を S 確定（🔧）
+    pityThreshold: 10,
+  },
   powerRange: {
     B: { min: 0.2, max: 0.4 },
     A: { min: 0.4, max: 0.55 },
@@ -144,16 +177,17 @@ export const GACHA_CONFIG = {
     A: { primaryMin: 3, primaryMax: 10, secondChance: 0.4, secondMin: 1, secondMax: 4 },
     S: { primaryMin: 6, primaryMax: 10, secondChance: 1, secondMin: 3, secondMax: 6 },
   },
-  priceByScale: {
-    mini: 50_000, // ¥5 万
-    mobile: 500_000, // ¥50 万
-    indie: 8_000_000, // ¥800 万
-    hit: 150_000_000, // ¥1.5 億
-    aaa: 1_500_000_000, // ¥15 億
-  },
-  pityThreshold: 20,
 } as const satisfies {
-  rates: Record<GachaRank, number>;
+  normal: {
+    rates: Record<GachaRank, number>;
+    priceByScale: Record<Scale, number>;
+    pityThreshold: number;
+  };
+  premium: {
+    rates: Record<GachaRank, number>;
+    priceByScale: Record<Scale, number>;
+    pityThreshold: number;
+  };
   powerRange: Record<GachaRank, { min: number; max: number }>;
   specialty: Record<
     GachaRank,
@@ -165,8 +199,6 @@ export const GACHA_CONFIG = {
       secondMax: number;
     }
   >;
-  priceByScale: Record<Scale, number>;
-  pityThreshold: number;
 };
 
 // ============================================================

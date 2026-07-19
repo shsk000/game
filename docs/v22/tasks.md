@@ -57,9 +57,19 @@
 - [x] spec §9 チェックリストの消し込み
 - [ ] **オーナー実プレイ確認（「引きの快感」成立・価格感）** ← 残タスク（機械検証不可）
 
+## 追加タスク（v0.22.1：ガチャ2種分割・2026-07-19 オーナー指示）
+
+- [x] `GACHA_CONFIG` を normal(S無)/premium(S有・高額・天井10) の2層に再構成（powerRange/specialty 共通）
+- [x] `core/gacha.ts` を kind 対応：`rollRank(kind,rng,pity)`／`gachaPrice(kind,scales)`／`pityThreshold(kind)`
+- [x] `pullGacha(kind)`：premium のみ pity 更新。normal は S を出さず pity 不変
+- [x] 採用モーダルに2種ボタン（ノーマル/プレミアム）。premium は資金不足で無効化＝序盤ロック
+- [x] premium mini 価格を初期資金超（¥600万）にして「序盤 1 発も引けない」を確定
+- [x] テスト：normal never S・premium can S・premium>normal 価格・premium mini>初期資金・pity は premium のみ
+- [x] 実機：¥5M で normal 有効/premium 無効、normal×100 で S=0、premium×100 で S/A/B 出現を確認
+
 ## 重要メモ（実装中の発見）
 
-- **S課金ラッシュで序盤加速が可能**：ピティ（20連S確定・mini¥5万）を使うと初期資金で S 3体を
-  揃えられ、mini でメタ70+ を出して序盤ティアを加速できる。当初計画の「S でも天井は変わらない
-  から序盤ガードは破れない」は部分的に誤り。**オーナー決定＝許容**（v21「時間を金で買う」思想に
-  整合。最終メタ95の天井は S-Lv1 でも届かず維持）。詳細は spec §8 冒頭。
+- **S課金ラッシュで序盤加速が可能だった**：当初の単一ガチャでは、ピティ（20連S確定・mini¥5万）で
+  初期資金 S 3体を揃え mini でメタ70+ を出せた。オーナー決定＝許容（v21「時間を金で買う」思想）。
+- **v0.22.1 でガチャ2種に分割し大幅緩和**：S をプレミアム（mini¥600万＝初期資金超）限定にしたため、
+  序盤に S を揃えるのが経済的にほぼ不可能に。早期分布ガードが当初計画より自然に守られる。詳細 spec §8。

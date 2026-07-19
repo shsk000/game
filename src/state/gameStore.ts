@@ -13,7 +13,7 @@ import { type Deps, defaultDeps } from '../core/ports';
 import { evaluateAchievements } from '../core/progression';
 import { computeRelease, type ReleaseOpts } from '../core/release';
 import { ACHIEVEMENTS } from '../data/achievements';
-import { DEV_PHRASES_PER_WEEK } from '../data/balance';
+import { DEV_PHRASES_PER_WEEK, type GachaKind } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import { newCandidate, sumProgrammerSpeed } from '../data/employees';
@@ -165,11 +165,12 @@ type Actions = {
   adDebugAssist: () => boolean;
   hireCandidate: () => boolean;
   /**
-   * v0.22：採用ガチャを1回引く（spec v22 §3〜4）。
-   * 価格は解放済み最高規模に連動（gachaPrice）。資金不足なら false。
+   * v0.22：採用ガチャを1回引く（spec v22 §3〜4）。v0.22.1：種類（normal/premium）を指定。
+   * 価格は種類 × 解放済み最高規模に連動（gachaPrice）。資金不足なら false。
+   * premium のみ天井カウンタ（gachaPity）を更新する。normal は S を出さず pity 不変。
    * 未処理の候補が残っていても引き直せる（前の候補は上書き＝実質見送り）。
    */
-  pullGacha: () => boolean;
+  pullGacha: (kind: GachaKind) => boolean;
   /** v0.22：開封済み候補を見送る（破棄。ガチャ料は返らない） */
   dismissCandidate: () => void;
   fireEmployee: (id: string) => void;
@@ -593,15 +594,16 @@ export const useGameStore = create<GameState>()(
       return true;
     },
 
-    pullGacha: () => {
-      const price = gachaPrice(get().unlockedScales);
+    pullGacha: (kind) => {
+      const price = gachaPrice(kind, get().unlockedScales);
       if (get().funds < price) return false;
       const pity = get().gachaPity;
-      const rank = rollRank(deps.rng, pity);
+      const rank = rollRank(kind, deps.rng, pity);
       set({
         funds: get().funds - price,
         candidate: newCandidate(deps, rank),
-        gachaPity: nextPityCount(pity, rank),
+        // premium のみ天井を更新。normal は S を出さないので pity は据え置き。
+        gachaPity: kind === 'premium' ? nextPityCount(pity, rank) : pity,
       });
       return true;
     },

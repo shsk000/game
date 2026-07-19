@@ -134,12 +134,12 @@ let counter = 0;
 
 /**
  * v0.22：候補はガチャランク付きで生成する。
- * rank 省略時はピティ無しの素の排出率で抽選（シミュレーション・テスト用）。
- * ピティを効かせる場合は呼び出し側（gameStore.pullGacha）が rollRank(rng, pity) の結果を渡す。
+ * rank 省略時はノーマルガチャ（S 無し）の素の排出率で抽選（シミュレーション・テスト用）。
+ * 実際の抽選（種類・ピティ込み）は呼び出し側（gameStore.pullGacha）が rollRank の結果を渡す。
  */
 export const newCandidate = (
   deps: Deps = defaultDeps,
-  rank: GachaRank = rollRank(deps.rng),
+  rank: GachaRank = rollRank('normal', deps.rng),
 ): Candidate => {
   const { rng, now } = deps;
   const role = pick(ROLE_DICE, rng);

@@ -99,29 +99,40 @@ describe('採用ガチャ（v0.22）', () => {
     setGameDeps({ rng: Math.random, now: () => Date.now() });
   });
 
-  it('pullGacha：資金がガチャ料分だけ減り、候補が出現する', () => {
+  it('pullGacha(normal)：資金がガチャ料分だけ減り、候補が出現する', () => {
     setDeterministicDeps(1);
-    const price = GACHA_CONFIG.priceByScale.mini;
+    const price = GACHA_CONFIG.normal.priceByScale.mini;
     resetStore({ funds: price + 100, unlockedScales: ['mini'], candidate: null, gachaPity: 0 });
-    expect(useGameStore.getState().pullGacha()).toBe(true);
+    expect(useGameStore.getState().pullGacha('normal')).toBe(true);
     expect(useGameStore.getState().funds).toBe(100);
     expect(useGameStore.getState().candidate).not.toBeNull();
   });
 
-  it('pullGacha：資金がガチャ料未満なら false・状態不変', () => {
+  it('pullGacha(normal)：S は絶対に出ず、pity も動かさない', () => {
+    // rng を常に 0（本来 S 判定）に固定してもノーマルは S=0 なので S にならない
+    setGameDeps({ rng: () => 0, now: () => 1_000_000 });
+    resetStore({ funds: 100_000_000, unlockedScales: ['mini'], candidate: null, gachaPity: 3 });
+    for (let i = 0; i < 10; i++) {
+      useGameStore.getState().pullGacha('normal');
+      expect(useGameStore.getState().candidate?.rank).not.toBe('S');
+    }
+    expect(useGameStore.getState().gachaPity).toBe(3); // ノーマルは pity 不変
+  });
+
+  it('pullGacha(premium)：資金がガチャ料未満なら false・状態不変（序盤は引けない）', () => {
     setDeterministicDeps(1);
-    const price = GACHA_CONFIG.priceByScale.mini;
+    const price = GACHA_CONFIG.premium.priceByScale.mini;
+    // 初期資金相当だと premium は引けない
     resetStore({ funds: price - 1, unlockedScales: ['mini'], candidate: null });
-    expect(useGameStore.getState().pullGacha()).toBe(false);
+    expect(useGameStore.getState().pullGacha('premium')).toBe(false);
     expect(useGameStore.getState().funds).toBe(price - 1);
     expect(useGameStore.getState().candidate).toBeNull();
   });
 
-  it('pullGacha：S 排出でピティが 0 リセット、非 S で +1', () => {
-    // rng を固定して排出ランクを観測し、ピティ挙動を確認
+  it('pullGacha(premium)：S 排出でピティが 0 リセット、非 S で +1', () => {
     setDeterministicDeps(1);
-    resetStore({ funds: 10_000_000, unlockedScales: ['mini'], candidate: null, gachaPity: 5 });
-    useGameStore.getState().pullGacha();
+    resetStore({ funds: 1_000_000_000, unlockedScales: ['mini'], candidate: null, gachaPity: 5 });
+    useGameStore.getState().pullGacha('premium');
     const rank = useGameStore.getState().candidate?.rank;
     const pity = useGameStore.getState().gachaPity;
     if (rank === 'S') expect(pity).toBe(0);
@@ -130,9 +141,9 @@ describe('採用ガチャ（v0.22）', () => {
 
   it('dismissCandidate：候補が消え、資金は返らない', () => {
     setDeterministicDeps(1);
-    const price = GACHA_CONFIG.priceByScale.mini;
+    const price = GACHA_CONFIG.normal.priceByScale.mini;
     resetStore({ funds: price + 500, unlockedScales: ['mini'], candidate: null });
-    useGameStore.getState().pullGacha();
+    useGameStore.getState().pullGacha('normal');
     const fundsAfterPull = useGameStore.getState().funds;
     useGameStore.getState().dismissCandidate();
     expect(useGameStore.getState().candidate).toBeNull();
@@ -142,7 +153,7 @@ describe('採用ガチャ（v0.22）', () => {
   it('hireCandidate：初月給が引かれ社員が増え、候補は消える', () => {
     setDeterministicDeps(1);
     resetStore({ funds: 10_000_000, unlockedScales: ['mini'], candidate: null, employees: [] });
-    useGameStore.getState().pullGacha();
+    useGameStore.getState().pullGacha('normal');
     const cand = useGameStore.getState().candidate;
     expect(cand).not.toBeNull();
     const fundsBeforeHire = useGameStore.getState().funds;
@@ -152,16 +163,22 @@ describe('採用ガチャ（v0.22）', () => {
     expect(useGameStore.getState().candidate).toBeNull();
   });
 
-  it('20連 S 非排出→次で S 確定（ピティが実 store で機能する）', () => {
+  it('premium 天井連続 S 非排出→次で S 確定（ピティが実 store で機能する）', () => {
     // rng を常に 0.99（本来 B）に固定
     setGameDeps({ rng: () => 0.99, now: () => 1_000_000 });
-    resetStore({ funds: 10_000_000_000, unlockedScales: ['mini'], candidate: null, gachaPity: 0 });
-    for (let i = 0; i < GACHA_CONFIG.pityThreshold; i++) {
-      useGameStore.getState().pullGacha();
+    const th = GACHA_CONFIG.premium.pityThreshold;
+    resetStore({
+      funds: 1_000_000_000_000,
+      unlockedScales: ['aaa'],
+      candidate: null,
+      gachaPity: 0,
+    });
+    for (let i = 0; i < th; i++) {
+      useGameStore.getState().pullGacha('premium');
       expect(useGameStore.getState().candidate?.rank).toBe('B');
     }
-    expect(useGameStore.getState().gachaPity).toBe(GACHA_CONFIG.pityThreshold);
-    useGameStore.getState().pullGacha();
+    expect(useGameStore.getState().gachaPity).toBe(th);
+    useGameStore.getState().pullGacha('premium');
     expect(useGameStore.getState().candidate?.rank).toBe('S');
     expect(useGameStore.getState().gachaPity).toBe(0);
   });

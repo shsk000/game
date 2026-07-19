@@ -9,11 +9,11 @@ import {
   PixelWindow,
   SegGauge,
 } from '../../components/ui';
-import { gachaPrice } from '../../core/gacha';
+import { gachaPrice, pityThreshold } from '../../core/gacha';
 import { nextGoals } from '../../core/goals';
 import { nextExpFor } from '../../core/growth';
 import { ACHIEVEMENTS } from '../../data/achievements';
-import { computeBorrowingLimit, DEBT_CONFIG, GACHA_CONFIG } from '../../data/balance';
+import { computeBorrowingLimit, DEBT_CONFIG } from '../../data/balance';
 import { roleLabel, sumMonthlySalaries } from '../../data/employees';
 import { GENRE_BY_ID } from '../../data/genres';
 import { MAX_EMPLOYEES, NATIVE_H, NATIVE_W } from '../../data/officeLayout';
@@ -88,7 +88,9 @@ export const OfficeScreen = () => {
   }, []);
 
   const next = nextLockedScale(unlocked);
-  const currentGachaPrice = gachaPrice(unlocked);
+  const normalGachaPrice = gachaPrice('normal', unlocked);
+  const premiumGachaPrice = gachaPrice('premium', unlocked);
+  const premiumPity = pityThreshold('premium');
   const sellingWorks = library.filter((w) => w.selling);
   const currentScale = unlocked[unlocked.length - 1] ?? 'mini';
   const currentScaleDef = SCALE_BY_ID[currentScale];
@@ -595,23 +597,62 @@ export const OfficeScreen = () => {
             onDismiss={() => dismissCandidate()}
           />
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-            <p style={{ margin: 0, fontSize: 13, textAlign: 'center', color: '#aab8cc' }}>
-              人材を1名スカウトします。ランク{' '}
-              <span style={{ color: RANK_VISUAL.S.color, fontWeight: 700 }}>S</span> /{' '}
-              <span style={{ color: RANK_VISUAL.A.color, fontWeight: 700 }}>A</span> /{' '}
-              <span style={{ color: RANK_VISUAL.B.color, fontWeight: 700 }}>B</span>{' '}
-              の誰かが出ます。
-            </p>
-            <PixelButton
-              variant="primary"
-              disabled={funds < currentGachaPrice}
-              onClick={() => pullGacha()}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* ノーマル：安価・S 無し（序盤の主力） */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '8px 10px',
+                background: '#1c2b45',
+                border: '2px solid #0a1422',
+              }}
             >
-              ガチャを引く ¥{currentGachaPrice.toLocaleString()}
-            </PixelButton>
-            <div style={{ fontSize: 11, color: '#8a96a8' }}>
-              あと {Math.max(0, GACHA_CONFIG.pityThreshold - gachaPity)} 回で S 確定
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#f0f3f8' }}>
+                  ノーマル採用 <span style={{ color: RANK_VISUAL.A.color }}>A</span> /{' '}
+                  <span style={{ color: RANK_VISUAL.B.color }}>B</span>
+                </div>
+                <div style={{ fontSize: 11, color: '#aab8cc' }}>手頃な人材（S は出ません）</div>
+              </div>
+              <PixelButton
+                variant="primary"
+                disabled={funds < normalGachaPrice}
+                onClick={() => pullGacha('normal')}
+              >
+                引く ¥{normalGachaPrice.toLocaleString()}
+              </PixelButton>
+            </div>
+
+            {/* プレミアム：高額・S 源（中盤以降） */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '8px 10px',
+                background: '#2a2440',
+                border: `2px solid ${RANK_VISUAL.S.color}`,
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#f0f3f8' }}>
+                  プレミアム採用 <span style={{ color: RANK_VISUAL.S.color }}>S</span> /{' '}
+                  <span style={{ color: RANK_VISUAL.A.color }}>A</span> /{' '}
+                  <span style={{ color: RANK_VISUAL.B.color }}>B</span>
+                </div>
+                <div style={{ fontSize: 11, color: '#aab8cc' }}>
+                  高確率で A、稀に S。あと {Math.max(0, premiumPity - gachaPity)} 回で S 確定
+                </div>
+              </div>
+              <PixelButton
+                variant="primary"
+                disabled={funds < premiumGachaPrice}
+                onClick={() => pullGacha('premium')}
+              >
+                引く ¥{premiumGachaPrice.toLocaleString()}
+              </PixelButton>
             </div>
           </div>
         )}
