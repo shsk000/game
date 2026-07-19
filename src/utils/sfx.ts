@@ -9,6 +9,26 @@
 
 let ctx: AudioContext | null = null;
 
+// v0.24：ミュート/音量。音は演出でありゲーム状態に影響しないため module 変数で保持する
+// （logic-architecture §2 の演出直呼び許容）。永続値は boot 時／設定変更時に store から反映する。
+let muted = false;
+let volume = 1;
+
+/** 実際に鳴らすか。内蔵ミュート or e2e が立てる window.__sfxMuted のどちらかで無音になる */
+const isMutedNow = (): boolean =>
+  muted ||
+  (typeof window !== 'undefined' && !!(window as unknown as { __sfxMuted?: boolean }).__sfxMuted);
+
+export const setSfxMuted = (m: boolean): void => {
+  muted = m;
+};
+export const isSfxMuted = (): boolean => isMutedNow();
+/** 音量 0..1（範囲外はクランプ）。0 で完全無音 */
+export const setSfxVolume = (v: number): void => {
+  volume = Math.min(1, Math.max(0, v));
+};
+export const getSfxVolume = (): number => volume;
+
 const ac = (): AudioContext | null => {
   try {
     ctx ??= new AudioContext();
@@ -24,6 +44,7 @@ const beep = (
   durSec: number,
   opts: { type?: OscillatorType; gain?: number; delaySec?: number } = {},
 ) => {
+  if (isMutedNow() || volume <= 0) return;
   const a = ac();
   if (!a) return;
   const { type = 'square', gain = 0.035, delaySec = 0 } = opts;
@@ -33,7 +54,7 @@ const beep = (
     const g = a.createGain();
     osc.type = type;
     osc.frequency.setValueAtTime(freq, t0);
-    g.gain.setValueAtTime(gain, t0);
+    g.gain.setValueAtTime(gain * volume, t0);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + durSec);
     osc.connect(g).connect(a.destination);
     osc.start(t0);

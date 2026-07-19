@@ -74,6 +74,10 @@ export const OfficeScreen = () => {
   const repayDebt = useGameStore((s) => s.repayDebt);
   const goTo = useGameStore((s) => s.goTo);
   const reset = useGameStore((s) => s.reset);
+  const muted = useGameStore((s) => s.muted);
+  const volume = useGameStore((s) => s.volume);
+  const setMuted = useGameStore((s) => s.setMuted);
+  const setVolume = useGameStore((s) => s.setVolume);
 
   const [modal, setModal] = useState<ModalKind>(null);
   const [debtAmountInput, setDebtAmountInput] = useState<string>('');
@@ -913,6 +917,34 @@ export const OfficeScreen = () => {
       {/* ── 設定モーダル ── */}
       <PixelModal open={modal === 'settings'} onClose={closeModal} title="設定" maxWidth={400}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* v0.24：効果音のミュート/音量 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+            >
+              <span style={{ fontSize: 13 }}>効果音</span>
+              <PixelButton variant="secondary" onClick={() => setMuted(!muted)}>
+                {muted ? 'OFF' : 'ON'}
+              </PixelButton>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, width: 40 }}>音量</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(volume * 100)}
+                disabled={muted}
+                onChange={(e) => setVolume(Number(e.target.value) / 100)}
+                style={{ flex: 1, accentColor: '#4a90d9' }}
+                aria-label="効果音音量"
+              />
+              <span style={{ fontSize: 12, width: 36, textAlign: 'right' }}>
+                {Math.round(volume * 100)}
+              </span>
+            </div>
+          </div>
+          <div style={{ height: 1, background: 'rgba(0,0,0,0.15)' }} />
           <p style={{ margin: 0, fontSize: 13 }}>
             セーブデータを削除して初期状態に戻します。元には戻せません。
           </p>

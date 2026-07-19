@@ -61,6 +61,10 @@ export type Persisted = {
   currentDate: GameDate;
   /** v0.21 投資：先行購入した累計回数（価格の逓増カーブ計算に使う。旧セーブは 0 に既定） */
   investPurchaseCount: number;
+  /** v0.24：効果音ミュート（旧セーブは false 既定） */
+  muted: boolean;
+  /** v0.24：効果音音量 0..1（旧セーブは 1 既定） */
+  volume: number;
 };
 
 const emptyGhostsRecord = (): Record<Scale, number | null> => ({
@@ -103,6 +107,8 @@ export const defaults = (): Persisted => ({
   lastSeenAt: Date.now(),
   currentDate: { ...INITIAL_GAME_DATE },
   investPurchaseCount: 0,
+  muted: false,
+  volume: 1,
 });
 
 type LegacyWork = Partial<Work> & {

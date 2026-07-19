@@ -4,6 +4,7 @@ import { defaultDeps, mulberry32 } from '../core/ports';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import { newCandidate } from '../data/employees';
 import { ensureTrend } from '../data/trend';
+import { setSfxMuted, setSfxVolume } from '../utils/sfx';
 import * as storage from '../utils/storage';
 import { type GameState, setGameDeps, useGameStore } from './gameStore';
 import { INITIAL_GAME_DATE } from './types';
@@ -32,6 +33,8 @@ const persistedSnapshot = (s: GameState): Omit<storage.Persisted, 'version' | 'l
   tutorialDone: s.tutorialDone,
   currentDate: s.currentDate,
   investPurchaseCount: s.investPurchaseCount,
+  muted: s.muted,
+  volume: s.volume,
 });
 
 const saveNow = (s: GameState, nowMs: number) => {
@@ -71,6 +74,8 @@ export const buildBootPatch = (
     offlineReport: offline.report,
     currentDate: persisted.currentDate ?? INITIAL_GAME_DATE,
     investPurchaseCount: persisted.investPurchaseCount ?? 0,
+    muted: persisted.muted ?? false,
+    volume: persisted.volume ?? 1,
   };
 };
 
@@ -98,6 +103,10 @@ export const bootGameStore = (deps?: Deps): void => {
 
   const persisted = storage.load() ?? storage.defaults();
   useGameStore.setState(buildBootPatch(persisted, resolved));
+
+  // 永続化された音設定を SE レイヤ（sfx）へ反映（音は演出なので store の外側で保持）
+  setSfxMuted(persisted.muted ?? false);
+  setSfxVolume(persisted.volume ?? 1);
 
   // 自動保存①：セーブ対象フィールドが変わったら保存
   useGameStore.subscribe(
