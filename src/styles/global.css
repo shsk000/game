@@ -1843,7 +1843,7 @@ body,
   }
 }
 .dev-combo-title::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;
@@ -2109,4 +2109,150 @@ body,
     2px 2px 0 #3a1a00,
     -2px -2px 0 #3a1a00,
     0 0 16px rgba(255, 157, 77, 0.8);
+}
+
+/* ── v0.22 採用ガチャ：カード開封演出（spec v22 §6。steps 離散のみ・グラデ不使用） ── */
+.gacha-card {
+  border: 4px solid #704028;
+  background: #24395c;
+  /* 濃い青背景。中のテキストは既定で明色にする（黒字継承で見えなくならないように） */
+  color: #eef3fa;
+  padding: 12px;
+  animation: gacha-card-pop 200ms steps(4);
+}
+
+@keyframes gacha-card-pop {
+  0% {
+    transform: scale(0);
+  }
+  25% {
+    transform: scale(0.5);
+  }
+  50% {
+    transform: scale(1);
+  }
+  75% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.gacha-card-back {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 132px;
+  width: 100%;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  animation: gacha-back-pulse 400ms steps(2) infinite;
+}
+
+@keyframes gacha-back-pulse {
+  0%,
+  100% {
+    border-color: #f0c020;
+  }
+  50% {
+    border-color: #704028;
+  }
+}
+
+.gacha-card-back-mark {
+  font-size: 48px;
+  line-height: 48px;
+  font-weight: 700;
+  color: #f0c020;
+}
+
+.gacha-card--B {
+  border-color: #b87333;
+}
+.gacha-card--A {
+  border-color: #c0c8d0;
+}
+
+.gacha-card--S {
+  animation:
+    gacha-card-pop 200ms steps(4),
+    gacha-rainbow 600ms steps(6) infinite;
+}
+
+/* 虹＝パレット 6 色の離散サイクル（linear-gradient は規約 NG） */
+@keyframes gacha-rainbow {
+  0%,
+  100% {
+    border-color: #a02828;
+  }
+  17% {
+    border-color: #e07020;
+  }
+  33% {
+    border-color: #f0c020;
+  }
+  50% {
+    border-color: #308040;
+  }
+  67% {
+    border-color: #3870c0;
+  }
+  83% {
+    border-color: #60c0d0;
+  }
+}
+
+.gacha-rank-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  font-size: 16px;
+  line-height: 16px;
+  font-weight: 700;
+  border: 2px solid #10151c;
+}
+
+.gacha-rank-badge--B {
+  background: #b87333;
+  color: #fff8e0;
+}
+.gacha-rank-badge--A {
+  background: #c0c8d0;
+  color: #202840;
+}
+.gacha-rank-badge--S {
+  background: #f0c020;
+  color: #202840;
+}
+
+/* S 排出時の全面フラッシュ（完全 1 → 完全 0 の離散切替。半端な opacity は規約 NG） */
+.gacha-s-flash {
+  position: absolute;
+  inset: -4px;
+  background: #fff8e0;
+  pointer-events: none;
+  animation: gacha-s-flash-kf 400ms steps(2) forwards;
+}
+
+@keyframes gacha-s-flash-kf {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.gacha-skip-note {
+  font-size: 12px;
+  line-height: 12px;
+  color: #8a96a8;
 }

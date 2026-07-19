@@ -1,4 +1,5 @@
 import { AdminCompatMatrix } from './AdminCompatMatrix';
+import { AdminEcon } from './AdminEcon';
 import { AdminImageGallery } from './AdminImageGallery';
 
 /**
@@ -28,6 +29,9 @@ const AdminNav = () => (
     <a href="/admin/compat" style={linkStyle}>
       相性表
     </a>
+    <a href="/admin/econ" style={linkStyle}>
+      お金デバッグ
+    </a>
   </nav>
 );
 
@@ -47,6 +51,12 @@ const AdminIndex = () => (
         </a>
         　ジャンル×テーマ相性倍率の全組み合わせ一覧（バランス確認用）
       </li>
+      <li>
+        <a href="/admin/econ" style={linkStyle}>
+          /admin/econ
+        </a>
+        　お金デバッグ（セーブの資金を追加/セット。リロードで反映）
+      </li>
     </ul>
   </div>
 );
@@ -59,6 +69,8 @@ export const AdminApp = () => {
     body = <AdminImageGallery />;
   } else if (path === '/admin/compat') {
     body = <AdminCompatMatrix />;
+  } else if (path === '/admin/econ') {
+    body = <AdminEcon />;
   } else {
     body = <AdminIndex />;
   }

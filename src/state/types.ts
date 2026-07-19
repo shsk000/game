@@ -1,3 +1,4 @@
+import type { GachaRank } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import type { GenreId } from '../data/genres';
 import type { Scale } from '../data/scales';
@@ -82,6 +83,12 @@ export type Employee = {
   id: string;
   name: string;
   role: EmployeeRole;
+  /**
+   * v0.22：採用ガチャの排出ランク（表示ラベル専用）。
+   * 能力への影響は basePower / specialties に織り込み済みで、rank 自体が
+   * 品質・売上に加点する経路は作らない（spec v22 §2）。旧セーブの社員は undefined。
+   */
+  rank?: GachaRank;
   /**
    * v0.16：全役割共通の 0..1 正規化スケール（成長込みの現在値）。
    * 実効果は使用側で ROLE_EFFECT 係数を掛ける（LoC/秒・品質+・売上%）。

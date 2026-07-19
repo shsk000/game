@@ -73,12 +73,24 @@ const distribution = (p: Persona, seed: number) => {
   };
 };
 
-/** 序盤：新人 3 人（mini）・初期帯の最良相性・上手いタイピング・属性ボーナス満額 */
+/**
+ * 序盤：新人 3 人（mini）・初期帯の最良相性・上手いタイピング・属性ボーナス満額。
+ *
+ * このペルソナは**非課金の平均的な新規プレイヤー**（採用ガチャの通常排出＝power 0.4 前後）を
+ * 表す。これが 70+ = 0% であることが v16 の核「序盤は腕やレベルではメタ70に届かない」ガード。
+ *
+ * v0.22 補足（オーナー決定 2026-07-19「許容」）：採用ガチャのピティで S を 3 体
+ * 強制入手すると mini でも charPower が飽和し序盤ティアを加速できる（メタ70+も出る）。
+ * これは v21「時間を金で買う＝加速」思想に沿った**意図された課金ショートカット**として許容する
+ * （spec v22 §8-1）。よって本ガードは課金ラッシュではなく非課金平均プレイをモデル化する。
+ * 最終天井（aaa でメタ95）は S-Lv1 3 体でも charPower ≈51 で届かず、レベル成長が必須なので
+ * 「95 の壁は能力でしか越えられない」不変条件は保たれる。
+ */
 const earlyGame = (): Persona => {
   const team = [emp('a', 'programmer', 0.4), emp('b', 'designer', 0.4), emp('c', 'pr', 0.4)];
   const { score } = computeCharacterScore({ assignedEmployees: team, scale: 'mini' });
   return {
-    name: '序盤（新人3人・全部上振れ）',
+    name: '序盤（非課金・新人3人・全部上振れ）',
     charPower: score,
     affinity: Math.round(((1.25 - 0.7) / 1.3) * 100), // 初期帯の上限 compat 1.25
     typingScore: 90,

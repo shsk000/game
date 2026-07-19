@@ -115,8 +115,91 @@ export const ROLE_EFFECT = {
   prSalesBonus: 0.2,
 } as const;
 
-/** 採用候補の初期 power レンジ（見習い帯。成長システムで育てるのが前提）叩き台 🔧 */
-export const CANDIDATE_POWER_RANGE = { min: 0.2, max: 0.6 } as const;
+// ============================================================
+// v0.22：採用ガチャ（spec v22 §4。旧 CANDIDATE_POWER_RANGE 0.2〜0.6 をランク帯に置換）
+// ============================================================
+
+export type GachaRank = 'B' | 'A' | 'S';
+
+/** 採用ガチャの種類（v0.22.1 で 2 種に分割）。normal＝安価・S 無し／premium＝高額・S 源 */
+export type GachaKind = 'normal' | 'premium';
+
+/**
+ * 採用ガチャの確定テーブル（spec v22 §4。数値は全て叩き台 🔧）。
+ *
+ * v0.22.1：オーナー指示で **ノーマル / プレミアム** の 2 種に分割。
+ * - **normal**：安価（規模連動・現行テーブル）。**S を出さない**（B/A のみ）。天井なし。
+ *   序盤の主力採用。A（power 0.4〜0.55）までは出るので普通に戦力になる。
+ * - **premium**：高額（mini ¥500 万＝初期資金と同額で**序盤はほぼ引けない**）。S の唯一の入手源。
+ *   天井 pityThreshold 連続 S 非排出で次を S 確定。中盤以降に手が届く設計。
+ *   → S を序盤から引けなくすることで v16 の早期分布ガード（序盤メタ70+＝0%）を
+ *     経済面から自然に守る（premium が高すぎて序盤は S を揃えられない）。
+ *
+ * 共通：
+ * - powerRange: ランク別 basePower 帯。S 上限 0.7 は旧候補上限 0.6 より高いが、charPower は
+ *   POWER_CAP × powerBonus 上限 70 で天井固定＝S は「天井に早く着く」だけ。
+ * - specialty: ランク別の得意分野構成。A は旧仕様（3-10 ＋ 40% で 1-4）と同じ。
+ */
+export const GACHA_CONFIG = {
+  normal: {
+    // S 無し。S の 5% 分を A に寄せて B70/A30（🔧）
+    rates: { B: 0.7, A: 0.3, S: 0 },
+    priceByScale: {
+      mini: 50_000, // ¥5 万
+      mobile: 500_000, // ¥50 万
+      indie: 8_000_000, // ¥800 万
+      hit: 150_000_000, // ¥1.5 億
+      aaa: 1_500_000_000, // ¥15 億
+    },
+    // S を出さないので天井は無い（0＝ピティ無効）
+    pityThreshold: 0,
+  },
+  premium: {
+    // A/S に寄せた高級枠。B も残してガチャの緊張を維持（🔧）
+    rates: { B: 0.4, A: 0.45, S: 0.15 },
+    priceByScale: {
+      mini: 6_000_000, // ¥600 万（初期資金 ¥500 万を上回る＝序盤は 1 発も引けない）
+      mobile: 30_000_000, // ¥3000 万
+      indie: 300_000_000, // ¥3 億
+      hit: 3_000_000_000, // ¥30 億
+      aaa: 15_000_000_000, // ¥150 億
+    },
+    // S 率 15%（期待 ≒6.7 連）に対する救済天井。10 連連続 S 非排出で次を S 確定（🔧）
+    pityThreshold: 10,
+  },
+  powerRange: {
+    B: { min: 0.2, max: 0.4 },
+    A: { min: 0.4, max: 0.55 },
+    S: { min: 0.55, max: 0.7 },
+  },
+  specialty: {
+    B: { primaryMin: 3, primaryMax: 7, secondChance: 0, secondMin: 0, secondMax: 0 },
+    A: { primaryMin: 3, primaryMax: 10, secondChance: 0.4, secondMin: 1, secondMax: 4 },
+    S: { primaryMin: 6, primaryMax: 10, secondChance: 1, secondMin: 3, secondMax: 6 },
+  },
+} as const satisfies {
+  normal: {
+    rates: Record<GachaRank, number>;
+    priceByScale: Record<Scale, number>;
+    pityThreshold: number;
+  };
+  premium: {
+    rates: Record<GachaRank, number>;
+    priceByScale: Record<Scale, number>;
+    pityThreshold: number;
+  };
+  powerRange: Record<GachaRank, { min: number; max: number }>;
+  specialty: Record<
+    GachaRank,
+    {
+      primaryMin: number;
+      primaryMax: number;
+      secondChance: number;
+      secondMin: number;
+      secondMax: number;
+    }
+  >;
+};
 
 // ============================================================
 // v0.16：社員成長（spec v16 §1。Lv10 = 数十作品規模＝終盤・オーナー確定）

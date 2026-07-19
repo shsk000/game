@@ -2,7 +2,6 @@ import { computeOfflineEarnings } from '../core/economy';
 import type { Deps } from '../core/ports';
 import { defaultDeps, mulberry32 } from '../core/ports';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
-import { newCandidate } from '../data/employees';
 import { ensureTrend } from '../data/trend';
 import * as storage from '../utils/storage';
 import { type GameState, setGameDeps, useGameStore } from './gameStore';
@@ -31,6 +30,8 @@ const persistedSnapshot = (s: GameState): Omit<storage.Persisted, 'version' | 'l
   achievements: s.achievements,
   tutorialDone: s.tutorialDone,
   currentDate: s.currentDate,
+  candidate: s.candidate,
+  gachaPity: s.gachaPity,
   investPurchaseCount: s.investPurchaseCount,
 });
 
@@ -53,7 +54,8 @@ export const buildBootPatch = (
     lifetimeRevenue: persisted.lifetimeRevenue + (offline.report?.earned ?? 0),
     fans: persisted.fans,
     employees: persisted.employees,
-    candidate: newCandidate(deps),
+    // v0.22：無料の自動候補は廃止（ガチャで引く）。開封済み未処理の候補だけ復元する
+    candidate: persisted.candidate ?? null,
     unlockedScales: persisted.unlockedScales,
     unlockedGenres: persisted.unlockedGenres,
     unlockedThemes: persisted.unlockedThemes,
@@ -70,6 +72,7 @@ export const buildBootPatch = (
     tutorialDone: persisted.tutorialDone,
     offlineReport: offline.report,
     currentDate: persisted.currentDate ?? INITIAL_GAME_DATE,
+    gachaPity: persisted.gachaPity ?? 0,
     investPurchaseCount: persisted.investPurchaseCount ?? 0,
   };
 };
