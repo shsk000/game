@@ -8,6 +8,7 @@ import {
 } from '../core/bugs';
 import { computeBorrow, computeMonthlyTick, computeRepay } from '../core/economy';
 import type { LevelUp } from '../core/growth';
+import { investPrice } from '../core/invest';
 import { type Deps, defaultDeps } from '../core/ports';
 import { evaluateAchievements } from '../core/progression';
 import { computeRelease, type ReleaseOpts } from '../core/release';
@@ -17,12 +18,12 @@ import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import { newCandidate, REFRESH_COST, sumProgrammerSpeed } from '../data/employees';
 import type { GenreId } from '../data/genres';
-import { GENRES } from '../data/genres';
+import { GENRE_BY_ID, GENRES } from '../data/genres';
 import { MAX_EMPLOYEES } from '../data/officeLayout';
 import type { Scale } from '../data/scales';
 import { nextLockedScale, SCALE_BY_ID, SCALES } from '../data/scales';
 import type { ThemeId } from '../data/themes';
-import { THEMES } from '../data/themes';
+import { THEME_BY_ID, THEMES } from '../data/themes';
 import { generateTitle } from '../data/titleGenerator';
 import { ensureTrend, type Trend } from '../data/trend';
 import { settlePool } from '../utils/sales';
@@ -151,6 +152,10 @@ type Actions = {
   refreshCandidate: () => boolean;
   fireEmployee: (id: string) => void;
   unlockNextScale: () => boolean;
+  /** v0.21 投資：未解放ジャンルを資金で先行購入（unlockedGenres に追加）。成立で true。 */
+  buyGenre: (id: GenreId) => boolean;
+  /** v0.21 投資：未解放テーマを資金で先行購入（unlockedThemes に追加）。成立で true。 */
+  buyTheme: (id: ThemeId) => boolean;
   clearOfflineReport: () => void;
   finishTutorial: () => void;
   clearNewlyAchieved: () => void;
@@ -189,6 +194,8 @@ export type GameState = {
   /** v0.16：直近リリースで発生した社員レベルアップ（ReleaseScreen 開封演出用） */
   lastLevelUps: LevelUp[];
   offlineReport: OfflineReport | null;
+  /** v0.21 投資：先行購入した累計回数（価格の逓増カーブに使う） */
+  investPurchaseCount: number;
   /** v0.10：ゲーム内日付（週単位） */
   currentDate: GameDate;
   /** v0.10：直近に発生した月初固定費（UI 表示用。発生していなければ null） */
@@ -234,6 +241,7 @@ export const useGameStore = create<GameState>()(
     lastReleased: null,
     lastLevelUps: [],
     offlineReport: null,
+    investPurchaseCount: pureDefaults.investPurchaseCount,
     currentDate: pureDefaults.currentDate ?? INITIAL_GAME_DATE,
     lastFixedCost: null,
     gameOver: false,
@@ -587,6 +595,36 @@ export const useGameStore = create<GameState>()(
       return true;
     },
 
+    // v0.21 投資：未解放ジャンル/テーマを資金で先行購入する。unlockedGenres/Themes は
+    // セーブされる単調増加の union（解放済みが消えない蓄積配列）なので、そこへ追加するだけで
+    // 永続化され、以後は自動解放分と同一扱いになる（computeStageUnlocks は無改修）。
+    // 価格は investPurchaseCount による逓増カーブ。購入のたびにカウントを +1 する。
+    buyGenre: (id) => {
+      const s = get();
+      if (s.unlockedGenres.includes(id)) return false;
+      const price = investPrice(GENRE_BY_ID[id].unlockStage, s.investPurchaseCount);
+      if (price === null || s.funds < price) return false;
+      set({
+        funds: s.funds - price,
+        unlockedGenres: [...s.unlockedGenres, id],
+        investPurchaseCount: s.investPurchaseCount + 1,
+      });
+      return true;
+    },
+
+    buyTheme: (id) => {
+      const s = get();
+      if (s.unlockedThemes.includes(id)) return false;
+      const price = investPrice(THEME_BY_ID[id].unlockStage, s.investPurchaseCount);
+      if (price === null || s.funds < price) return false;
+      set({
+        funds: s.funds - price,
+        unlockedThemes: [...s.unlockedThemes, id],
+        investPurchaseCount: s.investPurchaseCount + 1,
+      });
+      return true;
+    },
+
     clearOfflineReport: () => set({ offlineReport: null }),
     finishTutorial: () => set({ tutorialDone: true }),
     clearNewlyAchieved: () => set({ newlyAchieved: [] }),
@@ -630,6 +668,7 @@ export const useGameStore = create<GameState>()(
         lastReleased: null,
         lastLevelUps: [],
         offlineReport: null,
+        investPurchaseCount: d.investPurchaseCount,
         currentDate: d.currentDate,
         lastFixedCost: null,
         gameOver: false,

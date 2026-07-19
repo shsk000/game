@@ -59,6 +59,8 @@ export type Persisted = {
   tutorialDone: boolean;
   lastSeenAt: number;
   currentDate: GameDate;
+  /** v0.21 投資：先行購入した累計回数（価格の逓増カーブ計算に使う。旧セーブは 0 に既定） */
+  investPurchaseCount: number;
 };
 
 const emptyGhostsRecord = (): Record<Scale, number | null> => ({
@@ -100,6 +102,7 @@ export const defaults = (): Persisted => ({
   tutorialDone: false,
   lastSeenAt: Date.now(),
   currentDate: { ...INITIAL_GAME_DATE },
+  investPurchaseCount: 0,
 });
 
 type LegacyWork = Partial<Work> & {

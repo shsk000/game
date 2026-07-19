@@ -31,6 +31,7 @@ const persistedSnapshot = (s: GameState): Omit<storage.Persisted, 'version' | 'l
   achievements: s.achievements,
   tutorialDone: s.tutorialDone,
   currentDate: s.currentDate,
+  investPurchaseCount: s.investPurchaseCount,
 });
 
 const saveNow = (s: GameState, nowMs: number) => {
@@ -69,6 +70,7 @@ export const buildBootPatch = (
     tutorialDone: persisted.tutorialDone,
     offlineReport: offline.report,
     currentDate: persisted.currentDate ?? INITIAL_GAME_DATE,
+    investPurchaseCount: persisted.investPurchaseCount ?? 0,
   };
 };
 

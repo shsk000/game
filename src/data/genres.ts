@@ -822,7 +822,7 @@ export const GENRES: Genre[] = [
     emoji: '🃏',
     bgColor: '#7a1f2b',
     tags: ['logic', 'story'],
-    unlockStage: 1,
+    unlockStage: 2,
     snippets: [
       'かーどをひく',
       'でっきをくむ',
@@ -902,7 +902,7 @@ export const GENRES: Genre[] = [
     emoji: '🎉',
     bgColor: '#c23b7a',
     tags: ['fast', 'chill'],
-    unlockStage: 1,
+    unlockStage: 2,
     snippets: [
       'みんなであそぶ',
       'こんふぇってぃとばす',
@@ -1022,7 +1022,7 @@ export const GENRES: Genre[] = [
     emoji: '🀄',
     bgColor: '#6b4a2f',
     tags: ['logic', 'epic'],
-    unlockStage: 1,
+    unlockStage: 2,
     snippets: [
       'さいころをふる',
       'こまをすすめる',
@@ -1062,7 +1062,7 @@ export const GENRES: Genre[] = [
     emoji: '❓',
     bgColor: '#c9a227',
     tags: ['logic', 'story'],
-    unlockStage: 1,
+    unlockStage: 2,
     snippets: [
       'はやおしぼたん',
       'せいかいをさがす',
@@ -1142,7 +1142,7 @@ export const GENRES: Genre[] = [
     emoji: '📖',
     bgColor: '#6a5a8a',
     tags: ['story', 'chill'],
-    unlockStage: 1,
+    unlockStage: 2,
     snippets: [
       'ぺーじをめくる',
       'ぶんしょうをよむ',
@@ -1222,7 +1222,7 @@ export const GENRES: Genre[] = [
     emoji: '🎣',
     bgColor: '#2f6f8f',
     tags: ['chill'],
-    unlockStage: 1,
+    unlockStage: 2,
     snippets: [
       'さおをたれる',
       'あたりをまつ',
