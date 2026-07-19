@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { ads } from '../../ads/AdProvider';
 import { JacketView } from '../../components/JacketView';
 import { Tutorial } from '../../components/Tutorial';
-import { PixelButton, PixelWindow } from '../../components/ui';
+import { PixelButton, PixelModal, PixelWindow } from '../../components/ui';
 import { bugSuppression } from '../../core/bugs';
+import { investPrice } from '../../core/invest';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
 import { planWeeksAllowance, ROLE_EFFECT } from '../../data/balance';
 import { compatLabel, getCompat } from '../../data/compatibility';
@@ -112,11 +113,74 @@ const EstimateBox = ({ label, value, sub, accent }: EstimateBoxProps) => (
   </div>
 );
 
+/**
+ * v0.21 投資：未解放ジャンル/テーマの先行購入ショップ（ジャンル/テーマ共通）。
+ * 既定は閉じておき「🔒未解放を購入 (N)」を押すと未解放の一覧（鍵＋価格）を展開する。
+ * 常時全部（最大15＋13）を出すと画面を圧迫しスクロールを招くため（no-scroll 原則）。
+ */
+type LockedItem = { id: string; emoji: string; name: string; unlockStage: number };
+/** 購入確認の対象（クリックで即購入せず、確認モーダルを開くために保持する） */
+type PurchaseTarget = { kind: 'genre' | 'theme'; id: string; emoji: string; name: string; price: number };
+const LockedShop = ({
+  kind,
+  locked,
+  funds,
+  purchaseCount,
+  open,
+  onToggle,
+  onRequest,
+}: {
+  kind: 'genre' | 'theme';
+  locked: LockedItem[];
+  funds: number;
+  /** これまでの先行購入数（価格の逓増カーブに使う。買うほど全項目が高くなる） */
+  purchaseCount: number;
+  open: boolean;
+  onToggle: () => void;
+  /** クリック時：即購入せず、確認対象を親へ渡す（親が確認モーダルを開く） */
+  onRequest: (target: PurchaseTarget) => void;
+}) => {
+  if (locked.length === 0) return null;
+  return (
+    <>
+      <PixelButton
+        size="small"
+        variant="secondary"
+        onClick={onToggle}
+        ariaLabel={`未解放を購入 ${locked.length}種`}
+      >
+        🔒 未解放を購入 ({locked.length}) {open ? '▲' : '▼'}
+      </PixelButton>
+      {open &&
+        locked.map((it) => {
+          const price = investPrice(it.unlockStage, purchaseCount);
+          if (price === null) return null;
+          const affordable = funds >= price;
+          return (
+            <PixelButton
+              key={it.id}
+              size="small"
+              variant="secondary"
+              disabled={!affordable}
+              onClick={() => onRequest({ kind, id: it.id, emoji: it.emoji, name: it.name, price })}
+              ariaLabel={`${it.name} を ${formatYen(price)} で購入`}
+            >
+              🔒 {it.emoji} {it.name} {formatYen(price)}
+            </PixelButton>
+          );
+        })}
+    </>
+  );
+};
+
 export const PlanScreen = () => {
   const startProject = useGameStore((s) => s.startProject);
   const unlocked = useGameStore((s) => s.unlockedScales);
   const unlockedGenres = useGameStore((s) => s.unlockedGenres);
   const unlockedThemes = useGameStore((s) => s.unlockedThemes);
+  const buyGenre = useGameStore((s) => s.buyGenre);
+  const buyTheme = useGameStore((s) => s.buyTheme);
+  const investPurchaseCount = useGameStore((s) => s.investPurchaseCount);
   const funds = useGameStore((s) => s.funds);
   const employees = useGameStore((s) => s.employees);
   const library = useGameStore((s) => s.library);
@@ -136,6 +200,11 @@ export const PlanScreen = () => {
   const [title, setTitle] = useState(() => generateTitle(firstGenre, firstTheme));
   const [surveyedCompat, setSurveyedCompat] = useState<number | null>(null);
   const [adRunning, setAdRunning] = useState(false);
+  // v0.21 投資：未解放ジャンル/テーマの先行購入ショップの開閉（既定は閉じて画面を圧迫しない）
+  const [genreShopOpen, setGenreShopOpen] = useState(false);
+  const [themeShopOpen, setThemeShopOpen] = useState(false);
+  // 誤操作防止：チップのクリックでは即購入せず、確認モーダルを開く（対象を保持）
+  const [pendingPurchase, setPendingPurchase] = useState<PurchaseTarget | null>(null);
 
   useEffect(() => {
     if (!unlockedGenres.includes(genreId)) setGenreId(unlockedGenres[0] as GenreId);
@@ -219,11 +288,15 @@ export const PlanScreen = () => {
                 </PixelButton>
               );
             })}
-            {GENRES.length > unlockedGenres.length && (
-              <span style={{ fontSize: 11, color: '#9fb6d4', alignSelf: 'center' }}>
-                + ? 種類（未解放）
-              </span>
-            )}
+            <LockedShop
+              kind="genre"
+              locked={GENRES.filter((g) => !unlockedGenres.includes(g.id))}
+              funds={funds}
+              purchaseCount={investPurchaseCount}
+              open={genreShopOpen}
+              onToggle={() => setGenreShopOpen((v) => !v)}
+              onRequest={setPendingPurchase}
+            />
           </div>
         </PixelWindow>
 
@@ -246,11 +319,15 @@ export const PlanScreen = () => {
                 </PixelButton>
               );
             })}
-            {THEMES.length > unlockedThemes.length && (
-              <span style={{ fontSize: 11, color: '#9fb6d4', alignSelf: 'center' }}>
-                + ? 種類（未解放）
-              </span>
-            )}
+            <LockedShop
+              kind="theme"
+              locked={THEMES.filter((t) => !unlockedThemes.includes(t.id))}
+              funds={funds}
+              purchaseCount={investPurchaseCount}
+              open={themeShopOpen}
+              onToggle={() => setThemeShopOpen((v) => !v)}
+              onRequest={setPendingPurchase}
+            />
           </div>
         </PixelWindow>
 
@@ -582,6 +659,49 @@ export const PlanScreen = () => {
       </div>
 
       {!tutorialDone && <Tutorial />}
+
+      {/* v0.21 投資：先行購入の確認モーダル（ワンクリック誤購入の防止） */}
+      <PixelModal
+        open={pendingPurchase !== null}
+        onClose={() => setPendingPurchase(null)}
+        title="先行投資の確認"
+        maxWidth={420}
+      >
+        {pendingPurchase && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 4 }}>
+            <p style={{ ...hintStyle, fontSize: 14, color: COLORS.textDark }}>
+              {pendingPurchase.emoji} {pendingPurchase.name}（{pendingPurchase.kind === 'genre' ? 'ジャンル' : 'テーマ'}）を
+              <br />
+              <strong>{formatYen(pendingPurchase.price)}</strong> で先行購入しますか？
+            </p>
+            <p style={{ ...hintStyle, fontSize: 12 }}>
+              資金: {formatYen(funds)} → {formatYen(funds - pendingPurchase.price)}
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <PixelButton
+                size="small"
+                variant="secondary"
+                onClick={() => setPendingPurchase(null)}
+                ariaLabel="購入をやめる"
+              >
+                やめる
+              </PixelButton>
+              <PixelButton
+                size="small"
+                variant="primary"
+                onClick={() => {
+                  if (pendingPurchase.kind === 'genre') buyGenre(pendingPurchase.id as GenreId);
+                  else buyTheme(pendingPurchase.id as ThemeId);
+                  setPendingPurchase(null);
+                }}
+                ariaLabel={`${pendingPurchase.name} を購入する`}
+              >
+                購入する
+              </PixelButton>
+            </div>
+          </div>
+        )}
+      </PixelModal>
     </div>
   );
 };
