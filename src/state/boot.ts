@@ -4,6 +4,7 @@ import { defaultDeps, mulberry32 } from '../core/ports';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import { newCandidate } from '../data/employees';
 import { ensureTrend } from '../data/trend';
+import { startBgm } from '../utils/bgm';
 import { setSfxMuted, setSfxVolume } from '../utils/sfx';
 import * as storage from '../utils/storage';
 import { type GameState, setGameDeps, useGameStore } from './gameStore';
@@ -125,6 +126,8 @@ export const bootGameStore = (deps?: Deps): void => {
   // 自動保存②：離席時刻（lastSeenAt）の定期更新（オフライン収益の基準点）
   if (typeof window !== 'undefined') {
     setInterval(() => saveNow(useGameStore.getState(), resolved.now()), AUTOSAVE_INTERVAL_MS);
+    // BGM：autoplay ポリシー回避のため最初のユーザー操作で開始（以降ループ。ミュート/音量に自動追従）
+    window.addEventListener('pointerdown', () => startBgm(), { once: true });
   }
 
   // e2e / dev 用：window.__gs() で現在の state を覗く
