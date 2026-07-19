@@ -64,7 +64,7 @@ export const GachaReveal = ({ candidate, funds, isFull, onHire, onDismiss }: Pro
         >
           {rankVisual.label}
         </span>
-        <span style={{ fontWeight: 700, fontSize: 16, flex: 1, marginLeft: 8 }}>
+        <span style={{ fontWeight: 700, fontSize: 16, flex: 1, marginLeft: 8, color: '#ffffff' }}>
           {candidate.name}
         </span>
         <span
@@ -79,7 +79,7 @@ export const GachaReveal = ({ candidate, funds, isFull, onHire, onDismiss }: Pro
           {roleLabel(candidate.role)}
         </span>
       </div>
-      <div style={{ fontSize: 13, marginTop: 8 }}>
+      <div style={{ fontSize: 13, marginTop: 8, color: '#eef3fa' }}>
         {formatPower(candidate.role, candidate.power)}
       </div>
       <div style={{ fontSize: 12, marginTop: 4, color: '#aab8cc' }}>

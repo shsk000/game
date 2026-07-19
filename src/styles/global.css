@@ -2115,6 +2115,8 @@ body,
 .gacha-card {
   border: 4px solid #704028;
   background: #24395c;
+  /* 濃い青背景。中のテキストは既定で明色にする（黒字継承で見えなくならないように） */
+  color: #eef3fa;
   padding: 12px;
   animation: gacha-card-pop 200ms steps(4);
 }
