@@ -15,6 +15,7 @@ import type { Achievement } from '../../state/types';
 import { formatRoi, formatWeeks, formatYen } from '../../utils/format';
 import { scoreFlavor } from '../../utils/metascore';
 import { computeProfit } from '../../utils/profit';
+import { sfx } from '../../utils/sfx';
 
 type RevealStage =
   | 'pre-ads'
@@ -114,6 +115,7 @@ export const ReleaseScreen = () => {
     if (current) return;
     setNewAchievements(useGameStore.getState().newlyAchieved);
     const charContrib = (work.breakdown.charPower ?? 0) * WEIGHTS.charPower;
+    sfx.complete(); // 開封（評価ブレイクダウン再生）の合図
     setStage('reveal-character');
     setResultStep('score');
     setDisplayQ(Math.round(charContrib));
@@ -151,7 +153,12 @@ export const ReleaseScreen = () => {
         const eased = 1 - (1 - t) ** 3;
         setDisplayMeta(Math.round(target * eased));
         if (t < 1) raf = requestAnimationFrame(loop);
-        else setStage('done');
+        else {
+          setStage('done');
+          // メタスコア確定のファンファーレ。神ゲー認定はさらに特別音を重ねる
+          sfx.success();
+          if (work.isMasterpiece) sfx.rare();
+        }
       };
       raf = requestAnimationFrame(loop);
       timers.push(raf);
