@@ -935,6 +935,42 @@ export const OfficeScreen = () => {
       {/* ── 設定モーダル ── */}
       <PixelModal open={modal === 'settings'} onClose={closeModal} title="設定" maxWidth={400}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* 開発ビルド限定：お金デバッグ（動いているゲームに即反映。localStorage 経由の
+              admin/econ と違いタブ上書き問題が起きない） */}
+          {import.meta.env.DEV && (
+            <div
+              style={{
+                border: '2px solid #0a1422',
+                background: '#eef0d8',
+                padding: 10,
+                borderRadius: 2,
+              }}
+            >
+              <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700 }}>
+                🛠 デバッグ：お金を追加（開発ビルドのみ）
+              </p>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {[
+                  { label: '+¥100万', amt: 1_000_000 },
+                  { label: '+¥1000万', amt: 10_000_000 },
+                  { label: '+¥1億', amt: 100_000_000 },
+                  { label: '+¥10億', amt: 1_000_000_000 },
+                ].map((q) => (
+                  <PixelButton
+                    key={q.amt}
+                    size="small"
+                    variant="secondary"
+                    onClick={() => useGameStore.setState((s) => ({ funds: s.funds + q.amt }))}
+                  >
+                    {q.label}
+                  </PixelButton>
+                ))}
+              </div>
+              <p style={{ margin: '8px 0 0', fontSize: 11, color: '#606878' }}>
+                現在：{formatYen(funds)}
+              </p>
+            </div>
+          )}
           <p style={{ margin: 0, fontSize: 13 }}>
             セーブデータを削除して初期状態に戻します。元には戻せません。
           </p>
