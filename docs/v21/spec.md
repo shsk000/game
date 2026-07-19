@@ -90,15 +90,24 @@ exp/level/power/wageパイプラインに「早く到達する」だけで、ど
   そのまま残し、まだ解放されていない個別ジャンル/テーマだけを金で「先行購入」できるようにする。
   理由：無課金でも進行が完結する北極星を守りつつ、金の吸収先を追加できる。既に自動解放済みの
   ジャンル/テーマは購入対象外（二重課金にしない）。
-- **価格帯 🔧（叩き台・要シミュレーション調整）**：`unlockStage`別に価格を設定する
-  （ジャンル/テーマとも同一テーブル）。
-  - stage 2 素材：¥30万
-  - stage 3 素材：¥150万
-  - stage 4 素材：¥800万
-  - 根拠：既存の`SCALE_BALANCE.unlockCost`が各stageの累計売上ゲートの約6〜8%である比率を
-    参考値として採用。「人気なほど高い」（roadmap原文）は、stageが上がるほど到達に必要な
-    実績が大きい＝価値が高いという既存設計をそのまま「人気」の代理指標として使う
-    （新規の人気度パラメータは作らない）。
+- **価格 🔧（叩き台・要シミュレーション調整）**：
+  `価格 = stage別の基礎額 × 公比^(これまでの先行購入数)`（オーナー指示 2026-07-19：
+  「stage固定額では買うほど高くならず伸びない」→ 購入回数で逓増する青天井カーブに変更）。
+  - stage別の基礎額（×10 刻み）：stage2=¥30万／stage3=¥300万／stage4=¥3000万
+  - 公比 `INVEST_CONFIG.priceGrowth = 1.8`。先行購入するたびに次の全価格が ×1.8 になる。
+    価格は ¥万（10,000）単位に丸め。購入数は無償の自動解放を数えない（`investPurchaseCount`）。
+  - 効果：「stageが高い（人気）ほど基礎額が高い」×「買うほど高くなる」の二重で伸び、
+    資金力の増加に価格が追従し続ける（終盤も金の吸収先になる）。
+  - 根拠：stage基礎額は既存の`SCALE_BALANCE.unlockCost`がほぼ ×10 刻み
+    （¥200万→¥1500万→¥1.5億→¥15億）なのに揃える。「人気なほど高い」（roadmap原文）は
+    stageの代理指標を使う（新規の人気度パラメータは作らない）。
+- **初期解放（stage 1）は 3ジャンル・3テーマに戻す**（オーナー指示 2026-07-19：
+  「初期解放が多すぎ・金の使い道が少ないのでもっと少なく」）。v0.21 の素材拡充時に
+  一部の新規ジャンル/テーマを stage 1 に置いていたが（ジャンル9・テーマ5になっていた）、
+  以前どおり ジャンル=puzzle/adventure/simulation、テーマ=sushi/onsen/farming の 3+3 に戻し、
+  外した分（ジャンル6・テーマ2）は stage 2 へ。これにより初期購入対象が増え、投資機能の
+  金の吸収先が厚くなる。`INITIAL_GENRE_IDS`/`INITIAL_THEME_IDS` は stage 1 から導出のため
+  自動追随。
 - **因果チェーン確認**：購入は「選択肢に追加されるだけ」。選んだ後の品質・メタスコア計算
   （genre/theme affinity・trend倍率等）は既存ロジックのまま変更しない。新しい加点経路を
   増やさないため、CAPの罠に該当しない（安全）。
@@ -152,11 +161,16 @@ exp/level/power/wageパイプラインに「早く到達する」だけで、ど
 
 ## 7. 技術メモ
 
-- 価格・研修コスト等の数値は`src/data/balance.ts`に`INVEST_CONFIG`（仮称）としてまとめ、
-  他のJUICE_CONFIG等と同様に叩き台/確定を区別してコメントする。
-- ジャンル/テーマの「購入済み」状態は`gameStore`に新規の永続フィールド（例：
-  `purchasedGenres: GenreId[]` / `purchasedThemes: ThemeId[]`）として持たせ、
-  `computeStageUnlocks`の結果とマージする形にする（既存関数は無改修、呼び出し側で合成）。
+- 価格・研修コスト等の数値は`src/data/balance.ts`に`INVEST_CONFIG`としてまとめ、
+  他のJUICE_CONFIG等と同様に叩き台/確定を区別してコメントする。（実装済み）
+- ジャンル/テーマの「購入済み」状態は、**別フィールドを作らず既存の`unlockedGenres`/
+  `unlockedThemes`へ直接追加する**（2026-07-19 実装時に確定）。当初案は新規フィールド
+  `purchasedGenres`/`purchasedThemes`＋合成だったが、`unlockedGenres`/`unlockedThemes`は
+  既にセーブされる単調増加のunion（`storage.ts`/`computeStageUnlocks`側で
+  `Array.from(new Set([...]))`で蓄積される）であり、そこへ購入分を足せば永続化も自動、
+  以後は自動解放分と同一扱い（§4-Aの方針そのもの）になる。`computeStageUnlocks`は無改修。
+  純粋ロジックは`core/invest.ts`（`investPriceForStage`/`canBuyUnlock`）に置き、
+  `gameStore`の`buyGenre`/`buyTheme`が資金チェック→減算→配列追加を行う。
 - 研修は`core/growth.ts`の`applyExpGain`抽出＋`gameStore`への薄いアクション追加のみ。
   rng/clockは不要（純粋な数値計算）。
 - 両機能とも新規のunitテスト対象になる純粋関数を伴うので、testing-rules規約に従い

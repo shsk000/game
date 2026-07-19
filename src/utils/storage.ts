@@ -73,6 +73,8 @@ export type Persisted = {
    */
   candidate: Candidate | null;
   gachaPity: number;
+  /** v0.21 投資：先行購入した累計回数（価格の逓増カーブ計算に使う。旧セーブは 0 に既定） */
+  investPurchaseCount: number;
 };
 
 const emptyGhostsRecord = (): Record<Scale, number | null> => ({
@@ -116,6 +118,7 @@ export const defaults = (): Persisted => ({
   currentDate: { ...INITIAL_GAME_DATE },
   candidate: null,
   gachaPity: 0,
+  investPurchaseCount: 0,
 });
 
 type LegacyWork = Partial<Work> & {
