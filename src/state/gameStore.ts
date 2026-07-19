@@ -7,6 +7,7 @@ import {
   rollBugOnMiss,
 } from '../core/bugs';
 import { computeBorrow, computeMonthlyTick, computeRepay } from '../core/economy';
+import { gachaPrice, nextPityCount, rollRank } from '../core/gacha';
 import type { LevelUp } from '../core/growth';
 import { type Deps, defaultDeps } from '../core/ports';
 import { evaluateAchievements } from '../core/progression';
@@ -15,7 +16,7 @@ import { ACHIEVEMENTS } from '../data/achievements';
 import { DEV_PHRASES_PER_WEEK } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
-import { newCandidate, REFRESH_COST, sumProgrammerSpeed } from '../data/employees';
+import { newCandidate, sumProgrammerSpeed } from '../data/employees';
 import type { GenreId } from '../data/genres';
 import { GENRES } from '../data/genres';
 import { MAX_EMPLOYEES } from '../data/officeLayout';
@@ -64,10 +65,25 @@ const MISSION_FLAVORS: Record<string, string[]> = {
   sports: ['選手の動きを組む', 'シュート判定を実装する', 'スコア集計を作る', 'AI対戦相手を組む'],
   survival: ['空腹度処理を組む', 'クラフト処理を作る', '天候システムを実装する', '敵AIを組む'],
   cardgame: ['カード効果を実装する', 'デッキ処理を組む', '勝敗判定を作る', 'シャッフル処理を組む'],
-  towerdefense: ['タワー設置処理を組む', '敵ウェーブを実装する', '射程判定を作る', '経路探索を組む'],
+  towerdefense: [
+    'タワー設置処理を組む',
+    '敵ウェーブを実装する',
+    '射程判定を作る',
+    '経路探索を組む',
+  ],
   partygame: ['ミニゲーム切替を組む', '得点集計を実装する', 'ランダムイベントを作る', 'UIを組む'],
-  escapegame: ['ギミック判定を組む', 'アイテム管理を実装する', 'タイマー処理を作る', 'フラグ管理を組む'],
-  romanceadventure: ['好感度処理を組む', '会話分岐を実装する', 'エンディング分岐を作る', 'UIを組む'],
+  escapegame: [
+    'ギミック判定を組む',
+    'アイテム管理を実装する',
+    'タイマー処理を作る',
+    'フラグ管理を組む',
+  ],
+  romanceadventure: [
+    '好感度処理を組む',
+    '会話分岐を実装する',
+    'エンディング分岐を作る',
+    'UIを組む',
+  ],
   boardgame: ['サイコロ処理を組む', 'コマ移動を実装する', '取引処理を作る', 'マス判定を組む'],
   quiz: ['出題処理を組む', '早押し判定を実装する', '正解判定を作る', 'スコア処理を組む'],
   platformer: ['ジャンプ処理を組む', '足場判定を実装する', 'コイン収集を作る', '当たり判定を組む'],
@@ -148,7 +164,14 @@ type Actions = {
    */
   adDebugAssist: () => boolean;
   hireCandidate: () => boolean;
-  refreshCandidate: () => boolean;
+  /**
+   * v0.22：採用ガチャを1回引く（spec v22 §3〜4）。
+   * 価格は解放済み最高規模に連動（gachaPrice）。資金不足なら false。
+   * 未処理の候補が残っていても引き直せる（前の候補は上書き＝実質見送り）。
+   */
+  pullGacha: () => boolean;
+  /** v0.22：開封済み候補を見送る（破棄。ガチャ料は返らない） */
+  dismissCandidate: () => void;
   fireEmployee: (id: string) => void;
   unlockNextScale: () => boolean;
   clearOfflineReport: () => void;
@@ -201,6 +224,11 @@ export type GameState = {
    * 月利は monthlyTick 時に乗る。借入上限超 + 資金 0 でゲームオーバー。
    */
   debt: number;
+  /**
+   * v0.22：採用ガチャのピティ（天井）カウンタ。S 非排出の連続回数。
+   * pityThreshold（20）到達で次の 1 回が S 確定。S 排出でリセット。セーブに永続化。
+   */
+  gachaPity: number;
 } & Actions;
 
 /**
@@ -238,6 +266,7 @@ export const useGameStore = create<GameState>()(
     lastFixedCost: null,
     gameOver: false,
     debt: 0,
+    gachaPity: pureDefaults.gachaPity,
 
     goTo: (screen) => set({ screen }),
 
@@ -559,16 +588,25 @@ export const useGameStore = create<GameState>()(
       set({
         funds: get().funds - cand.wage,
         employees: [...get().employees, emp],
-        candidate: newCandidate(deps),
+        candidate: null,
       });
       return true;
     },
 
-    refreshCandidate: () => {
-      if (get().funds < REFRESH_COST) return false;
-      set({ funds: get().funds - REFRESH_COST, candidate: newCandidate(deps) });
+    pullGacha: () => {
+      const price = gachaPrice(get().unlockedScales);
+      if (get().funds < price) return false;
+      const pity = get().gachaPity;
+      const rank = rollRank(deps.rng, pity);
+      set({
+        funds: get().funds - price,
+        candidate: newCandidate(deps, rank),
+        gachaPity: nextPityCount(pity, rank),
+      });
       return true;
     },
+
+    dismissCandidate: () => set({ candidate: null }),
 
     fireEmployee: (id) => {
       set({ employees: get().employees.filter((e) => e.id !== id) });
@@ -614,7 +652,7 @@ export const useGameStore = create<GameState>()(
         lifetimeRevenue: d.lifetimeRevenue,
         fans: d.fans,
         employees: d.employees,
-        candidate: newCandidate(deps),
+        candidate: null,
         unlockedScales: d.unlockedScales,
         unlockedGenres: d.unlockedGenres,
         unlockedThemes: d.unlockedThemes,
@@ -634,6 +672,7 @@ export const useGameStore = create<GameState>()(
         lastFixedCost: null,
         gameOver: false,
         debt: 0,
+        gachaPity: 0,
       });
     },
   })),

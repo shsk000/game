@@ -1,7 +1,8 @@
+import { rollRank } from '../core/gacha';
 import type { Deps, Rng } from '../core/ports';
 import { defaultDeps } from '../core/ports';
 import type { Candidate, Employee, EmployeeRole, EmployeeSpecialty } from '../state/types';
-import { CANDIDATE_POWER_RANGE, computeMonthlyWage, ROLE_EFFECT } from './balance';
+import { computeMonthlyWage, GACHA_CONFIG, type GachaRank, ROLE_EFFECT } from './balance';
 import type { CategoryId } from './categories';
 
 const SURNAMES = [
@@ -65,12 +66,14 @@ const ROLE_DICE: EmployeeRole[] = ['programmer', 'programmer', 'designer', 'desi
 
 /**
  * v0.16：power は全役割共通の 0..1 正規化スケール（balance.ts ROLE_EFFECT で換算）。
- * 候補は「見習い帯」（CANDIDATE_POWER_RANGE 0.2〜0.6）で生成し、成長システムで育てる。
+ * v0.22：一様な「見習い帯」（旧 0.2〜0.6）をガチャランク別の帯に置換。
  */
-const rollPower = (rng: Rng): number => {
-  const { min, max } = CANDIDATE_POWER_RANGE;
-  return Math.round((min + rng() * (max - min)) * 100) / 100;
-};
+const rollPower = (rng: Rng, range: { min: number; max: number }): number =>
+  Math.round((range.min + rng() * (range.max - range.min)) * 100) / 100;
+
+/** v0.22：ランク帯で basePower を抽選（進行シミュレーション等からも使う） */
+export const rollPowerForRank = (rank: GachaRank, rng: Rng): number =>
+  rollPower(rng, GACHA_CONFIG.powerRange[rank]);
 
 /**
  * v0.10 仕上げ：月給計算は balance.ts に集約。役職差なし。
@@ -107,16 +110,21 @@ const PRIMARY_CATEGORIES_BY_ROLE: Record<EmployeeRole, CategoryId[]> = {
   pr: ['story', 'presentation'],
 };
 
-const rollSpecialties = (role: EmployeeRole, rng: Rng): EmployeeSpecialty[] => {
+/**
+ * v0.22：ランク別の specialty 構成（GACHA_CONFIG.specialty）。
+ * B は主 1 つのみ / A は旧仕様どおり（主 3-10 ＋ 40% で副 1-4）/ S は 2 つ確定。
+ */
+const rollSpecialties = (role: EmployeeRole, rank: GachaRank, rng: Rng): EmployeeSpecialty[] => {
+  const cfg = GACHA_CONFIG.specialty[rank];
   const result: EmployeeSpecialty[] = [];
   const primaryPool = PRIMARY_CATEGORIES_BY_ROLE[role];
   const primary = pick(primaryPool, rng);
-  const primaryBonus = Math.round(3 + rng() * 7); // 3-10
+  const primaryBonus = Math.round(cfg.primaryMin + rng() * (cfg.primaryMax - cfg.primaryMin));
   result.push({ categoryId: primary, bonus: primaryBonus });
-  if (rng() < 0.4) {
+  if (cfg.secondChance > 0 && rng() < cfg.secondChance) {
     const otherPool = ALL_CATEGORY_IDS.filter((c) => c !== primary);
     const second = pick(otherPool, rng);
-    const secondBonus = Math.round(1 + rng() * 3); // 1-4
+    const secondBonus = Math.round(cfg.secondMin + rng() * (cfg.secondMax - cfg.secondMin));
     result.push({ categoryId: second, bonus: secondBonus });
   }
   return result;
@@ -124,21 +132,30 @@ const rollSpecialties = (role: EmployeeRole, rng: Rng): EmployeeSpecialty[] => {
 
 let counter = 0;
 
-export const newCandidate = (deps: Deps = defaultDeps): Candidate => {
+/**
+ * v0.22：候補はガチャランク付きで生成する。
+ * rank 省略時はピティ無しの素の排出率で抽選（シミュレーション・テスト用）。
+ * ピティを効かせる場合は呼び出し側（gameStore.pullGacha）が rollRank(rng, pity) の結果を渡す。
+ */
+export const newCandidate = (
+  deps: Deps = defaultDeps,
+  rank: GachaRank = rollRank(deps.rng),
+): Candidate => {
   const { rng, now } = deps;
   const role = pick(ROLE_DICE, rng);
-  const power = rollPower(rng);
+  const power = rollPowerForRank(rank, rng);
   counter += 1;
   return {
     id: `c-${now()}-${counter}`,
     name: randomName(rng),
     role,
+    rank,
     power,
     basePower: power,
     level: 1,
     exp: 0,
     wage: wageFor(role, power),
-    specialties: rollSpecialties(role, rng),
+    specialties: rollSpecialties(role, rank, rng),
   };
 };
 
@@ -179,5 +196,3 @@ export const sumEmployeeCategoryBonus = (
   }
   return total;
 };
-
-export const REFRESH_COST = 50;

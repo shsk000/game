@@ -56,6 +56,24 @@ describe('save / load（v5 往復）', () => {
     expect(storage.load()).toBeNull();
   });
 
+  it('v0.22：ピティ・候補が往復で保持される', () => {
+    const d = { ...storage.defaults(), gachaPity: 12 };
+    storage.save(d);
+    expect(storage.load()?.gachaPity).toBe(12);
+  });
+
+  it('v0.22：ガチャフィールドの無い旧 v7 セーブはデフォルト補完される（pity=0・候補 null）', () => {
+    const d = storage.defaults();
+    // 旧セーブを模して gachaPity / candidate を落とす
+    const legacy = { ...d } as Record<string, unknown>;
+    legacy.gachaPity = undefined;
+    legacy.candidate = undefined;
+    storage.save(legacy as ReturnType<typeof storage.defaults>);
+    const loaded = storage.load();
+    expect(loaded?.gachaPity).toBe(0);
+    expect(loaded?.candidate).toBeNull();
+  });
+
   it('カテゴリが空の旧 v5 データは初期3カテゴリに補完される', () => {
     const d = { ...storage.defaults(), unlockedCategories: [] };
     storage.save(d as ReturnType<typeof storage.defaults>);

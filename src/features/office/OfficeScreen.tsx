@@ -9,17 +9,20 @@ import {
   PixelWindow,
   SegGauge,
 } from '../../components/ui';
+import { gachaPrice } from '../../core/gacha';
 import { nextGoals } from '../../core/goals';
 import { nextExpFor } from '../../core/growth';
 import { ACHIEVEMENTS } from '../../data/achievements';
-import { computeBorrowingLimit, DEBT_CONFIG, ROLE_EFFECT } from '../../data/balance';
-import { REFRESH_COST, roleLabel, sumMonthlySalaries } from '../../data/employees';
+import { computeBorrowingLimit, DEBT_CONFIG, GACHA_CONFIG } from '../../data/balance';
+import { roleLabel, sumMonthlySalaries } from '../../data/employees';
 import { GENRE_BY_ID } from '../../data/genres';
 import { MAX_EMPLOYEES, NATIVE_H, NATIVE_W } from '../../data/officeLayout';
 import { nextLockedScale, SCALE_BY_ID, SCALES } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
 import { formatYen } from '../../utils/format';
+import { formatPower, RANK_VISUAL, ROLE_VISUAL } from './employeeDisplay';
+import { GachaReveal } from './GachaReveal';
 
 /**
  * オフィス画面：ゲームのトップ画面。
@@ -37,22 +40,7 @@ const ICON_BASE = '/sprites/ui';
 
 type ModalKind = 'hire' | 'scale' | 'achievements' | 'settings' | 'debt' | null;
 
-// v0.16：power は 0..1 正規化。表示は ROLE_EFFECT で実効値に換算する
-const formatPower = (role: string, power: number) => {
-  if (role === 'programmer')
-    return `開発 +${(power * ROLE_EFFECT.programmerLocPerSec).toFixed(2)} LoC/秒・🐛バグ抑制`;
-  if (role === 'designer')
-    return `品質基礎 +${(power * ROLE_EFFECT.designerQualityBonus).toFixed(1)}`;
-  return `売上 +${Math.round(power * ROLE_EFFECT.prSalesBonus * 100)}%`;
-};
-
-/** 役職ごとの絵文字とラベル色（リファレンスの社員リスト準拠） */
-const ROLE_VISUAL: Record<string, { emoji: string; color: string }> = {
-  programmer: { emoji: '🧑‍💻', color: '#1d8a3c' },
-  designer: { emoji: '🎨', color: '#1668a8' },
-  pr: { emoji: '📣', color: '#c2447a' },
-};
-
+// formatPower / ROLE_VISUAL / RANK_VISUAL は employeeDisplay.ts に共通化（v0.22）
 // SegGauge は src/components/ui/SegGauge.tsx に共通化（v0.11 開発フェーズと共用）
 
 export const OfficeScreen = () => {
@@ -67,7 +55,9 @@ export const OfficeScreen = () => {
   const lastFixedCost = useGameStore((s) => s.lastFixedCost);
   const debt = useGameStore((s) => s.debt);
   const hireCandidate = useGameStore((s) => s.hireCandidate);
-  const refreshCandidate = useGameStore((s) => s.refreshCandidate);
+  const pullGacha = useGameStore((s) => s.pullGacha);
+  const dismissCandidate = useGameStore((s) => s.dismissCandidate);
+  const gachaPity = useGameStore((s) => s.gachaPity);
   const fireEmployee = useGameStore((s) => s.fireEmployee);
   const unlockNextScale = useGameStore((s) => s.unlockNextScale);
   const borrowMoney = useGameStore((s) => s.borrowMoney);
@@ -98,6 +88,7 @@ export const OfficeScreen = () => {
   }, []);
 
   const next = nextLockedScale(unlocked);
+  const currentGachaPrice = gachaPrice(unlocked);
   const sellingWorks = library.filter((w) => w.selling);
   const currentScale = unlocked[unlocked.length - 1] ?? 'mini';
   const currentScaleDef = SCALE_BY_ID[currentScale];
@@ -592,55 +583,37 @@ export const OfficeScreen = () => {
         </div>
       </div>
 
-      {/* ── 採用モーダル ── */}
-      <PixelModal open={modal === 'hire'} onClose={closeModal} title="採用" maxWidth={560}>
+      {/* ── 採用モーダル（v0.22：ガチャ） ── */}
+      <PixelModal open={modal === 'hire'} onClose={closeModal} title="採用ガチャ" maxWidth={560}>
         {candidate ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
+          <GachaReveal
+            key={candidate.id}
+            candidate={candidate}
+            funds={funds}
+            isFull={employees.length >= MAX_EMPLOYEES}
+            onHire={() => hireCandidate()}
+            onDismiss={() => dismissCandidate()}
+          />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+            <p style={{ margin: 0, fontSize: 13, textAlign: 'center', color: '#aab8cc' }}>
+              人材を1名スカウトします。ランク{' '}
+              <span style={{ color: RANK_VISUAL.S.color, fontWeight: 700 }}>S</span> /{' '}
+              <span style={{ color: RANK_VISUAL.A.color, fontWeight: 700 }}>A</span> /{' '}
+              <span style={{ color: RANK_VISUAL.B.color, fontWeight: 700 }}>B</span>{' '}
+              の誰かが出ます。
+            </p>
+            <PixelButton
+              variant="primary"
+              disabled={funds < currentGachaPrice}
+              onClick={() => pullGacha()}
             >
-              <span style={{ fontWeight: 700, fontSize: 16 }}>{candidate.name}</span>
-              <span
-                style={{
-                  fontSize: 12,
-                  padding: '2px 8px',
-                  background: '#2d6cb5',
-                  color: '#ffffff',
-                  borderRadius: 2,
-                }}
-              >
-                {roleLabel(candidate.role)}
-              </span>
-            </div>
-            <div style={{ fontSize: 13 }}>{formatPower(candidate.role, candidate.power)}</div>
-            {employees.length >= MAX_EMPLOYEES && (
-              <div style={{ fontSize: 12, color: '#c66' }}>
-                満席です（最大 {MAX_EMPLOYEES} 人）。採用するには席を空けてください。
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <PixelButton
-                variant="primary"
-                disabled={funds < candidate.wage || employees.length >= MAX_EMPLOYEES}
-                onClick={() => hireCandidate()}
-              >
-                採用 ¥{candidate.wage.toLocaleString()}
-              </PixelButton>
-              <PixelButton
-                variant="secondary"
-                disabled={funds < REFRESH_COST}
-                onClick={() => refreshCandidate()}
-              >
-                別の候補 ¥{REFRESH_COST}
-              </PixelButton>
+              ガチャを引く ¥{currentGachaPrice.toLocaleString()}
+            </PixelButton>
+            <div style={{ fontSize: 11, color: '#8a96a8' }}>
+              あと {Math.max(0, GACHA_CONFIG.pityThreshold - gachaPity)} 回で S 確定
             </div>
           </div>
-        ) : (
-          <p style={{ margin: 0, fontSize: 13 }}>候補がいません</p>
         )}
 
         {employees.length > 0 && (
@@ -678,6 +651,14 @@ export const OfficeScreen = () => {
                     borderRadius: 2,
                   }}
                 >
+                  {e.rank && (
+                    <span
+                      className={`gacha-rank-badge gacha-rank-badge--${e.rank}`}
+                      style={{ width: 20, height: 20, fontSize: 11 }}
+                    >
+                      {RANK_VISUAL[e.rank].label}
+                    </span>
+                  )}
                   <span
                     style={{
                       fontSize: 10,

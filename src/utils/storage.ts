@@ -8,7 +8,14 @@ import type { Scale } from '../data/scales';
 import type { ThemeId } from '../data/themes';
 import { INITIAL_THEME_IDS } from '../data/themes';
 import type { Trend } from '../data/trend';
-import type { Achievement, Employee, GameDate, Work, WorkBreakdown } from '../state/types';
+import type {
+  Achievement,
+  Candidate,
+  Employee,
+  GameDate,
+  Work,
+  WorkBreakdown,
+} from '../state/types';
 import { INITIAL_GAME_DATE } from '../state/types';
 
 /**
@@ -59,6 +66,13 @@ export type Persisted = {
   tutorialDone: boolean;
   lastSeenAt: number;
   currentDate: GameDate;
+  /**
+   * v0.22 追加（version は 7 のまま。旧セーブは defaults マージで補完される加算的変更）：
+   *  - candidate: 開封済み・未処理のガチャ候補（有料で引いた結果をリロードで失わせない）
+   *  - gachaPity: 採用ガチャの天井カウンタ
+   */
+  candidate: Candidate | null;
+  gachaPity: number;
 };
 
 const emptyGhostsRecord = (): Record<Scale, number | null> => ({
@@ -100,6 +114,8 @@ export const defaults = (): Persisted => ({
   tutorialDone: false,
   lastSeenAt: Date.now(),
   currentDate: { ...INITIAL_GAME_DATE },
+  candidate: null,
+  gachaPity: 0,
 });
 
 type LegacyWork = Partial<Work> & {
@@ -394,6 +410,9 @@ const shapeLoaded = (parsed: Persisted): Persisted => {
       ? parsed.unlockedCategories
       : [...INITIAL_CATEGORY_IDS];
   merged.currentDate = parsed.currentDate ?? { ...INITIAL_GAME_DATE };
+  // v0.22：旧 v7 セーブにはガチャフィールドが無い（デフォルト補完）
+  merged.candidate = parsed.candidate ?? null;
+  merged.gachaPity = parsed.gachaPity ?? 0;
 
   // v0.17.1 修正：保存済みの解放（ステージ解放含む）を尊重する。
   // 旧実装は v0.10 時代の「人気ジャンル再ロック」を毎回適用しており、

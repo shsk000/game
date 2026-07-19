@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { BUG_CONFIG } from '../data/balance';
-import { useGameStore } from './gameStore';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mulberry32 } from '../core/ports';
+import { BUG_CONFIG, GACHA_CONFIG } from '../data/balance';
+import { setGameDeps, useGameStore } from './gameStore';
 import { resetStore } from './testing';
 import type { CurrentProject } from './types';
 import { ZERO_AXES } from './types';
@@ -86,5 +87,82 @@ describe('adDebugAssist（v0.19 広告でバグ半減・1開発1回）', () => {
   it('プロジェクトが無ければ false', () => {
     resetStore({ current: null });
     expect(useGameStore.getState().adDebugAssist()).toBe(false);
+  });
+});
+
+describe('採用ガチャ（v0.22）', () => {
+  const setDeterministicDeps = (seed: number) =>
+    setGameDeps({ rng: mulberry32(seed), now: () => 1_000_000 });
+
+  afterEach(() => {
+    // 他テストへ本番 deps の漏れを防ぐ
+    setGameDeps({ rng: Math.random, now: () => Date.now() });
+  });
+
+  it('pullGacha：資金がガチャ料分だけ減り、候補が出現する', () => {
+    setDeterministicDeps(1);
+    const price = GACHA_CONFIG.priceByScale.mini;
+    resetStore({ funds: price + 100, unlockedScales: ['mini'], candidate: null, gachaPity: 0 });
+    expect(useGameStore.getState().pullGacha()).toBe(true);
+    expect(useGameStore.getState().funds).toBe(100);
+    expect(useGameStore.getState().candidate).not.toBeNull();
+  });
+
+  it('pullGacha：資金がガチャ料未満なら false・状態不変', () => {
+    setDeterministicDeps(1);
+    const price = GACHA_CONFIG.priceByScale.mini;
+    resetStore({ funds: price - 1, unlockedScales: ['mini'], candidate: null });
+    expect(useGameStore.getState().pullGacha()).toBe(false);
+    expect(useGameStore.getState().funds).toBe(price - 1);
+    expect(useGameStore.getState().candidate).toBeNull();
+  });
+
+  it('pullGacha：S 排出でピティが 0 リセット、非 S で +1', () => {
+    // rng を固定して排出ランクを観測し、ピティ挙動を確認
+    setDeterministicDeps(1);
+    resetStore({ funds: 10_000_000, unlockedScales: ['mini'], candidate: null, gachaPity: 5 });
+    useGameStore.getState().pullGacha();
+    const rank = useGameStore.getState().candidate?.rank;
+    const pity = useGameStore.getState().gachaPity;
+    if (rank === 'S') expect(pity).toBe(0);
+    else expect(pity).toBe(6);
+  });
+
+  it('dismissCandidate：候補が消え、資金は返らない', () => {
+    setDeterministicDeps(1);
+    const price = GACHA_CONFIG.priceByScale.mini;
+    resetStore({ funds: price + 500, unlockedScales: ['mini'], candidate: null });
+    useGameStore.getState().pullGacha();
+    const fundsAfterPull = useGameStore.getState().funds;
+    useGameStore.getState().dismissCandidate();
+    expect(useGameStore.getState().candidate).toBeNull();
+    expect(useGameStore.getState().funds).toBe(fundsAfterPull); // 返金なし
+  });
+
+  it('hireCandidate：初月給が引かれ社員が増え、候補は消える', () => {
+    setDeterministicDeps(1);
+    resetStore({ funds: 10_000_000, unlockedScales: ['mini'], candidate: null, employees: [] });
+    useGameStore.getState().pullGacha();
+    const cand = useGameStore.getState().candidate;
+    expect(cand).not.toBeNull();
+    const fundsBeforeHire = useGameStore.getState().funds;
+    expect(useGameStore.getState().hireCandidate()).toBe(true);
+    expect(useGameStore.getState().employees.length).toBe(1);
+    expect(useGameStore.getState().funds).toBe(fundsBeforeHire - (cand?.wage ?? 0));
+    expect(useGameStore.getState().candidate).toBeNull();
+  });
+
+  it('20連 S 非排出→次で S 確定（ピティが実 store で機能する）', () => {
+    // rng を常に 0.99（本来 B）に固定
+    setGameDeps({ rng: () => 0.99, now: () => 1_000_000 });
+    resetStore({ funds: 10_000_000_000, unlockedScales: ['mini'], candidate: null, gachaPity: 0 });
+    for (let i = 0; i < GACHA_CONFIG.pityThreshold; i++) {
+      useGameStore.getState().pullGacha();
+      expect(useGameStore.getState().candidate?.rank).toBe('B');
+    }
+    expect(useGameStore.getState().gachaPity).toBe(GACHA_CONFIG.pityThreshold);
+    useGameStore.getState().pullGacha();
+    expect(useGameStore.getState().candidate?.rank).toBe('S');
+    expect(useGameStore.getState().gachaPity).toBe(0);
   });
 });

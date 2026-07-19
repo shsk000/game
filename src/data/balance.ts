@@ -115,8 +115,59 @@ export const ROLE_EFFECT = {
   prSalesBonus: 0.2,
 } as const;
 
-/** 採用候補の初期 power レンジ（見習い帯。成長システムで育てるのが前提）叩き台 🔧 */
-export const CANDIDATE_POWER_RANGE = { min: 0.2, max: 0.6 } as const;
+// ============================================================
+// v0.22：採用ガチャ（spec v22 §4。旧 CANDIDATE_POWER_RANGE 0.2〜0.6 をランク帯に置換）
+// ============================================================
+
+export type GachaRank = 'B' | 'A' | 'S';
+
+/**
+ * 採用ガチャの確定テーブル（spec v22 §4。数値は全て叩き台 🔧）。
+ *
+ * - rates: 排出率（合計 1.0）。S 5% は「引きの快感」の核
+ * - powerRange: ランク別 basePower 帯。S 上限 0.7 は旧上限 0.6 より高いが、
+ *   charPower は POWER_CAP × powerBonus 上限 70 で天井固定＝S は「天井に早く着く」だけ
+ * - specialty: ランク別の得意分野構成。A は旧仕様（3-10 ＋ 40% で 1-4）と同じ
+ * - priceByScale: 単発価格。解放済み最高規模に連動（アンカー ≒ devCost × 1/6。
+ *   S 期待 20 連 ≒ devCost × 3）。固定額だと中盤以降に実質無料化するため規模スケール制
+ * - pityThreshold: 天井。この回数連続で S 非排出なら次の 1 回は S 確定
+ */
+export const GACHA_CONFIG = {
+  rates: { B: 0.7, A: 0.25, S: 0.05 },
+  powerRange: {
+    B: { min: 0.2, max: 0.4 },
+    A: { min: 0.4, max: 0.55 },
+    S: { min: 0.55, max: 0.7 },
+  },
+  specialty: {
+    B: { primaryMin: 3, primaryMax: 7, secondChance: 0, secondMin: 0, secondMax: 0 },
+    A: { primaryMin: 3, primaryMax: 10, secondChance: 0.4, secondMin: 1, secondMax: 4 },
+    S: { primaryMin: 6, primaryMax: 10, secondChance: 1, secondMin: 3, secondMax: 6 },
+  },
+  priceByScale: {
+    mini: 50_000, // ¥5 万
+    mobile: 500_000, // ¥50 万
+    indie: 8_000_000, // ¥800 万
+    hit: 150_000_000, // ¥1.5 億
+    aaa: 1_500_000_000, // ¥15 億
+  },
+  pityThreshold: 20,
+} as const satisfies {
+  rates: Record<GachaRank, number>;
+  powerRange: Record<GachaRank, { min: number; max: number }>;
+  specialty: Record<
+    GachaRank,
+    {
+      primaryMin: number;
+      primaryMax: number;
+      secondChance: number;
+      secondMin: number;
+      secondMax: number;
+    }
+  >;
+  priceByScale: Record<Scale, number>;
+  pityThreshold: number;
+};
 
 // ============================================================
 // v0.16：社員成長（spec v16 §1。Lv10 = 数十作品規模＝終盤・オーナー確定）
