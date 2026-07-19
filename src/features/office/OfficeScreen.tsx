@@ -944,31 +944,85 @@ export const OfficeScreen = () => {
                 background: '#eef0d8',
                 padding: 10,
                 borderRadius: 2,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
               }}
             >
-              <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700 }}>
-                🛠 デバッグ：お金を追加（開発ビルドのみ）
+              <p style={{ margin: 0, fontSize: 12, fontWeight: 700 }}>
+                🛠 デバッグ（開発ビルドのみ）
               </p>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {[
-                  { label: '+¥100万', amt: 1_000_000 },
-                  { label: '+¥1000万', amt: 10_000_000 },
-                  { label: '+¥1億', amt: 100_000_000 },
-                  { label: '+¥10億', amt: 1_000_000_000 },
-                ].map((q) => (
-                  <PixelButton
-                    key={q.amt}
-                    size="small"
-                    variant="secondary"
-                    onClick={() => useGameStore.setState((s) => ({ funds: s.funds + q.amt }))}
-                  >
-                    {q.label}
-                  </PixelButton>
-                ))}
+
+              {/* 所持金 */}
+              <div>
+                <p style={{ margin: '0 0 4px', fontSize: 11, color: '#606878' }}>
+                  所持金を追加（現在：{formatYen(funds)}）
+                </p>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {[
+                    { label: '+¥100万', amt: 1_000_000 },
+                    { label: '+¥1000万', amt: 10_000_000 },
+                    { label: '+¥1億', amt: 100_000_000 },
+                    { label: '+¥10億', amt: 1_000_000_000 },
+                  ].map((q) => (
+                    <PixelButton
+                      key={q.amt}
+                      size="small"
+                      variant="secondary"
+                      onClick={() => useGameStore.setState((s) => ({ funds: s.funds + q.amt }))}
+                    >
+                      {q.label}
+                    </PixelButton>
+                  ))}
+                </div>
               </div>
-              <p style={{ margin: '8px 0 0', fontSize: 11, color: '#606878' }}>
-                現在：{formatYen(funds)}
-              </p>
+
+              {/* 累計売上（規模解放ゲートはこれで判定。所持金では解放できない） */}
+              <div>
+                <p style={{ margin: '0 0 4px', fontSize: 11, color: '#606878' }}>
+                  累計売上を追加（規模解放の条件。現在：{formatYen(lifetimeRevenue)}）
+                </p>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {[
+                    { label: '+¥1000万', amt: 10_000_000 },
+                    { label: '+¥1億', amt: 100_000_000 },
+                    { label: '+¥10億', amt: 1_000_000_000 },
+                  ].map((q) => (
+                    <PixelButton
+                      key={q.amt}
+                      size="small"
+                      variant="secondary"
+                      onClick={() =>
+                        useGameStore.setState((s) => ({
+                          lifetimeRevenue: s.lifetimeRevenue + q.amt,
+                        }))
+                      }
+                    >
+                      {q.label}
+                    </PixelButton>
+                  ))}
+                </div>
+              </div>
+
+              {/* 規模を強制解放（条件を無視して次の規模を追加） */}
+              <div>
+                <p style={{ margin: '0 0 4px', fontSize: 11, color: '#606878' }}>
+                  規模解放（条件無視。現在：{currentScale}）
+                </p>
+                <PixelButton
+                  size="small"
+                  variant="secondary"
+                  disabled={!next}
+                  onClick={() =>
+                    useGameStore.setState((s) => {
+                      const nx = nextLockedScale(s.unlockedScales);
+                      return nx ? { unlockedScales: [...s.unlockedScales, nx.id] } : {};
+                    })
+                  }
+                >
+                  {next ? `${next.name} を解放` : '全規模解放済み'}
+                </PixelButton>
+              </div>
             </div>
           )}
           <p style={{ margin: 0, fontSize: 13 }}>
