@@ -103,6 +103,11 @@ describe('computeBorrow', () => {
     expect(computeBorrow(ctx(), 0)).toBeNull();
     expect(computeBorrow(ctx(), -100)).toBeNull();
   });
+
+  it('非有限（NaN/Infinity）は不成立で funds/debt を汚染しない', () => {
+    expect(computeBorrow(ctx(), Number.NaN)).toBeNull();
+    expect(computeBorrow(ctx(), Number.POSITIVE_INFINITY)).toBeNull();
+  });
 });
 
 describe('computeRepay', () => {
@@ -115,6 +120,11 @@ describe('computeRepay', () => {
     expect(computeRepay({ funds: 1000, debt: 0 }, 100)).toBeNull();
     expect(computeRepay({ funds: 0, debt: 1000 }, 100)).toBeNull();
     expect(computeRepay({ funds: 1000, debt: 1000 }, 0)).toBeNull();
+  });
+
+  it('非有限（NaN/Infinity）は不成立で funds/debt を汚染しない', () => {
+    expect(computeRepay({ funds: 1000, debt: 1000 }, Number.NaN)).toBeNull();
+    expect(computeRepay({ funds: 1000, debt: 1000 }, Number.POSITIVE_INFINITY)).toBeNull();
   });
 });
 

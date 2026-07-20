@@ -59,7 +59,8 @@ export const computeBorrow = (
   ctx: EconomyCtx,
   amount: number,
 ): { funds: number; debt: number } | null => {
-  if (amount <= 0) return null;
+  // 非有限（NaN/Infinity）や 0 以下は無効。NaN は `<= 0` を素通りするため明示的に弾く。
+  if (!Number.isFinite(amount) || amount <= 0) return null;
   const salaries = sumMonthlySalaries(ctx.employees);
   const rent = currentRent(ctx.unlockedScales);
   const limit = computeBorrowingLimit(salaries + rent);
@@ -72,7 +73,8 @@ export const computeRepay = (
   ctx: Pick<EconomyCtx, 'funds' | 'debt'>,
   amount: number,
 ): { funds: number; debt: number } | null => {
-  if (amount <= 0) return null;
+  // 非有限（NaN/Infinity）や 0 以下は無効。NaN は `<= 0` を素通りするため明示的に弾く。
+  if (!Number.isFinite(amount) || amount <= 0) return null;
   const pay = Math.min(amount, ctx.funds, ctx.debt);
   if (pay <= 0) return null;
   return { funds: ctx.funds - pay, debt: ctx.debt - pay };
