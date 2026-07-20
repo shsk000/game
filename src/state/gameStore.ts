@@ -7,6 +7,7 @@ import {
   rollBugOnMiss,
 } from '../core/bugs';
 import { computeBorrow, computeMonthlyTick, computeRepay } from '../core/economy';
+import { canBuyEquipment, freeCopies, type OwnedItems } from '../core/equip';
 import { gachaPrice, nextPityCount, rollRank } from '../core/gacha';
 import type { LevelUp } from '../core/growth';
 import { investPrice } from '../core/invest';
@@ -18,6 +19,7 @@ import { DEV_PHRASES_PER_WEEK, type GachaKind } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import { newCandidate, sumProgrammerSpeed } from '../data/employees';
+import { DEFAULT_LOADOUT, EQUIPMENT_BY_ID, type EquipSlot } from '../data/equipment';
 import type { GenreId } from '../data/genres';
 import { GENRE_BY_ID, GENRES } from '../data/genres';
 import { MAX_EMPLOYEES } from '../data/officeLayout';
@@ -180,6 +182,16 @@ type Actions = {
   buyGenre: (id: GenreId) => boolean;
   /** v0.21 投資：未解放テーマを資金で先行購入（unlockedThemes に追加）。成立で true。 */
   buyTheme: (id: ThemeId) => boolean;
+  /**
+   * v0.25 装備：装備アイテムを資金で購入（ownedItems に追加＝ライセンス方式）。
+   * 既所有・初期装備（cost0）・資金不足・不明IDは false。
+   */
+  buyEquipment: (itemId: string) => boolean;
+  /**
+   * v0.25 装備：社員のスロットに装備/解除する。itemId=null または初期装備で解除。
+   * 未所有アイテム・スロット不一致・不明社員は false。
+   */
+  equipItem: (empId: string, slot: EquipSlot, itemId: string | null) => boolean;
   clearOfflineReport: () => void;
   finishTutorial: () => void;
   clearNewlyAchieved: () => void;
@@ -237,6 +249,8 @@ export type GameState = {
    * pityThreshold（20）到達で次の 1 回が S 確定。S 排出でリセット。セーブに永続化。
    */
   gachaPity: number;
+  /** v0.25 装備：購入済み装備の個数（itemId→個数・実体方式で1個=1社員ぶん）。割当は Employee.equipped。 */
+  ownedItems: OwnedItems;
 } & Actions;
 
 /**
@@ -276,6 +290,7 @@ export const useGameStore = create<GameState>()(
     gameOver: false,
     debt: 0,
     gachaPity: pureDefaults.gachaPity,
+    ownedItems: pureDefaults.ownedItems,
 
     goTo: (screen) => set({ screen }),
 
@@ -665,6 +680,44 @@ export const useGameStore = create<GameState>()(
       return true;
     },
 
+    // v0.25 装備：購入（実体方式。1個=1社員ぶん。既に所有していても追加購入して個数を増やせる）。
+    buyEquipment: (itemId) => {
+      const s = get();
+      const def = EQUIPMENT_BY_ID[itemId];
+      if (!def) return false;
+      if (!canBuyEquipment({ def, funds: s.funds })) return false;
+      set({
+        funds: s.funds - def.cost,
+        ownedItems: { ...s.ownedItems, [itemId]: (s.ownedItems[itemId] ?? 0) + 1 },
+      });
+      return true;
+    },
+
+    // v0.25 装備：社員のスロットに割当/解除。null・初期装備で解除（equipped からキー削除）。
+    // 実体方式：別の社員へ新規装備するには「空き個数（購入済み−使用中）」が要る。
+    equipItem: (empId, slot, itemId) => {
+      const s = get();
+      const emp = s.employees.find((e) => e.id === empId);
+      if (!emp) return false;
+      const isDefault = itemId !== null && DEFAULT_LOADOUT[slot] === itemId;
+      if (itemId !== null && !isDefault) {
+        const def = EQUIPMENT_BY_ID[itemId];
+        if (!def || def.slot !== slot) return false;
+        const already = emp.equipped?.[slot] === itemId; // 同じ物を着け直すのは空き不要
+        const loadouts = s.employees.map((e) => e.equipped ?? {});
+        if (!already && freeCopies(s.ownedItems, loadouts, itemId) <= 0) return false;
+      }
+      const employees = s.employees.map((e) => {
+        if (e.id !== empId) return e;
+        const equipped = { ...(e.equipped ?? {}) };
+        if (itemId === null || isDefault) delete equipped[slot];
+        else equipped[slot] = itemId;
+        return { ...e, equipped };
+      });
+      set({ employees });
+      return true;
+    },
+
     clearOfflineReport: () => set({ offlineReport: null }),
     finishTutorial: () => set({ tutorialDone: true }),
     clearNewlyAchieved: () => set({ newlyAchieved: [] }),
@@ -714,6 +767,7 @@ export const useGameStore = create<GameState>()(
         gameOver: false,
         debt: 0,
         gachaPity: 0,
+        ownedItems: d.ownedItems,
       });
     },
   })),

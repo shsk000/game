@@ -21,6 +21,7 @@ import { nextLockedScale, SCALE_BY_ID, SCALES } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
 import { formatYen } from '../../utils/format';
+import { EquipmentModal } from './EquipmentModal';
 import { formatPower, RANK_VISUAL, ROLE_VISUAL } from './employeeDisplay';
 import { GachaReveal } from './GachaReveal';
 
@@ -38,7 +39,7 @@ import { GachaReveal } from './GachaReveal';
 
 const ICON_BASE = '/sprites/ui';
 
-type ModalKind = 'hire' | 'scale' | 'achievements' | 'settings' | 'debt' | null;
+type ModalKind = 'hire' | 'scale' | 'equipment' | 'achievements' | 'settings' | 'debt' | null;
 
 // formatPower / ROLE_VISUAL / RANK_VISUAL は employeeDisplay.ts に共通化（v0.22）
 // SegGauge は src/components/ui/SegGauge.tsx に共通化（v0.11 開発フェーズと共用）
@@ -122,6 +123,12 @@ export const OfficeScreen = () => {
       emoji: '🏆',
       iconSrc: `${ICON_BASE}/icon_scale.png`,
       onClick: () => setModal('scale'),
+    },
+    {
+      id: 'equipment',
+      label: '装備',
+      emoji: '🛠',
+      onClick: () => setModal('equipment'),
     },
     {
       id: 'library',
@@ -727,6 +734,9 @@ export const OfficeScreen = () => {
           </div>
         )}
       </PixelModal>
+
+      {/* ── 装備モーダル（v0.25 装備システム） ── */}
+      <EquipmentModal open={modal === 'equipment'} onClose={closeModal} />
 
       {/* ── 規模解放モーダル ── */}
       <PixelModal open={modal === 'scale'} onClose={closeModal} title="規模解放" maxWidth={520}>

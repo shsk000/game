@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AXIS_QUALITY_BONUS_CAP } from '../data/balance';
+import { AXIS_QUALITY_BONUS_CAP, EQUIP_QUALITY_BONUS_CAP } from '../data/balance';
 import { SCALE_BY_ID } from '../data/scales';
 import type { CurrentProject, DevAxes, Work } from '../state/types';
 import { ZERO_AXES } from '../state/types';
@@ -233,6 +233,81 @@ describe('computeRelease', () => {
     const total = (w: Work) => w.initialRevenue + w.salesPool;
     // 炎上リスク 20×2=40 → 売上倍率が 1.0 → 0.6 に低下（品質減点の影響も乗る）
     expect(total(buggy.work)).toBeLessThan(total(clean.work));
+  });
+
+  // === v0.25 装備システム ===
+  const worker = {
+    id: 'e1',
+    name: 'テスト 花子',
+    role: 'programmer' as const,
+    power: 0.4,
+    basePower: 0.4,
+    level: 1,
+    exp: 0,
+    wage: 540_000,
+    specialties: [],
+  };
+  // program の devStats を積んだ状態（装備の program 倍率が効く土台）
+  const builtProgram = () =>
+    project({
+      assignedEmployeeIds: ['e1'],
+      devStats: { program: 100, graphics: 0, sound: 0, design: 0 },
+    });
+
+  it('装備なしと「初期装備（効果1.0）」は品質が一致する（装備枠は未装備で0）', () => {
+    const bare = computeRelease(
+      ctx({ employees: [worker], current: builtProgram() }),
+      undefined,
+      deps(),
+    ).work;
+    const defaultEquipped = computeRelease(
+      ctx({
+        employees: [
+          { ...worker, equipped: { pc: 'pc-laptop', chair: 'chair-basic', misc: 'misc-none' } },
+        ],
+        current: builtProgram(),
+      }),
+      undefined,
+      deps(),
+    ).work;
+    expect(defaultEquipped.quality).toBe(bare.quality);
+  });
+
+  it('装備した社員は、打ったカテゴリの品質が上がる（上限内）', () => {
+    const bare = computeRelease(
+      ctx({ employees: [worker], current: builtProgram() }),
+      undefined,
+      deps(),
+    ).work;
+    const equipped = computeRelease(
+      ctx({
+        employees: [{ ...worker, equipped: { pc: 'pc-gaming' } }], // program 1.35
+        current: builtProgram(),
+      }),
+      undefined,
+      deps(),
+    ).work;
+    expect(equipped.quality).toBeGreaterThan(bare.quality);
+    // 装備以外は同一入力・同一 seed なので、差分＝装備枠のみ ≤ EQUIP_QUALITY_BONUS_CAP
+    expect(equipped.quality - bare.quality).toBeLessThanOrEqual(EQUIP_QUALITY_BONUS_CAP);
+  });
+
+  it('打っていないカテゴリの装備は効かない（devStatsが0なら加点0）', () => {
+    // graphics を打っていない（program だけ積んだ）状態で graphics 装備（液タブ）を付けても不変
+    const bare = computeRelease(
+      ctx({ employees: [worker], current: builtProgram() }),
+      undefined,
+      deps(),
+    ).work;
+    const pentab = computeRelease(
+      ctx({
+        employees: [{ ...worker, equipped: { misc: 'misc-pentab' } }], // graphics 1.25
+        current: builtProgram(),
+      }),
+      undefined,
+      deps(),
+    ).work;
+    expect(pentab.quality).toBe(bare.quality);
   });
 
   it('ゴースト（開発タイム記録）を上回ったら ghostBeaten', () => {
