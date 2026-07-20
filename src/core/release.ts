@@ -43,8 +43,6 @@ import {
 
 export type ReleaseOpts = {
   launchAd?: boolean;
-  marketingAd?: boolean;
-  debugAd?: boolean;
 };
 
 /** リリース計算が読む状態のスナップショット */
@@ -109,13 +107,13 @@ export const computeRelease = (
     themeId: cur.themeId,
   });
   // 3) タイピング演技スコア（0..100）— spec §2-2
-  // 広告ボーナス（既存仕様）はパフォーマンス側に +5 ずつ寄せる
-  const adPerfBoost = (opts?.marketingAd ? 5 : 0) + (opts?.debugAd ? 5 : 0);
+  // 発売時の広告（マーケ/デバッグチーム）でスコアを +5 する旧仕様は撤去。
+  // 広告はスコアに影響させない（バグ削減はデバッグフェーズ、売上はローンチ広告で扱う）。
   // v0.17：バグゼロ（開発〜デバッグで残バグ 0）でタイピング演技 +5（既存 noBugs 判定に接続）
   const remainingBugs = cur.bugCount ?? 0;
   const performance = Math.min(
     100,
-    computePerformanceScore({ ...cur.perf, noBugs: remainingBugs === 0 }) + adPerfBoost,
+    computePerformanceScore({ ...cur.perf, noBugs: remainingBugs === 0 }),
   );
 
   // 4) computeQualityV10 で合成（運の基底 50 ± 揺らぎ）。神ゲーガチャは v0.10 で廃止。

@@ -84,8 +84,6 @@ export const ReleaseScreen = () => {
   const [resultStep, setResultStep] = useState<'score' | 'sales'>('score');
   const [displayQ, setDisplayQ] = useState(0);
   const [displayMeta, setDisplayMeta] = useState(0);
-  const [marketingApplied, setMarketingApplied] = useState(false);
-  const [debugApplied, setDebugApplied] = useState(false);
   const [launchAdApplied, setLaunchAdApplied] = useState(false);
   const [adRunning, setAdRunning] = useState<null | 'marketing' | 'debug' | 'launch'>(null);
   const [bonusRevenue, setBonusRevenue] = useState(0);
@@ -96,8 +94,6 @@ export const ReleaseScreen = () => {
   useEffect(() => {
     if (!work && current) {
       setStage('pre-ads');
-      setMarketingApplied(false);
-      setDebugApplied(false);
       setLaunchAdApplied(false);
       setBonusRevenue(0);
       setDisplayQ(0);
@@ -178,37 +174,11 @@ export const ReleaseScreen = () => {
   const theme = THEME_BY_ID[planThemeId];
   const compat = getCompat(planGenreId, planThemeId);
 
-  const runMarketingAd = () => {
-    if (marketingApplied || adRunning) return;
-    setAdRunning('marketing');
-    ads.showRewarded({
-      label: 'marketing-ad',
-      onComplete: () => {
-        setMarketingApplied(true);
-        setAdRunning(null);
-      },
-      onFail: () => setAdRunning(null),
-    });
-  };
-
-  const runDebugAd = () => {
-    if (debugApplied || adRunning) return;
-    setAdRunning('debug');
-    ads.showRewarded({
-      label: 'debug-ad',
-      onComplete: () => {
-        setDebugApplied(true);
-        setAdRunning(null);
-      },
-      onFail: () => setAdRunning(null),
-    });
-  };
-
   const revealResults = () => {
     // current が無い＝既に releaseWork 済み。二度押し（結果発表ボタンの高速ダブルクリック）で
     // releaseWork が `no current project` を throw しクラッシュするのを防ぐ。
     if (adRunning || !current) return;
-    releaseWork({ marketingAd: marketingApplied, debugAd: debugApplied });
+    releaseWork();
   };
 
   const runLaunchAd = () => {
@@ -264,31 +234,6 @@ export const ReleaseScreen = () => {
               <span>
                 {theme.emoji} {theme.name}
               </span>
-            </div>
-            <p className="meta-flavor">発売前に広告でブーストできます。</p>
-            <div className="ad-row">
-              <button
-                className="primary-btn ad-btn"
-                disabled={marketingApplied || adRunning !== null}
-                onClick={runMarketingAd}
-              >
-                {marketingApplied
-                  ? '✅ マーケティング適用済 (+5 カテゴリ)'
-                  : adRunning === 'marketing'
-                    ? '広告再生中…'
-                    : '📺 マーケティング広告 +5 カテゴリ'}
-              </button>
-              <button
-                className="primary-btn ad-btn"
-                disabled={debugApplied || adRunning !== null}
-                onClick={runDebugAd}
-              >
-                {debugApplied
-                  ? '✅ デバッグチーム適用済 (+5 パフォ)'
-                  : adRunning === 'debug'
-                    ? '広告再生中…'
-                    : '📺 デバッグチーム広告 +5 パフォーマンス'}
-              </button>
             </div>
             <button className="primary-btn" disabled={adRunning !== null} onClick={revealResults}>
               🎬 結果を発表
