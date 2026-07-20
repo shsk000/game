@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mulberry32 } from '../core/ports';
 import { BUG_CONFIG, GACHA_CONFIG } from '../data/balance';
+import { SCALE_BY_ID } from '../data/scales';
 import { setGameDeps, useGameStore } from './gameStore';
 import { resetStore } from './testing';
 import type { CurrentProject } from './types';
@@ -77,6 +78,30 @@ describe('finishDevelopment（DEV検証フック：タイピングを飛ばし�
     useGameStore.getState().finishDevelopment();
     expect(useGameStore.getState().current).toBeNull();
     expect(useGameStore.getState().screen).not.toBe('release');
+  });
+});
+
+describe('startProject（前払い開発費 devCost の徴収）', () => {
+  beforeEach(() => {
+    resetStore();
+    setGameDeps({ rng: () => 0.5, now: () => 1_000_000 });
+  });
+
+  it('企画開始で規模の devCost が funds から引かれる', () => {
+    resetStore({ funds: 5_000_000, current: null });
+    useGameStore.getState().startProject('puzzle', 'sushi', 'mini');
+    const s = useGameStore.getState();
+    expect(s.funds).toBe(5_000_000 - SCALE_BY_ID.mini.baseCost);
+    expect(s.current?.phase).toBe('planning');
+    expect(s.debt).toBe(0);
+  });
+
+  it('資金不足なら不足分が借金へ振替される（funds は 0 下げ止まり）', () => {
+    resetStore({ funds: 100_000, current: null });
+    useGameStore.getState().startProject('puzzle', 'sushi', 'mini');
+    const s = useGameStore.getState();
+    expect(s.funds).toBe(0);
+    expect(s.debt).toBe(SCALE_BY_ID.mini.baseCost - 100_000);
   });
 });
 

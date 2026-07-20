@@ -78,6 +78,20 @@ export const computeRepay = (
   return { funds: ctx.funds - pay, debt: ctx.debt - pay };
 };
 
+/**
+ * コスト支払い（企画開始の前払い開発費 devCost 等）。computeMonthlyTick と同じ規則で、
+ * 資金がマイナスになった分は自動的に借金へ振替し、資金は 0 で下げ止まる。
+ * （ゲームオーバー判定は月初 computeMonthlyTick 側に委ねる＝ここでは行わない）
+ */
+export const computeSpend = (
+  ctx: { funds: number; debt: number },
+  amount: number,
+): { funds: number; debt: number } => {
+  const raw = ctx.funds - amount;
+  if (raw < 0) return { funds: 0, debt: ctx.debt + -raw };
+  return { funds: raw, debt: ctx.debt };
+};
+
 /** オフライン収益の反映猶予：これ未満の離席はレポートしない */
 const MIN_AWAY_SEC = 60;
 
