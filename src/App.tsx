@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { GameOverModal } from './components/GameOverModal';
 import { GlobalTicker } from './components/GlobalTicker';
 import { ScreenOverlay } from './components/ui';
@@ -8,6 +9,7 @@ import { OfficeScreen } from './features/office/OfficeScreen';
 import { PlanScreen } from './features/plan/PlanScreen';
 import { ReleaseScreen } from './features/release/ReleaseScreen';
 import { useGameStore } from './state/gameStore';
+import { setBgmTrack } from './utils/bgm';
 
 /**
  * v0.11 G2：ゲーム UI の文法に基づく画面構成。
@@ -20,6 +22,11 @@ export default function App() {
   const screen = useGameStore((s) => s.screen);
   const gameOver = useGameStore((s) => s.gameOver);
   const goTo = useGameStore((s) => s.goTo);
+
+  // v0.24：画面に応じて BGM トラックを切替（開発中は集中テンポ、それ以外はオフィス）
+  useEffect(() => {
+    setBgmTrack(screen === 'develop' ? 'develop' : 'office');
+  }, [screen]);
 
   // 開発中はフルスクリーンテイクオーバー（ステージは描画しない＝タイピング集中）
   if (screen === 'develop') {

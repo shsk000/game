@@ -28,6 +28,7 @@ import { THEME_BY_ID, THEMES } from '../data/themes';
 import { generateTitle } from '../data/titleGenerator';
 import { ensureTrend, type Trend } from '../data/trend';
 import { settlePool } from '../utils/sales';
+import { setSfxMuted, setSfxVolume } from '../utils/sfx';
 import type { Records } from '../utils/storage';
 import * as storage from '../utils/storage';
 import type {
@@ -192,6 +193,10 @@ type Actions = {
   borrowMoney: (amount: number) => boolean;
   /** v0.10 仕上げ §6-7：返済。funds の範囲で debt を返す。 */
   repayDebt: (amount: number) => boolean;
+  /** v0.24：効果音ミュート切替（sfx へ即反映＋永続化） */
+  setMuted: (m: boolean) => void;
+  /** v0.24：効果音音量 0..1（範囲外はクランプ。sfx へ即反映＋永続化） */
+  setVolume: (v: number) => void;
   reset: () => void;
 };
 
@@ -232,6 +237,10 @@ export type GameState = {
    * 月利は monthlyTick 時に乗る。借入上限超 + 資金 0 でゲームオーバー。
    */
   debt: number;
+  /** v0.24：効果音ミュート */
+  muted: boolean;
+  /** v0.24：効果音音量 0..1 */
+  volume: number;
   /**
    * v0.22：採用ガチャのピティ（天井）カウンタ。S 非排出の連続回数。
    * pityThreshold（20）到達で次の 1 回が S 確定。S 排出でリセット。セーブに永続化。
@@ -275,6 +284,8 @@ export const useGameStore = create<GameState>()(
     lastFixedCost: null,
     gameOver: false,
     debt: 0,
+    muted: pureDefaults.muted,
+    volume: pureDefaults.volume,
     gachaPity: pureDefaults.gachaPity,
 
     goTo: (screen) => set({ screen }),
@@ -669,6 +680,16 @@ export const useGameStore = create<GameState>()(
     finishTutorial: () => set({ tutorialDone: true }),
     clearNewlyAchieved: () => set({ newlyAchieved: [] }),
 
+    setMuted: (m) => {
+      setSfxMuted(m);
+      set({ muted: m });
+    },
+    setVolume: (v) => {
+      const vol = Math.min(1, Math.max(0, v));
+      setSfxVolume(vol);
+      set({ volume: vol });
+    },
+
     borrowMoney: (amount) => {
       const patch = computeBorrow(get(), amount);
       if (!patch) return false;
@@ -713,8 +734,12 @@ export const useGameStore = create<GameState>()(
         lastFixedCost: null,
         gameOver: false,
         debt: 0,
+        muted: d.muted,
+        volume: d.volume,
         gachaPity: 0,
       });
+      setSfxMuted(d.muted);
+      setSfxVolume(d.volume);
     },
   })),
 );
