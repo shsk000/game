@@ -6,12 +6,17 @@ import {
   useState,
 } from 'react';
 import {
+  bookSprite,
   chairSprite,
+  desktopSprite,
+  gamingRigSprite,
   laptopSprite,
   NATIVE_H,
   NATIVE_W,
   OFFICE_LAYOUT,
   officeBgSrc,
+  pentabSprite,
+  plantSprite,
   PROP_TRANSFORMS,
   type PropTransform,
   type SeatDir,
@@ -48,6 +53,12 @@ const CHAR_SCALE = OFFICE_LAYOUT.charScale;
 const PROPS: PropDef[] = [
   { id: 'laptop', label: 'ノートPC', sprite: laptopSprite },
   { id: 'chair', label: '椅子', sprite: chairSprite },
+  // v0.25 装備プロップ（机上に置く単体オブジェクト）
+  { id: 'desktop', label: 'デスクトップ', sprite: desktopSprite },
+  { id: 'gaming_rig', label: 'ゲーミング', sprite: gamingRigSprite },
+  { id: 'book', label: '技術書', sprite: bookSprite },
+  { id: 'pentab', label: '液タブ', sprite: pentabSprite },
+  { id: 'plant', label: '観葉植物', sprite: plantSprite },
 ];
 
 const ROSTER = [

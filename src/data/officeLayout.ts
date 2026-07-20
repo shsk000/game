@@ -74,6 +74,12 @@ export const sittingSprite = (folder: string, dir: SeatDir) =>
 
 export const chairSprite = (dir: SeatDir) => `${SPRITE_BASE}/chair_${dir}.png`;
 export const laptopSprite = (dir: SeatDir) => `${SPRITE_BASE}/laptop_${dir}.png`;
+// v0.25 装備の机上スプライト（<name>_<dir>.png）。単体オブジェクト・透過背景。
+export const desktopSprite = (dir: SeatDir) => `${SPRITE_BASE}/desktop_${dir}.png`;
+export const gamingRigSprite = (dir: SeatDir) => `${SPRITE_BASE}/gaming_rig_${dir}.png`;
+export const bookSprite = (dir: SeatDir) => `${SPRITE_BASE}/book_${dir}.png`;
+export const pentabSprite = (dir: SeatDir) => `${SPRITE_BASE}/pentab_${dir}.png`;
+export const plantSprite = (dir: SeatDir) => `${SPRITE_BASE}/plant_${dir}.png`;
 export const officeBgSrc = `${SPRITE_BASE}/office_bg.png`;
 
 export type PropTransform = { x: number; y: number; scale: number; z: number };
@@ -90,7 +96,16 @@ export type PropTransform = { x: number; y: number; scale: number; z: number };
  *
  * 🔧 south は現状どの座席でも使われていない（全席 north）ため未調整の既定値のまま。
  */
-export const PROP_TRANSFORMS: Record<'laptop' | 'chair', Record<SeatDir, PropTransform>> = {
+export type PropKey =
+  | 'laptop'
+  | 'chair'
+  | 'desktop'
+  | 'gaming_rig'
+  | 'book'
+  | 'pentab'
+  | 'plant';
+
+export const PROP_TRANSFORMS: Record<PropKey, Record<SeatDir, PropTransform>> = {
   laptop: {
     north: { x: -3, y: -155, scale: 1.4, z: -1 },
     south: { x: 0, y: -230, scale: OFFICE_LAYOUT.charScale, z: 2 },
@@ -100,6 +115,27 @@ export const PROP_TRANSFORMS: Record<'laptop' | 'chair', Record<SeatDir, PropTra
     north: { x: -3, y: -32, scale: 1, z: 1 },
     // 🔧 south は旧素材（48×64・グレー）のまま。使う席が出たら north と同じ発注から差し替える。
     south: { x: 0, y: 10, scale: OFFICE_LAYOUT.charScale, z: -1 },
+  },
+  // v0.25 装備プロップ。初期値は仮（/admin/props で実機調整して JSON を転記する）。
+  desktop: {
+    north: { x: -3, y: -160, scale: 1, z: -1 },
+    south: { x: 0, y: -230, scale: 1, z: 2 },
+  },
+  gaming_rig: {
+    north: { x: -3, y: -160, scale: 1, z: -1 },
+    south: { x: 0, y: -230, scale: 1, z: 2 },
+  },
+  book: {
+    north: { x: 42, y: -120, scale: 0.55, z: 1 },
+    south: { x: 42, y: -120, scale: 0.55, z: 1 },
+  },
+  pentab: {
+    north: { x: -42, y: -118, scale: 0.6, z: 1 },
+    south: { x: -42, y: -118, scale: 0.6, z: 1 },
+  },
+  plant: {
+    north: { x: 50, y: -150, scale: 0.6, z: 1 },
+    south: { x: 50, y: -150, scale: 0.6, z: 1 },
   },
 };
 
