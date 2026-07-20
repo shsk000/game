@@ -205,7 +205,9 @@ export const ReleaseScreen = () => {
   };
 
   const revealResults = () => {
-    if (adRunning) return;
+    // current が無い＝既に releaseWork 済み。二度押し（結果発表ボタンの高速ダブルクリック）で
+    // releaseWork が `no current project` を throw しクラッシュするのを防ぐ。
+    if (adRunning || !current) return;
     releaseWork({ marketingAd: marketingApplied, debugAd: debugApplied });
   };
 
