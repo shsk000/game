@@ -35,13 +35,39 @@ const sellingWork = (over: Partial<Work> = {}): Work => ({
 });
 
 describe('buildBootPatch', () => {
-  it('新規データ（離席なし）：オフラインレポートなし・候補とトレンドが埋まる', () => {
+  it('新規データ（離席なし）：オフラインレポートなし・トレンドが埋まる・候補はガチャ前なので空', () => {
     const p = { ...storage.defaults(), lastSeenAt: NOW };
     const patch = buildBootPatch(p, deps());
     expect(patch.offlineReport).toBeNull();
     expect(patch.funds).toBe(p.funds);
-    expect(patch.candidate).not.toBeNull();
+    // v0.22：無料の自動候補は廃止。ガチャを引くまで候補は無い
+    expect(patch.candidate).toBeNull();
+    expect(patch.gachaPity).toBe(0);
     expect(patch.trend?.expiresAt).toBeGreaterThan(NOW);
+  });
+
+  it('v0.22：セーブに残った開封済み候補・ピティは復元される', () => {
+    const cand = { ...storage.defaults() };
+    const saved = {
+      ...cand,
+      lastSeenAt: NOW,
+      candidate: {
+        id: 'c-saved',
+        name: 'テスト 太郎',
+        role: 'programmer' as const,
+        rank: 'S' as const,
+        power: 0.6,
+        basePower: 0.6,
+        level: 1,
+        exp: 0,
+        wage: 660_000,
+        specialties: [],
+      },
+      gachaPity: 13,
+    };
+    const patch = buildBootPatch(saved, deps());
+    expect(patch.candidate?.id).toBe('c-saved');
+    expect(patch.gachaPity).toBe(13);
   });
 
   it('離席中の販売分が資金・累計売上に合算され、レポートが付く', () => {
@@ -89,13 +115,9 @@ describe('buildBootPatch', () => {
     expect(buildBootPatch({ ...base, trend: alive }, deps()).trend).toEqual(alive);
   });
 
-  it('同じ seed なら同じ結果（決定性。候補 id の連番のみ例外）', () => {
+  it('同じ seed なら同じ結果（決定性）', () => {
     const p = { ...storage.defaults(), library: [sellingWork()], lastSeenAt: NOW - 100_000 };
-    const strip = (patch: ReturnType<typeof buildBootPatch>) => ({
-      ...patch,
-      candidate: patch.candidate ? { ...patch.candidate, id: '' } : null,
-    });
-    expect(strip(buildBootPatch(p, deps()))).toEqual(strip(buildBootPatch(p, deps())));
+    expect(buildBootPatch(p, deps())).toEqual(buildBootPatch(p, deps()));
   });
 });
 

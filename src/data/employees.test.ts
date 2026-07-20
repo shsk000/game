@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { mulberry32 } from '../core/ports';
-import { CANDIDATE_POWER_RANGE, computeMonthlyWage, ROLE_EFFECT } from './balance';
+import { computeMonthlyWage, GACHA_CONFIG, type GachaRank, ROLE_EFFECT } from './balance';
 import {
   newCandidate,
-  REFRESH_COST,
+  rollPowerForRank,
   sumEmployeeCategoryBonus,
   sumMonthlySalaries,
   sumProgrammerSpeed,
@@ -12,42 +12,69 @@ import {
 const fixedDeps = (seed: number) => ({ rng: mulberry32(seed), now: () => 1_000_000 });
 
 describe('newCandidate', () => {
-  it('同じ seed なら同じ候補が生成される（id の連番を除く）', () => {
-    const a = newCandidate(fixedDeps(42));
-    const b = newCandidate(fixedDeps(42));
+  it('同じ seed・同じランクなら同じ候補が生成される（id の連番を除く）', () => {
+    const a = newCandidate(fixedDeps(42), 'A');
+    const b = newCandidate(fixedDeps(42), 'A');
     expect(a.name).toBe(b.name);
     expect(a.role).toBe(b.role);
     expect(a.power).toBe(b.power);
+    expect(a.rank).toBe('A');
     expect(a.specialties).toEqual(b.specialties);
   });
 
-  it('power は見習い帯（CANDIDATE_POWER_RANGE）に収まり、成長フィールドが初期化される', () => {
-    for (let seed = 0; seed < 50; seed++) {
-      const c = newCandidate(fixedDeps(seed));
-      expect(c.power).toBeGreaterThanOrEqual(CANDIDATE_POWER_RANGE.min);
-      expect(c.power).toBeLessThanOrEqual(CANDIDATE_POWER_RANGE.max);
-      expect(c.basePower).toBe(c.power);
-      expect(c.level).toBe(1);
-      expect(c.exp).toBe(0);
+  it('rank を指定しなくても排出テーブルで抽選され rank が付与される', () => {
+    const c = newCandidate(fixedDeps(3));
+    expect(['B', 'A', 'S']).toContain(c.rank);
+    expect(c.basePower).toBe(c.power);
+    expect(c.level).toBe(1);
+    expect(c.exp).toBe(0);
+  });
+
+  it('ランク別 basePower はそのランクの帯に収まる（境界含む）', () => {
+    for (const rank of ['B', 'A', 'S'] as GachaRank[]) {
+      const range = GACHA_CONFIG.powerRange[rank];
+      for (let seed = 0; seed < 40; seed++) {
+        const c = newCandidate(fixedDeps(seed), rank);
+        expect(c.power, `${rank} seed=${seed}`).toBeGreaterThanOrEqual(range.min);
+        expect(c.power, `${rank} seed=${seed}`).toBeLessThanOrEqual(range.max);
+      }
     }
   });
 
   it('月給は balance.ts の computeMonthlyWage と一致する', () => {
-    const c = newCandidate(fixedDeps(7));
+    const c = newCandidate(fixedDeps(7), 'A');
     expect(c.wage).toBe(Math.round(computeMonthlyWage(c.power)));
   });
 
-  it('specialty は 1〜2 個で、ボーナス値域は主 3-10 / 副 1-4', () => {
-    for (let seed = 0; seed < 50; seed++) {
-      const c = newCandidate(fixedDeps(seed));
-      expect(c.specialties.length).toBeGreaterThanOrEqual(1);
-      expect(c.specialties.length).toBeLessThanOrEqual(2);
-      expect(c.specialties[0].bonus).toBeGreaterThanOrEqual(3);
-      expect(c.specialties[0].bonus).toBeLessThanOrEqual(10);
-      if (c.specialties[1]) {
-        expect(c.specialties[1].bonus).toBeGreaterThanOrEqual(1);
-        expect(c.specialties[1].bonus).toBeLessThanOrEqual(4);
-        expect(c.specialties[1].categoryId).not.toBe(c.specialties[0].categoryId);
+  it('specialty はランク仕様帯に収まる（B=1個 / S=2個確定）', () => {
+    for (const rank of ['B', 'A', 'S'] as GachaRank[]) {
+      const cfg = GACHA_CONFIG.specialty[rank];
+      for (let seed = 0; seed < 40; seed++) {
+        const c = newCandidate(fixedDeps(seed), rank);
+        expect(c.specialties.length).toBeGreaterThanOrEqual(1);
+        expect(c.specialties.length).toBeLessThanOrEqual(2);
+        expect(c.specialties[0].bonus).toBeGreaterThanOrEqual(cfg.primaryMin);
+        expect(c.specialties[0].bonus).toBeLessThanOrEqual(cfg.primaryMax);
+        if (rank === 'B') expect(c.specialties.length).toBe(1);
+        if (rank === 'S') expect(c.specialties.length).toBe(2);
+        if (c.specialties[1]) {
+          expect(c.specialties[1].bonus).toBeGreaterThanOrEqual(cfg.secondMin);
+          expect(c.specialties[1].bonus).toBeLessThanOrEqual(cfg.secondMax);
+          expect(c.specialties[1].categoryId).not.toBe(c.specialties[0].categoryId);
+        }
+      }
+    }
+  });
+});
+
+describe('rollPowerForRank', () => {
+  it('各ランクの帯域内を返す', () => {
+    for (const rank of ['B', 'A', 'S'] as GachaRank[]) {
+      const range = GACHA_CONFIG.powerRange[rank];
+      for (let seed = 0; seed < 20; seed++) {
+        const p = rollPowerForRank(rank, mulberry32(seed));
+        expect(p).toBeGreaterThanOrEqual(range.min);
+        expect(p).toBeLessThanOrEqual(range.max);
       }
     }
   });
@@ -87,11 +114,5 @@ describe('集計ヘルパー', () => {
     expect(sumEmployeeCategoryBonus([a, b], ['a'], ['graphics', 'sound'])).toBe(5);
     // カテゴリ不一致も加算されない
     expect(sumEmployeeCategoryBonus([a], ['a'], ['story'])).toBe(0);
-  });
-});
-
-describe('REFRESH_COST', () => {
-  it('候補リフレッシュ費用が定義されている', () => {
-    expect(REFRESH_COST).toBeGreaterThan(0);
   });
 });
