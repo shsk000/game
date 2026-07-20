@@ -105,6 +105,55 @@ describe('startProject（前払い開発費 devCost の徴収）', () => {
   });
 });
 
+describe('buyGenre / buyTheme（投資：未解放ジャンル・テーマの先行購入）', () => {
+  beforeEach(() => resetStore());
+
+  it('ロック済みジャンルを購入すると price 分 funds が減り解放される', () => {
+    resetStore({ funds: 1_000_000 });
+    expect(useGameStore.getState().unlockedGenres).not.toContain('racing'); // stage2=初期未解放
+    expect(useGameStore.getState().buyGenre('racing')).toBe(true);
+    const s = useGameStore.getState();
+    expect(s.funds).toBe(1_000_000 - 300_000); // stage2 基礎額 ¥30万 × 1.8^0
+    expect(s.unlockedGenres).toContain('racing');
+    expect(s.investPurchaseCount).toBe(1);
+  });
+
+  it('ロック済みテーマを購入すると price 分 funds が減り解放される', () => {
+    resetStore({ funds: 1_000_000 });
+    expect(useGameStore.getState().unlockedThemes).not.toContain('animal');
+    expect(useGameStore.getState().buyTheme('animal')).toBe(true);
+    const s = useGameStore.getState();
+    expect(s.funds).toBe(1_000_000 - 300_000);
+    expect(s.unlockedThemes).toContain('animal');
+    expect(s.investPurchaseCount).toBe(1);
+  });
+
+  it('資金不足なら購入不可（false・状態不変）', () => {
+    resetStore({ funds: 100_000 });
+    expect(useGameStore.getState().buyGenre('racing')).toBe(false);
+    const s = useGameStore.getState();
+    expect(s.funds).toBe(100_000);
+    expect(s.unlockedGenres).not.toContain('racing');
+    expect(s.investPurchaseCount).toBe(0);
+  });
+
+  it('初期解放済み（stage1）は購入不可（false・二重課金しない）', () => {
+    resetStore({ funds: 10_000_000 });
+    expect(useGameStore.getState().buyGenre('puzzle')).toBe(false);
+    expect(useGameStore.getState().buyTheme('sushi')).toBe(false);
+    expect(useGameStore.getState().funds).toBe(10_000_000);
+  });
+
+  it('連続購入で価格が逓増する（×priceGrowth^purchaseCount）', () => {
+    resetStore({ funds: 5_000_000 });
+    expect(useGameStore.getState().buyGenre('racing')).toBe(true); // ¥30万（count 0）
+    expect(useGameStore.getState().buyTheme('animal')).toBe(true); // ¥30万 ×1.8 = ¥54万（count 1）
+    const s = useGameStore.getState();
+    expect(s.investPurchaseCount).toBe(2);
+    expect(s.funds).toBe(5_000_000 - 300_000 - 540_000);
+  });
+});
+
 describe('adDebugAssist（v0.19 広告でバグ半減・1開発1回）', () => {
   beforeEach(() => resetStore());
 
