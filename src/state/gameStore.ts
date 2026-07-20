@@ -6,7 +6,7 @@ import {
   rollBugOnKeystroke,
   rollBugOnMiss,
 } from '../core/bugs';
-import { computeBorrow, computeMonthlyTick, computeRepay } from '../core/economy';
+import { computeBorrow, computeMonthlyTick, computeRepay, computeSpend } from '../core/economy';
 import { gachaPrice, nextPityCount, rollRank } from '../core/gacha';
 import type { LevelUp } from '../core/growth';
 import { investPrice } from '../core/invest';
@@ -325,10 +325,15 @@ export const useGameStore = create<GameState>()(
         workTarget,
         ...buildMissionFlavor(genreId),
       };
+      // v0.x：前払い開発費 devCost（=規模の baseCost）を企画開始時に徴収する。
+      // 資金不足分は自動で借金へ振替（computeSpend は monthlyTick と同じ規則）。
+      const spend = computeSpend({ funds: get().funds, debt: get().debt }, def.baseCost);
       set({
         current: project,
         screen: 'develop',
         trend: ensureTrend(get().trend, now(), deps.rng),
+        funds: spend.funds,
+        debt: spend.debt,
       });
     },
 

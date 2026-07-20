@@ -8,6 +8,7 @@ import {
   computeMonthlyTick,
   computeOfflineEarnings,
   computeRepay,
+  computeSpend,
   type EconomyCtx,
 } from './economy';
 
@@ -35,6 +36,26 @@ const ctx = (over: Partial<EconomyCtx> = {}): EconomyCtx => ({
 });
 
 const MINI_RENT = SCALE_BY_ID.mini.monthlyRent;
+
+describe('computeSpend（前払いコスト徴収）', () => {
+  it('資金が足りれば funds から差し引く（借金は増えない）', () => {
+    expect(computeSpend({ funds: 1_000_000, debt: 0 }, 300_000)).toEqual({
+      funds: 700_000,
+      debt: 0,
+    });
+  });
+
+  it('資金不足なら不足分を借金へ振替し、funds は 0 で下げ止まる', () => {
+    expect(computeSpend({ funds: 200_000, debt: 500_000 }, 300_000)).toEqual({
+      funds: 0,
+      debt: 600_000, // 500,000 + 不足 100,000
+    });
+  });
+
+  it('ちょうど使い切ると funds 0・借金増なし', () => {
+    expect(computeSpend({ funds: 300_000, debt: 0 }, 300_000)).toEqual({ funds: 0, debt: 0 });
+  });
+});
 
 describe('computeMonthlyTick', () => {
   it('固定費 = 給与 + 賃料 + 借金月利', () => {
@@ -82,6 +103,11 @@ describe('computeBorrow', () => {
     expect(computeBorrow(ctx(), 0)).toBeNull();
     expect(computeBorrow(ctx(), -100)).toBeNull();
   });
+
+  it('非有限（NaN/Infinity）は不成立で funds/debt を汚染しない', () => {
+    expect(computeBorrow(ctx(), Number.NaN)).toBeNull();
+    expect(computeBorrow(ctx(), Number.POSITIVE_INFINITY)).toBeNull();
+  });
 });
 
 describe('computeRepay', () => {
@@ -94,6 +120,11 @@ describe('computeRepay', () => {
     expect(computeRepay({ funds: 1000, debt: 0 }, 100)).toBeNull();
     expect(computeRepay({ funds: 0, debt: 1000 }, 100)).toBeNull();
     expect(computeRepay({ funds: 1000, debt: 1000 }, 0)).toBeNull();
+  });
+
+  it('非有限（NaN/Infinity）は不成立で funds/debt を汚染しない', () => {
+    expect(computeRepay({ funds: 1000, debt: 1000 }, Number.NaN)).toBeNull();
+    expect(computeRepay({ funds: 1000, debt: 1000 }, Number.POSITIVE_INFINITY)).toBeNull();
   });
 });
 

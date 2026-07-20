@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mulberry32 } from '../core/ports';
 import { BUG_CONFIG, GACHA_CONFIG } from '../data/balance';
+import { SCALE_BY_ID } from '../data/scales';
 import { setGameDeps, useGameStore } from './gameStore';
 import { resetStore } from './testing';
 import type { CurrentProject } from './types';
@@ -77,6 +78,79 @@ describe('finishDevelopment（DEV検証フック：タイピングを飛ばし�
     useGameStore.getState().finishDevelopment();
     expect(useGameStore.getState().current).toBeNull();
     expect(useGameStore.getState().screen).not.toBe('release');
+  });
+});
+
+describe('startProject（前払い開発費 devCost の徴収）', () => {
+  beforeEach(() => {
+    resetStore();
+    setGameDeps({ rng: () => 0.5, now: () => 1_000_000 });
+  });
+
+  it('企画開始で規模の devCost が funds から引かれる', () => {
+    resetStore({ funds: 5_000_000, current: null });
+    useGameStore.getState().startProject('puzzle', 'sushi', 'mini');
+    const s = useGameStore.getState();
+    expect(s.funds).toBe(5_000_000 - SCALE_BY_ID.mini.baseCost);
+    expect(s.current?.phase).toBe('planning');
+    expect(s.debt).toBe(0);
+  });
+
+  it('資金不足なら不足分が借金へ振替される（funds は 0 下げ止まり）', () => {
+    resetStore({ funds: 100_000, current: null });
+    useGameStore.getState().startProject('puzzle', 'sushi', 'mini');
+    const s = useGameStore.getState();
+    expect(s.funds).toBe(0);
+    expect(s.debt).toBe(SCALE_BY_ID.mini.baseCost - 100_000);
+  });
+});
+
+describe('buyGenre / buyTheme（投資：未解放ジャンル・テーマの先行購入）', () => {
+  beforeEach(() => resetStore());
+
+  it('ロック済みジャンルを購入すると price 分 funds が減り解放される', () => {
+    resetStore({ funds: 1_000_000 });
+    expect(useGameStore.getState().unlockedGenres).not.toContain('racing'); // stage2=初期未解放
+    expect(useGameStore.getState().buyGenre('racing')).toBe(true);
+    const s = useGameStore.getState();
+    expect(s.funds).toBe(1_000_000 - 300_000); // stage2 基礎額 ¥30万 × 1.8^0
+    expect(s.unlockedGenres).toContain('racing');
+    expect(s.investPurchaseCount).toBe(1);
+  });
+
+  it('ロック済みテーマを購入すると price 分 funds が減り解放される', () => {
+    resetStore({ funds: 1_000_000 });
+    expect(useGameStore.getState().unlockedThemes).not.toContain('animal');
+    expect(useGameStore.getState().buyTheme('animal')).toBe(true);
+    const s = useGameStore.getState();
+    expect(s.funds).toBe(1_000_000 - 300_000);
+    expect(s.unlockedThemes).toContain('animal');
+    expect(s.investPurchaseCount).toBe(1);
+  });
+
+  it('資金不足なら購入不可（false・状態不変）', () => {
+    resetStore({ funds: 100_000 });
+    expect(useGameStore.getState().buyGenre('racing')).toBe(false);
+    const s = useGameStore.getState();
+    expect(s.funds).toBe(100_000);
+    expect(s.unlockedGenres).not.toContain('racing');
+    expect(s.investPurchaseCount).toBe(0);
+  });
+
+  it('初期解放済み（stage1）は購入不可（false・二重課金しない）', () => {
+    resetStore({ funds: 10_000_000 });
+    expect(useGameStore.getState().buyGenre('puzzle')).toBe(false);
+    expect(useGameStore.getState().buyTheme('sushi')).toBe(false);
+    expect(useGameStore.getState().funds).toBe(10_000_000);
+  });
+
+  it('連続購入で価格が逓増する（×priceGrowth^purchaseCount）', () => {
+    resetStore({ funds: 5_000_000 });
+    expect(useGameStore.getState().buyGenre('racing')).toBe(true); // ¥30万（count 0）
+    expect(useGameStore.getState().buyTheme('animal')).toBe(true); // ¥30万 ×1.8 = ¥54万（count 1）
+    const s = useGameStore.getState();
+    expect(s.investPurchaseCount).toBe(2);
+    expect(s.funds).toBe(5_000_000 - 300_000 - 540_000);
   });
 });
 
