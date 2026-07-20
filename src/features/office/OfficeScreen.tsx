@@ -752,6 +752,8 @@ export const OfficeScreen = () => {
                 style={{
                   padding: '6px 10px',
                   background: isUnlocked ? '#d0e8c0' : '#2e4568',
+                  // 濃色（青）背景では色未指定だと黒字継承で不可視になるため明色を明示
+                  color: isUnlocked ? '#0a1422' : '#e6ecf5',
                   border: '2px solid #0a1422',
                   borderRadius: 2,
                   fontSize: 13,
@@ -793,6 +795,8 @@ export const OfficeScreen = () => {
             padding: 10,
             marginBottom: 10,
             background: '#24395c',
+            // 濃紺背景では色未指定だと黒字継承で不可視になるため明色を明示
+            color: '#e6ecf5',
             border: '2px solid #0a1422',
             fontSize: 12,
             fontVariantNumeric: 'tabular-nums',
@@ -842,6 +846,8 @@ export const OfficeScreen = () => {
                   gap: 10,
                   padding: '8px 10px',
                   background: done ? '#24395c' : '#2e4568',
+                  // 濃紺背景では色未指定だと黒字継承で不可視になるため明色を明示
+                  color: '#e6ecf5',
                   border: '2px solid #0a1422',
                   borderRadius: 2,
                   opacity: done ? 1 : 0.7,
@@ -849,7 +855,7 @@ export const OfficeScreen = () => {
               >
                 <span style={{ fontSize: 22 }}>{a.emoji}</span>
                 <span style={{ fontWeight: 700, fontSize: 13, minWidth: 110 }}>{a.name}</span>
-                <span style={{ fontSize: 12, color: '#3a4452', flex: 1 }}>{a.desc}</span>
+                <span style={{ fontSize: 12, color: '#b3bccb', flex: 1 }}>{a.desc}</span>
               </li>
             );
           })}

@@ -59,6 +59,27 @@ describe('advancePhase（v0.17.1 バグ最低保証）', () => {
   });
 });
 
+describe('finishDevelopment（DEV検証フック：タイピングを飛ばし発売へ即到達）', () => {
+  beforeEach(() => resetStore());
+
+  it('企画フェーズからでも発売フェーズへ飛び、doneLoC が作業目標まで埋まる', () => {
+    resetStore({ current: devProject({ phase: 'planning', workTarget: 100, doneLoC: 10 }) });
+    useGameStore.getState().finishDevelopment();
+    const s = useGameStore.getState();
+    expect(s.current?.phase).toBe('release');
+    expect(s.current?.doneLoC).toBe(100);
+    expect(s.current?.finishedAt).not.toBeNull();
+    expect(s.screen).toBe('release');
+  });
+
+  it('プロジェクトが無ければ何もしない（発売に飛ばない）', () => {
+    resetStore({ current: null });
+    useGameStore.getState().finishDevelopment();
+    expect(useGameStore.getState().current).toBeNull();
+    expect(useGameStore.getState().screen).not.toBe('release');
+  });
+});
+
 describe('adDebugAssist（v0.19 広告でバグ半減・1開発1回）', () => {
   beforeEach(() => resetStore());
 

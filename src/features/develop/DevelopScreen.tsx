@@ -122,6 +122,8 @@ export const DevelopScreen = () => {
   const addDevelopLoC = useGameStore((s) => s.addDevelopLoC);
   const addDevStat = useGameStore((s) => s.addDevStat);
   const advancePhase = useGameStore((s) => s.advancePhase);
+  // DEV 検証用：タイピングを飛ばして発売フェーズへ即到達する（docs/qa/bug-hunt.md 参照）
+  const finishDevelopment = useGameStore((s) => s.finishDevelopment);
   const noteBugOnMiss = useGameStore((s) => s.noteBugOnMiss);
   const noteBugOnKeystroke = useGameStore((s) => s.noteBugOnKeystroke);
   const fixBug = useGameStore((s) => s.fixBug);
@@ -688,6 +690,27 @@ export const DevelopScreen = () => {
             <SegGauge pct={budgetPct} color={periodColor} track="#0c1207" height={8} />
             <span style={{ fontSize: 10, fontWeight: 700, color: periodColor }}>{periodNote}</span>
           </div>
+
+          {/* 開発ビルド限定：バグ検証用に発売フェーズへ即到達（タイピング律速＋リアルタイム
+              固定費でAI検証が back-half に届かない問題への QA フック。docs/qa/bug-hunt.md） */}
+          {import.meta.env.DEV && (
+            <button
+              type="button"
+              onClick={() => finishDevelopment()}
+              style={{
+                marginTop: 'auto',
+                padding: '6px 8px',
+                border: '1px dashed #6a7686',
+                background: '#141b26',
+                color: '#c8d2e0',
+                fontSize: 10,
+                borderRadius: 2,
+                cursor: 'pointer',
+              }}
+            >
+              🛠 [DEV] 開発を即完了（発売へ）
+            </button>
+          )}
         </aside>
 
         {/* 中央：フェーズ別メインパネル */}
