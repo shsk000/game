@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ads } from '../../ads/AdProvider';
+import { PlanMeetingBoard } from '../../components/PlanMeetingBoard';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
 import { bugSuppression, bugsClearedByAd, pickBugFixPhrase } from '../../core/bugs';
 import {
@@ -38,7 +39,6 @@ import { GENRE_BY_ID, type GenreId, genreBackgroundUrl, genreSpriteUrl } from '.
 import {
   GENRE_PLAN_CONTENT,
   getPlanTicketAt,
-  IDEA_CARD_COLORS,
   PHRASES_PER_PLAN_TICKET,
   PLAN_BASE_GAIN,
   PLAN_CATEGORY_META,
@@ -50,7 +50,13 @@ import {
 import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
-import { DEV_PHASE_META, DEV_PHASE_ORDER, type DevPhase, dateToWeekIndex } from '../../state/types';
+import {
+  DEV_PHASE_META,
+  DEV_PHASE_ORDER,
+  type DevPhase,
+  type EmployeeRole,
+  dateToWeekIndex,
+} from '../../state/types';
 import { sfx } from '../../utils/sfx';
 import { computeDevImpact, progressGain, toCharsPerMin } from './devImpact';
 import { type TypingView, useTyping } from './useTyping';
@@ -749,6 +755,7 @@ export const DevelopScreen = () => {
               accuracyPct={accuracyPct}
               memos={planMemos}
               cards={planCards}
+              team={employees}
               lastResult={lastResult}
             />
           ) : phase === 'debugging' ? (
@@ -1255,9 +1262,9 @@ const DevelopCenter = ({
               ? 'dev-perfect-shake'
               : undefined
           }
-          style={{ display: 'flex', gap: 8 }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
         >
-          <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+          <div style={{ position: 'relative' }}>
             <div
               style={{
                 display: 'flex',
@@ -1302,49 +1309,6 @@ const DevelopCenter = ({
               </span>
             )}
           </div>
-          <div style={{ width: 96, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ ...devBox(), gap: 1, padding: 5 }}>
-              <span style={{ fontSize: 9, color: DEV.sub }}>⏩入力速度</span>
-              <span
-                style={{
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: DEV.cream,
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                {charsPerMin}
-              </span>
-              <span style={{ fontSize: 8, color: DEV.sub }}>文字/分</span>
-            </div>
-            <div style={{ ...devBox(), gap: 1, padding: 5 }}>
-              <span style={{ fontSize: 9, color: DEV.sub }}>🎯正確さ</span>
-              <span
-                style={{
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: DEV.cream,
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                {accuracyPct}%
-              </span>
-            </div>
-            <div key={`bug-${bugCount}`} style={{ ...devBox(), gap: 1, padding: 5 }}>
-              <span style={{ fontSize: 9, color: DEV.sub }}>🐛バグ</span>
-              <span
-                style={{
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: bugCount > 0 ? DEV.orange : DEV.greenBright,
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                ×{bugCount}
-              </span>
-              <span style={{ fontSize: 8, color: DEV.sub }}>デバッグで返済</span>
-            </div>
-          </div>
         </div>
 
         <div>
@@ -1373,6 +1337,53 @@ const DevelopCenter = ({
               <span className="dev-next-key">{view.remained.slice(0, 1)}</span>
             )}
             <span style={{ color: '#5a6e3a' }}>{view.remained.slice(1)}</span>
+          </div>
+          {/* ローマ字入力の「下」に、入力速度・正確さ・バグを横並びで置く */}
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            <div style={{ ...devBox(), flex: 1, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 5, padding: '5px 6px' }}>
+              <span style={{ fontSize: 9, color: DEV.sub, whiteSpace: 'nowrap' }}>⏩入力速度</span>
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: DEV.cream,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {charsPerMin}
+              </span>
+              <span style={{ fontSize: 8, color: DEV.sub }}>文字/分</span>
+            </div>
+            <div style={{ ...devBox(), flex: 1, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 5, padding: '5px 6px' }}>
+              <span style={{ fontSize: 9, color: DEV.sub, whiteSpace: 'nowrap' }}>🎯正確さ</span>
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: DEV.cream,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {accuracyPct}%
+              </span>
+            </div>
+            <div
+              key={`bug-${bugCount}`}
+              style={{ ...devBox(), flex: 1, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 5, padding: '5px 6px' }}
+            >
+              <span style={{ fontSize: 9, color: DEV.sub, whiteSpace: 'nowrap' }}>🐛バグ</span>
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: bugCount > 0 ? DEV.orange : DEV.greenBright,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                ×{bugCount}
+              </span>
+              <span style={{ fontSize: 8, color: DEV.sub, whiteSpace: 'nowrap' }}>デバッグで返済</span>
+            </div>
           </div>
         </div>
 
@@ -1929,6 +1940,7 @@ const PlanningCenter = ({
   accuracyPct,
   memos,
   cards,
+  team,
   lastResult,
 }: {
   litPhaseDots: number;
@@ -1944,6 +1956,7 @@ const PlanningCenter = ({
   accuracyPct: number;
   memos: string[];
   cards: string[];
+  team: { id: string; role: EmployeeRole }[];
   lastResult: LastResult | null;
 }) => {
   const catMeta = PLAN_CATEGORY_META[ticket.category];
@@ -2107,9 +2120,9 @@ const PlanningCenter = ({
               ? 'dev-perfect-shake'
               : undefined
           }
-          style={{ display: 'flex', gap: 8 }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
         >
-          <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+          <div style={{ position: 'relative' }}>
             <div style={{ fontSize: 11, color: PLAN.accent, fontWeight: 700, marginBottom: 4 }}>
               入力する文章
             </div>
@@ -2140,49 +2153,6 @@ const PlanningCenter = ({
               </span>
             )}
           </div>
-          <div style={{ width: 96, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ ...devBox(), gap: 1, padding: 5 }}>
-              <span style={{ fontSize: 9, color: DEV.sub }}>⏩入力速度</span>
-              <span
-                style={{
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: DEV.cream,
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                {charsPerMin}
-              </span>
-              <span style={{ fontSize: 8, color: DEV.sub }}>文字/分</span>
-            </div>
-            <div style={{ ...devBox(), gap: 1, padding: 5 }}>
-              <span style={{ fontSize: 9, color: DEV.sub }}>🎯正確さ</span>
-              <span
-                style={{
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: DEV.cream,
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                {accuracyPct}%
-              </span>
-            </div>
-            <div key={`bug-${bugCount}`} style={{ ...devBox(), gap: 1, padding: 5 }}>
-              <span style={{ fontSize: 9, color: DEV.sub }}>🐛バグ</span>
-              <span
-                style={{
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: bugCount > 0 ? DEV.orange : DEV.greenBright,
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                ×{bugCount}
-              </span>
-              <span style={{ fontSize: 8, color: DEV.sub }}>デバッグで返済</span>
-            </div>
-          </div>
         </div>
 
         <div>
@@ -2212,10 +2182,57 @@ const PlanningCenter = ({
             )}
             <span style={{ color: '#5a6e3a' }}>{view.remained.slice(1)}</span>
           </div>
+          {/* ローマ字入力の「下」に、入力速度・正確さ・バグを横並びで置く */}
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            <div style={{ ...devBox(), flex: 1, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 5, padding: '5px 6px' }}>
+              <span style={{ fontSize: 9, color: DEV.sub, whiteSpace: 'nowrap' }}>⏩入力速度</span>
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: DEV.cream,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {charsPerMin}
+              </span>
+              <span style={{ fontSize: 8, color: DEV.sub }}>文字/分</span>
+            </div>
+            <div style={{ ...devBox(), flex: 1, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 5, padding: '5px 6px' }}>
+              <span style={{ fontSize: 9, color: DEV.sub, whiteSpace: 'nowrap' }}>🎯正確さ</span>
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: DEV.cream,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {accuracyPct}%
+              </span>
+            </div>
+            <div
+              key={`bug-${bugCount}`}
+              style={{ ...devBox(), flex: 1, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 5, padding: '5px 6px' }}
+            >
+              <span style={{ fontSize: 9, color: DEV.sub, whiteSpace: 'nowrap' }}>🐛バグ</span>
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: bugCount > 0 ? DEV.orange : DEV.greenBright,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                ×{bugCount}
+              </span>
+              <span style={{ fontSize: 8, color: DEV.sub, whiteSpace: 'nowrap' }}>デバッグで返済</span>
+            </div>
+          </div>
         </div>
 
-        {/* 企画中の様子：企画メモ＋アイデアカード（コード画面は出さない） */}
-        <PlanBoard memos={memos} cards={cards} />
+        {/* 企画中の様子：ホワイトボードを社員が囲む会議シーン。付箋は板面に増える */}
+        <PlanMeetingBoard employees={team} memos={memos} cards={cards} />
 
         {/* ③今回の結果（入力した結果、企画がどう良くなったか） */}
         <ResultCard result={lastResult} />
@@ -2223,92 +2240,6 @@ const PlanningCenter = ({
     </div>
   );
 };
-
-const PLAN_BOARD_HEIGHT = 96;
-
-/** 企画中の様子：左＝ノート風の企画メモ、右＝コルクボードに増えていく付箋（アイデアカード） */
-const PlanBoard = ({ memos, cards }: { memos: string[]; cards: string[] }) => (
-  <div style={{ display: 'flex', gap: 8, minWidth: 0 }}>
-    {/* 企画メモ（ノート紙） */}
-    <div
-      style={{
-        flex: 1,
-        minWidth: 0,
-        background: PLAN.paper,
-        border: `1px solid ${PLAN.paperLine}`,
-        padding: '5px 10px',
-        height: PLAN_BOARD_HEIGHT,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      <span style={{ fontSize: 10, fontWeight: 700, color: PLAN.inkSub, marginBottom: 2 }}>
-        📝 企画メモ
-      </span>
-      {memos.length === 0 ? (
-        <span style={{ fontSize: 11, color: PLAN.inkSub }}>まだメモはない…</span>
-      ) : (
-        memos.map((m, i) => (
-          <span
-            key={`${i}-${m}`}
-            className={i === memos.length - 1 ? 'dev-stat-pop' : undefined}
-            style={{
-              fontSize: 11,
-              color: PLAN.ink,
-              lineHeight: '15px',
-              borderBottom: `1px dashed ${PLAN.paperLine}`,
-              overflowWrap: 'anywhere',
-            }}
-          >
-            ・{m}
-          </span>
-        ))
-      )}
-    </div>
-    {/* アイデアカード（付箋） */}
-    <div
-      style={{
-        width: 218,
-        flexShrink: 0,
-        background: PLAN.cork,
-        border: `1px solid ${DEV.panelBorder}`,
-        padding: 6,
-        height: PLAN_BOARD_HEIGHT,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-      }}
-    >
-      <span style={{ fontSize: 10, fontWeight: 700, color: '#e8d5b5' }}>💡 アイデアカード</span>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignContent: 'flex-start' }}>
-        {cards.length === 0 ? (
-          <span style={{ fontSize: 10, color: '#9a8265' }}>アイデア待ち…</span>
-        ) : (
-          cards.map((c, i) => (
-            <span
-              key={c}
-              className="dev-stat-pop"
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: PLAN.ink,
-                background: IDEA_CARD_COLORS[i % IDEA_CARD_COLORS.length],
-                padding: '4px 8px',
-                boxShadow: '1px 2px 0 rgba(0,0,0,0.45)',
-                transform: `rotate(${i % 2 === 0 ? -2 : 2}deg)`,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {c}
-            </span>
-          ))
-        )}
-      </div>
-    </div>
-  </div>
-);
 
 /** 右ペイン：現在の企画書（企画フェーズ中）。決定事項が埋まっていく紙のドキュメント */
 const PlanDocPanel = ({

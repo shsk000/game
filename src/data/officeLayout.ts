@@ -146,6 +146,36 @@ export function isWalkable(nativeX: number, nativeY: number): boolean {
   return walkableSet.has(`${i},${j}`);
 }
 
+/** 遮蔽物（家具）が占めるセルの解像度と footprint 集合。机やソファの「上」に立たせないために使う。 */
+const OCCL_CELL_SIZE = OFFICE_LAYOUT.occlCell ?? 5;
+const OCCLUDER_FOOTPRINT: ReadonlySet<string> = new Set(
+  OFFICE_LAYOUT.occluders.flatMap((o) => o.cells),
+);
+
+/** その座標が家具（遮蔽物）の footprint 上か。歩行時に机・ソファの上に立つのを防ぐ判定に使う。 */
+export function isOverFurniture(nativeX: number, nativeY: number): boolean {
+  const i = Math.floor(nativeX / OCCL_CELL_SIZE);
+  const j = Math.floor(nativeY / OCCL_CELL_SIZE);
+  return OCCLUDER_FOOTPRINT.has(`${i},${j}`);
+}
+
+/** 歩ける床＝歩行可能グリッド内かつ家具の上でない。v0.26 うろつきはここだけを歩く。 */
+export function isOpenFloor(nativeX: number, nativeY: number): boolean {
+  return isWalkable(nativeX, nativeY) && !isOverFurniture(nativeX, nativeY);
+}
+
+/**
+ * 歩ける床セルの中心座標（native px）。grid.walkable から家具 footprint を除いた「開けた床」だけ。
+ * v0.26 うろつきの目標地点をこの中から抽選する（机の上を目標にしない）。
+ */
+export const WALKABLE_POINTS: ReadonlyArray<{ x: number; y: number }> = OFFICE_LAYOUT.grid.walkable
+  .map((key) => {
+    const [i, j] = key.split(',').map(Number);
+    const c = OFFICE_LAYOUT.grid.cell;
+    return { x: i * c + c / 2, y: j * c + c / 2 };
+  })
+  .filter((p) => !isOverFurniture(p.x, p.y));
+
 /** 8方向の入力ベクトルから最も近い Dir8 を選ぶ（atan2 を45度刻みで量子化）。 */
 export function vectorToDir8(dx: number, dy: number): Dir8 {
   const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
