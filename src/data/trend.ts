@@ -50,6 +50,37 @@ export const trendMultiplier = (trend: Trend | null, g: GenreId, t: ThemeId): nu
   return 1.0;
 };
 
+/**
+ * トレンド合致でメタスコアに直接加える点数（スコアに反映する主経路）。
+ *  - ジャンル＋テーマ両方合致: +10
+ *  - どちらか片方合致: +5
+ *  - 合致なし: 0
+ * ※ 売上への二重掛け（softBonus 側）は廃止し、トレンドは「スコアを上げて段を押し上げる」形で
+ *   売上に効かせる（docs/scoring.md）。
+ */
+export const trendScoreBonus = (trend: Trend | null, g: GenreId, t: ThemeId): number => {
+  if (!trend) return 0;
+  const gHit = trend.genreId === g;
+  const tHit = trend.themeId === t;
+  if (gHit && tHit) return 10;
+  if (gHit || tHit) return 5;
+  return 0;
+};
+
+/**
+ * トレンド合致で売上に掛ける倍率（控えめ・案B）。スコア側（trendScoreBonus +10/+5）とは別の
+ * 穏当な上乗せで、売上にも効かせる。両方合致 ×1.10 / 片方 ×1.05 / 合致なし ×1.0。
+ * ※ softBonus の +20% 共有上限の外で掛ける（表示どおり効く）。
+ */
+export const trendSalesMultiplier = (trend: Trend | null, g: GenreId, t: ThemeId): number => {
+  if (!trend) return 1;
+  const gHit = trend.genreId === g;
+  const tHit = trend.themeId === t;
+  if (gHit && tHit) return 1.1;
+  if (gHit || tHit) return 1.05;
+  return 1;
+};
+
 export const trendLabel = (trend: Trend | null): string => {
   if (!trend) return '';
   const g = GENRE_BY_ID[trend.genreId];
