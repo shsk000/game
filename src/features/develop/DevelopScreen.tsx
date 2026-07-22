@@ -166,7 +166,9 @@ export const DevelopScreen = () => {
   const currentTicket = useMemo(() => getTicketAt(genreId, ticketIndex), [genreId, ticketIndex]);
   const nextTicket = useMemo(() => getTicketAt(genreId, ticketIndex + 1), [genreId, ticketIndex]);
 
-  const [ticketPhrase, setTicketPhrase] = useState(() => pickPhrase(currentTicket.category));
+  const [ticketPhrase, setTicketPhrase] = useState(() =>
+    pickPhrase(currentTicket.category, undefined, current?.scale),
+  );
 
   // ★企画チケット状態（v0.15.3）：固定 7 カテゴリを順に打ち切ると企画書が埋まり、開発フェーズへ。
   const [planIndex, setPlanIndex] = useState(0);
@@ -443,7 +445,11 @@ export const DevelopScreen = () => {
         // v0.20 C：クランチタイム中は稀にボス文章（プール2文連結の長文）を出す
         // レア文章とは独立抽選だが、両方当たった場合はボスを優先（バッジ・報酬の二重表示を避ける）
         const nextIsBoss = crunchActive && rollBoss();
-        setTicketPhrase(nextIsBoss ? pickBossPhrase(newCategory) : pickPhrase(newCategory));
+        setTicketPhrase(
+          nextIsBoss
+            ? pickBossPhrase(newCategory, undefined, current?.scale)
+            : pickPhrase(newCategory, undefined, current?.scale),
+        );
         setIsBossPhrase(nextIsBoss);
         setIsRarePhrase(nextIsBoss ? false : rollRare());
         // v0.20 G：ボス出現時にランダムな1体を選び、出現バナーを一度だけ流す
