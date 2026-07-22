@@ -341,7 +341,17 @@ export function PropEditorTool() {
                 style={{ width: 56 }}
               />
             </label>
-            <span style={{ color: '#888' }}>z: 負=キャラより奥 / 正=手前｜skew/縦scaleで平面物を机に寝かせる</span>
+            <label style={lbl}>
+              回転°
+              <input
+                type="number"
+                step={1}
+                value={cur.rotate ?? 0}
+                onChange={(e) => update(selected, 'rotate', Number(e.target.value))}
+                style={{ width: 56 }}
+              />
+            </label>
+            <span style={{ color: '#888' }}>z: 負=奥 / 正=手前｜skew/縦scale/回転で平面物を机に寝かせる</span>
             <button type="button" onClick={() => resetOne(selected)} style={btn(false)}>
               ↺ この物体を既定値
             </button>
@@ -454,6 +464,7 @@ export function PropEditorTool() {
                         z={baseZ + t.z}
                         skewX={t.skewX}
                         scaleY={t.scaleY}
+                        rotate={t.rotate}
                         outline={editable && selected === p.id}
                         onMouseDown={editable ? (e) => startDrag(e, p.id) : undefined}
                       />
@@ -499,6 +510,7 @@ function Sprite({
   onMouseDown,
   skewX,
   scaleY,
+  rotate,
 }: {
   src: string;
   x: number;
@@ -509,6 +521,7 @@ function Sprite({
   onMouseDown?: (e: ReactMouseEvent) => void;
   skewX?: number;
   scaleY?: number;
+  rotate?: number;
 }) {
   const [natural, setNatural] = useState<number | null>(null);
   const width = natural == null ? undefined : natural * scale;
@@ -517,7 +530,7 @@ function Sprite({
     left: x,
     top: footY,
     width,
-    transform: `translate(-50%, -100%) skewX(${skewX ?? 0}deg) scaleY(${scaleY ?? 1})`,
+    transform: `translate(-50%, -100%) rotate(${rotate ?? 0}deg) skewX(${skewX ?? 0}deg) scaleY(${scaleY ?? 1})`,
     zIndex: z,
     imageRendering: 'pixelated',
     visibility: width === undefined ? 'hidden' : 'visible',

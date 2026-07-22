@@ -91,6 +91,8 @@ export type PropTransform = {
   skewX?: number;
   /** v0.25：奥行き方向の潰し（縦 scale）。iso の面に合わせる。既定 1。 */
   scaleY?: number;
+  /** v0.25：回転（度・時計回り）。向きの微調整に。既定 0。 */
+  rotate?: number;
 };
 
 /**
