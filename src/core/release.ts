@@ -29,11 +29,7 @@ import type { Records } from '../utils/storage';
 import { remainingBugPenalty } from './bugs';
 import { applyReleaseGrowth, type LevelUp } from './growth';
 import type { Deps } from './ports';
-import {
-  computeNewlyUnlockedCategories,
-  computeStageUnlocks,
-  evaluateAchievements,
-} from './progression';
+import { computeNewlyUnlockedCategories, evaluateAchievements } from './progression';
 
 /**
  * リリースパイプライン（品質→メタスコア→売上→ファン→解放→実績）。
@@ -241,14 +237,10 @@ export const computeRelease = (
   };
 
   const newLibrary = [work, ...ctx.library];
-  // v0.10 仕上げ §6-8：累計売上 + ヒット作のハイブリッドで解放判定
+  // v0.29：ジャンル/テーマの発売時自動解放（computeStageUnlocks）を廃止。
+  // stage2+ の解放は buyGenre/buyTheme（購入）が唯一の経路（案A→案B）。
+  // カテゴリの自動解放は据え置き（対象外）。docs/v29/spec.md。
   const projectedLifetimeRevenue = ctx.lifetimeRevenue + initialRevenue;
-  const stageUnlock = computeStageUnlocks(
-    ctx.unlockedGenres,
-    ctx.unlockedThemes,
-    newLibrary,
-    projectedLifetimeRevenue,
-  );
   const newCategoryUnlocks = computeNewlyUnlockedCategories(
     ctx.unlockedCategories,
     newLibrary,
@@ -282,8 +274,8 @@ export const computeRelease = (
     records: newRec,
     achievements: newAch.unlocked,
     newlyAchieved: [...ctx.newlyAchieved, ...newAch.newly],
-    unlockedGenres: [...ctx.unlockedGenres, ...stageUnlock.newGenres],
-    unlockedThemes: [...ctx.unlockedThemes, ...stageUnlock.newThemes],
+    unlockedGenres: [...ctx.unlockedGenres],
+    unlockedThemes: [...ctx.unlockedThemes],
     unlockedCategories: [...ctx.unlockedCategories, ...newCategoryUnlocks],
     employees: growth.employees,
     lastLevelUps: growth.levelUps,
