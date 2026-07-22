@@ -18,6 +18,8 @@ export type PixelMenuItem = {
   emoji?: string;
   onClick?: () => void;
   disabled?: boolean;
+  /** 未実装ティザー：薄グレー表示だがクリック可（disabled と違い onClick は生きる）。右上に「準備中」バッジを出す */
+  dimmed?: boolean;
 };
 
 type Props = {
@@ -62,15 +64,16 @@ type ItemProps = {
 };
 
 const PixelMenuBarItem = ({ item, active }: ItemProps) => {
-  const { label, iconSrc, emoji, onClick, disabled } = item;
+  const { label, iconSrc, emoji, onClick, disabled, dimmed } = item;
   return (
     <button
       type="button"
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
-      aria-label={label}
+      aria-label={dimmed ? `${label}（準備中）` : label}
       aria-pressed={active}
       style={{
+        position: 'relative',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -82,7 +85,7 @@ const PixelMenuBarItem = ({ item, active }: ItemProps) => {
         border: '1px solid #10151c',
         color: active ? '#ffffff' : '#1c2228',
         cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.4 : 1,
+        opacity: disabled ? 0.4 : dimmed ? 0.5 : 1,
         fontFamily: 'inherit',
         fontWeight: 700,
         fontSize: 11,
@@ -95,6 +98,25 @@ const PixelMenuBarItem = ({ item, active }: ItemProps) => {
         textShadow: active ? '1px 1px 0 rgba(0,0,0,0.3)' : 'none',
       }}
     >
+      {dimmed && (
+        <span
+          style={{
+            position: 'absolute',
+            top: 2,
+            right: 2,
+            background: '#2e4568',
+            color: '#ffffff',
+            fontSize: 8,
+            fontWeight: 700,
+            letterSpacing: '0.02em',
+            padding: '1px 3px',
+            border: '1px solid #10151c',
+            lineHeight: 1,
+          }}
+        >
+          準備中
+        </span>
+      )}
       <PixelIcon src={iconSrc} emoji={emoji ?? ''} label={label} size={26} />
       <span>{label}</span>
     </button>
