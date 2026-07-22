@@ -85,6 +85,8 @@ export const ReleaseScreen = () => {
   const [displayQ, setDisplayQ] = useState(0);
   const [displayMeta, setDisplayMeta] = useState(0);
   const [launchAdApplied, setLaunchAdApplied] = useState(false);
+  // 発売前のマーケティング広告（売上 +10%。スコアには影響しない）
+  const [marketingApplied, setMarketingApplied] = useState(false);
   const [adRunning, setAdRunning] = useState<null | 'marketing' | 'debug' | 'launch'>(null);
   const [bonusRevenue, setBonusRevenue] = useState(0);
   const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
@@ -95,6 +97,7 @@ export const ReleaseScreen = () => {
     if (!work && current) {
       setStage('pre-ads');
       setLaunchAdApplied(false);
+      setMarketingApplied(false);
       setBonusRevenue(0);
       setDisplayQ(0);
       setDisplayMeta(0);
@@ -174,11 +177,24 @@ export const ReleaseScreen = () => {
   const theme = THEME_BY_ID[planThemeId];
   const compat = getCompat(planGenreId, planThemeId);
 
+  const runMarketingAd = () => {
+    if (marketingApplied || adRunning) return;
+    setAdRunning('marketing');
+    ads.showRewarded({
+      label: 'marketing-ad',
+      onComplete: () => {
+        setMarketingApplied(true);
+        setAdRunning(null);
+      },
+      onFail: () => setAdRunning(null),
+    });
+  };
+
   const revealResults = () => {
     // current が無い＝既に releaseWork 済み。二度押し（結果発表ボタンの高速ダブルクリック）で
     // releaseWork が `no current project` を throw しクラッシュするのを防ぐ。
     if (adRunning || !current) return;
-    releaseWork();
+    releaseWork({ marketingAd: marketingApplied });
   };
 
   const runLaunchAd = () => {
@@ -234,6 +250,20 @@ export const ReleaseScreen = () => {
               <span>
                 {theme.emoji} {theme.name}
               </span>
+            </div>
+            <p className="meta-flavor">発売前にマーケティング広告で売上を伸ばせます。</p>
+            <div className="ad-row">
+              <button
+                className="primary-btn ad-btn"
+                disabled={marketingApplied || adRunning !== null}
+                onClick={runMarketingAd}
+              >
+                {marketingApplied
+                  ? '✅ マーケティング適用済（売上+10%）'
+                  : adRunning === 'marketing'
+                    ? '広告再生中…'
+                    : '📺 マーケティング広告（売上+10%）'}
+              </button>
             </div>
             <button className="primary-btn" disabled={adRunning !== null} onClick={revealResults}>
               🎬 結果を発表

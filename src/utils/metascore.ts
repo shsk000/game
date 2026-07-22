@@ -10,7 +10,7 @@ import type { GenreId } from '../data/genres';
 import type { Scale } from '../data/scales';
 import type { ThemeId } from '../data/themes';
 import type { Trend } from '../data/trend';
-import { trendMultiplier } from '../data/trend';
+import { trendScoreBonus } from '../data/trend';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -26,10 +26,10 @@ export const computeMetascore = (
   trend: Trend | null,
   rng: Rng = Math.random,
 ): MetascoreResult => {
-  // v0.10 仕上げ：compat / trend ブーストは quality（4 要素）と revenue 側に
-  // 既に組み込み済み。ここでは ±5 の評価家ブレのみ加える。
-  // 旧仕様の「3% 確率で名作 +25」は廃止。名作タイル（90-94）は SCORE_TIERS の自然分布で実現。
-  const trendBoost = (trendMultiplier(trend, genreId, themeId) - 1) * 5;
+  // トレンドはスコアに直接反映する主経路（両方合致 +10 / 片方 +5）。
+  // 売上側の二重掛け（softBonus）は廃止し、トレンドは「スコアを押し上げて段を上げる」形で効かせる。
+  // ±5 の評価家ブレも加える。旧「3% 確率で名作 +25」は廃止（名作帯は SCORE_TIERS の自然分布）。
+  const trendBoost = trendScoreBonus(trend, genreId, themeId);
   const variance = (rng() - 0.5) * 10;
   const metascore = Math.round(clamp(quality + trendBoost + variance, 0, 100));
   // isMasterpiece は metascore 90+ の自然到達で判定（後方互換のため残す）
@@ -66,7 +66,7 @@ export const computeRevenue = (
   _genreId: GenreId,
   _themeId: ThemeId,
   scale: Scale,
-  trend: Trend | null,
+  _trend: Trend | null,
   fans: number,
   launchAdActive: boolean,
   prBonus = 0,
@@ -75,13 +75,17 @@ export const computeRevenue = (
   const baseRevenue = SCALE_BALANCE[scale].baseRevenue;
   const tierMul = salesMultiplierForScore(metascore);
 
-  // 各ソフトボーナス（負の値もあり、最終的に合算）
-  // v0.10 仕上げ：上限を +50% → +20% に圧縮（hit 帯がさらに ×1.5 で +¥1500 万嵩上げされていた問題）
-  const trendBonus = Math.max(-0.15, trendMultiplier(trend, _genreId, _themeId) - 1);
+  // 案B：共有の +20% 上限を廃止し、各ボーナスを独立の倍率として掛ける（表示どおり効く）。
+  //  - 広報(prBonus) は上限なし（+11%×2人 = 約+22% が本当に効く）
+  //  - ファン / ローンチ広告 / 初回組合せ もそれぞれ独立に上乗せ
+  // ※ トレンド／マーケ広告の売上倍率は release.ts 側で別途掛ける（同じく上限の外）。
   const fanBonus = Math.min(0.15, Math.sqrt(Math.max(0, fans)) / 400); // ファン 10000 で +0.15 上限
   const launchBonus = launchAdActive ? 0.1 : 0;
-  const totalBonus = trendBonus + fanBonus + launchBonus + prBonus + pioneerBonus;
-  const softMul = 1 + Math.max(-0.3, Math.min(0.2, totalBonus));
+  const softMul =
+    (1 + Math.max(0, prBonus)) *
+    (1 + fanBonus) *
+    (1 + launchBonus) *
+    (1 + Math.max(0, pioneerBonus));
 
   const v = baseRevenue * tierMul * softMul;
   return Math.max(0, Math.round(v));
