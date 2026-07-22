@@ -554,7 +554,9 @@ export const PlanScreen = () => {
           >
             {trend ? trendLabel(trend) : '—'}
           </p>
-          <p style={{ ...hintStyle, marginTop: 2 }}>合致 ×1.3（片方）／ ×1.7（両方）</p>
+          <p style={{ ...hintStyle, marginTop: 2 }}>
+            合致：スコア +5／+10・売上 +5%／+10%（片方／両方）
+          </p>
         </PixelWindow>
 
         {/* 企画プレビュー */}
