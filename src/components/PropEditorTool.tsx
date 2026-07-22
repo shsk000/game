@@ -320,7 +320,28 @@ export function PropEditorTool() {
                 style={{ width: 56 }}
               />
             </label>
-            <span style={{ color: '#888' }}>z: 負=キャラより奥 / 正=手前</span>
+            <label style={lbl}>
+              skew°
+              <input
+                type="number"
+                step={1}
+                value={cur.skewX ?? 0}
+                onChange={(e) => update(selected, 'skewX', Number(e.target.value))}
+                style={{ width: 56 }}
+              />
+            </label>
+            <label style={lbl}>
+              縦scale
+              <input
+                type="number"
+                step={0.05}
+                min={0.1}
+                value={cur.scaleY ?? 1}
+                onChange={(e) => update(selected, 'scaleY', Number(e.target.value))}
+                style={{ width: 56 }}
+              />
+            </label>
+            <span style={{ color: '#888' }}>z: 負=キャラより奥 / 正=手前｜skew/縦scaleで平面物を机に寝かせる</span>
             <button type="button" onClick={() => resetOne(selected)} style={btn(false)}>
               ↺ この物体を既定値
             </button>
@@ -431,6 +452,8 @@ export function PropEditorTool() {
                         footY={seatFootY + t.y}
                         scale={t.scale}
                         z={baseZ + t.z}
+                        skewX={t.skewX}
+                        scaleY={t.scaleY}
                         outline={editable && selected === p.id}
                         onMouseDown={editable ? (e) => startDrag(e, p.id) : undefined}
                       />
@@ -474,6 +497,8 @@ function Sprite({
   z,
   outline,
   onMouseDown,
+  skewX,
+  scaleY,
 }: {
   src: string;
   x: number;
@@ -482,6 +507,8 @@ function Sprite({
   z: number;
   outline?: boolean;
   onMouseDown?: (e: ReactMouseEvent) => void;
+  skewX?: number;
+  scaleY?: number;
 }) {
   const [natural, setNatural] = useState<number | null>(null);
   const width = natural == null ? undefined : natural * scale;
@@ -490,7 +517,7 @@ function Sprite({
     left: x,
     top: footY,
     width,
-    transform: 'translate(-50%, -100%)',
+    transform: `translate(-50%, -100%) skewX(${skewX ?? 0}deg) scaleY(${scaleY ?? 1})`,
     zIndex: z,
     imageRendering: 'pixelated',
     visibility: width === undefined ? 'hidden' : 'visible',

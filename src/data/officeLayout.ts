@@ -82,7 +82,16 @@ export const pentabSprite = (dir: SeatDir) => `${SPRITE_BASE}/pentab_${dir}.png`
 export const plantSprite = (dir: SeatDir) => `${SPRITE_BASE}/plant_${dir}.png`;
 export const officeBgSrc = `${SPRITE_BASE}/office_bg.png`;
 
-export type PropTransform = { x: number; y: number; scale: number; z: number };
+export type PropTransform = {
+  x: number;
+  y: number;
+  scale: number;
+  z: number;
+  /** v0.25：平らな物（液タブ・本）を机の面に寝かせる CSS skewX（度）。既定 0。 */
+  skewX?: number;
+  /** v0.25：奥行き方向の潰し（縦 scale）。iso の面に合わせる。既定 1。 */
+  scaleY?: number;
+};
 
 /**
  * 物体（PC・椅子…）の配置。すべて着席キャラの足元（seat.y + sitFootOffset(dir)）からの相対値で、
