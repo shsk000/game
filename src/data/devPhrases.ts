@@ -1149,7 +1149,7 @@ export const getTicketAt = (
 };
 
 /**
- * v0.29「規模で打鍵の重みを変える」：1文の長さ（モーラ数）を規模に連動させる。
+ * v0.30「規模で打鍵の重みを変える」：1文の長さ（モーラ数）を規模に連動させる。
  *
  * 総量（workTarget）は既に規模連動（gameStore）。ここでは「1文あたりの重み」を規模で変える。
  * v0.27 で各プールは短/中/長が均等に整備済みなので、抽選の重み付けだけで実現できる（新規データ不要）。
@@ -1213,7 +1213,7 @@ const pickWeighted = (category: TicketCategory, scale: Scale, rng: Rng): string 
 };
 
 /**
- * 開発フェーズの 1 文を選ぶ。scale を渡すと規模に応じて長さが偏る（v0.29）。
+ * 開発フェーズの 1 文を選ぶ。scale を渡すと規模に応じて長さが偏る（v0.30）。
  * scale 省略時は従来どおりプール全体から一様抽選（後方互換）。
  */
 export const pickPhrase = (
@@ -1229,7 +1229,7 @@ export const pickPhrase = (
 /**
  * v0.20 C：ボス文章（クランチタイム中に混じる長文）。
  * 新規コンテンツを追加せず、既存プールから 2 文を連結して「長め」を作る（最小変更）。
- * v0.29：scale を渡すと連結元の各文も規模の重みに従う（連結本数は 2 のまま）。
+ * v0.30：scale を渡すと連結元の各文も規模の重みに従う（連結本数は 2 のまま）。
  */
 export const pickBossPhrase = (
   category: TicketCategory,

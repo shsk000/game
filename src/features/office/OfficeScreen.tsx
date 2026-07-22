@@ -38,7 +38,14 @@ import { GachaReveal } from './GachaReveal';
 
 const ICON_BASE = '/sprites/ui';
 
-type ModalKind = 'hire' | 'scale' | 'achievements' | 'settings' | 'debt' | null;
+type ModalKind =
+  | 'hire'
+  | 'scale'
+  | 'achievements'
+  | 'settings'
+  | 'debt'
+  | 'officeUpgrade'
+  | null;
 
 // formatPower / ROLE_VISUAL / RANK_VISUAL は employeeDisplay.ts に共通化（v0.22）
 // SegGauge は src/components/ui/SegGauge.tsx に共通化（v0.11 開発フェーズと共用）
@@ -147,6 +154,15 @@ export const OfficeScreen = () => {
       emoji: '🌟',
       iconSrc: `${ICON_BASE}/icon_achievements.png`,
       onClick: () => setModal('achievements'),
+    },
+    {
+      // v0.xx：将来のオフィスアップグレード機能のティザー（薄グレー＋準備中バッジ）。
+      // 押すと「準備中／近日追加予定」モーダルを出すだけ（機能は未実装）。
+      id: 'office',
+      label: 'オフィス',
+      emoji: '🏢',
+      dimmed: true,
+      onClick: () => setModal('officeUpgrade'),
     },
     {
       id: 'settings',
@@ -1076,6 +1092,36 @@ export const OfficeScreen = () => {
             }}
           >
             セーブをリセット
+          </PixelButton>
+        </div>
+      </PixelModal>
+
+      {/* ── オフィスアップグレード（準備中ティザー） ── */}
+      <PixelModal
+        open={modal === 'officeUpgrade'}
+        onClose={closeModal}
+        title="オフィスアップグレード"
+        maxWidth={380}
+      >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 12,
+            textAlign: 'center',
+            color: '#1c2228',
+          }}
+        >
+          <div style={{ fontSize: 44, lineHeight: 1 }}>🏢</div>
+          <p style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>準備中</p>
+          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
+            オフィスを拡張・アップグレードできる機能を開発中です。
+            <br />
+            近日追加予定です！ 🛠️
+          </p>
+          <PixelButton variant="secondary" onClick={closeModal}>
+            とじる
           </PixelButton>
         </div>
       </PixelModal>

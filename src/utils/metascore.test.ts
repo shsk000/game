@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { QUALITY_WEIGHTS, SALES_MULTIPLIER_BY_SCORE, SCALE_BALANCE } from '../data/balance';
 import type { Trend } from '../data/trend';
+import { trendSalesMultiplier, trendScoreBonus } from '../data/trend';
 import {
   computeMetascore,
   computePerformanceScore,
@@ -24,20 +25,51 @@ describe('computeMetascore', () => {
     expect(computeMetascore(70, 'action', 'ninja', null, () => 0).metascore).toBe(65);
   });
 
-  it('トレンド完全合致は +3.5（(1.7-1)×5）', () => {
+  it('トレンド両方合致は +10、片方合致は +5', () => {
     const trend: Trend = {
       genreId: 'action',
       themeId: 'ninja',
       expiresAt: Number.MAX_SAFE_INTEGER,
     };
-    const r = computeMetascore(70, 'action', 'ninja', trend, MID);
-    expect(r.metascore).toBe(Math.round(70 + 3.5));
+    // 両方合致（ジャンルもテーマも一致）
+    expect(computeMetascore(70, 'action', 'ninja', trend, MID).metascore).toBe(80);
+    // 片方合致（ジャンルのみ一致）
+    expect(computeMetascore(70, 'action', 'sushi', trend, MID).metascore).toBe(75);
+    // 不一致
+    expect(computeMetascore(70, 'puzzle', 'sushi', trend, MID).metascore).toBe(70);
   });
 
   it('0..100 にクランプ、90+ で名作', () => {
     expect(computeMetascore(120, 'action', 'ninja', null, MID).metascore).toBe(100);
     expect(computeMetascore(-20, 'action', 'ninja', null, MID).metascore).toBe(0);
     expect(computeMetascore(92, 'action', 'ninja', null, MID).isMasterpiece).toBe(true);
+  });
+});
+
+describe('trendScoreBonus（トレンドはスコアに反映）', () => {
+  const trend: Trend = { genreId: 'action', themeId: 'ninja', expiresAt: Number.MAX_SAFE_INTEGER };
+  it('スコア：両方合致 +10 / 片方 +5 / 不一致 0 / トレンドなし 0', () => {
+    expect(trendScoreBonus(trend, 'action', 'ninja')).toBe(10);
+    expect(trendScoreBonus(trend, 'action', 'sushi')).toBe(5);
+    expect(trendScoreBonus(trend, 'puzzle', 'ninja')).toBe(5);
+    expect(trendScoreBonus(trend, 'puzzle', 'sushi')).toBe(0);
+    expect(trendScoreBonus(null, 'action', 'ninja')).toBe(0);
+  });
+
+  it('売上：両方合致 ×1.10 / 片方 ×1.05 / 不一致 ×1.0 / なし ×1.0', () => {
+    expect(trendSalesMultiplier(trend, 'action', 'ninja')).toBe(1.1);
+    expect(trendSalesMultiplier(trend, 'action', 'sushi')).toBe(1.05);
+    expect(trendSalesMultiplier(trend, 'puzzle', 'sushi')).toBe(1);
+    expect(trendSalesMultiplier(null, 'action', 'ninja')).toBe(1);
+  });
+});
+
+describe('computeRevenue はトレンドに依存しない（二重掛けを撤去）', () => {
+  it('trend の有無・合致に関わらず売上は同じ（トレンドはスコア側で効かせる）', () => {
+    const trend: Trend = { genreId: 'action', themeId: 'ninja', expiresAt: Number.MAX_SAFE_INTEGER };
+    const withTrend = computeRevenue(60, 'action', 'ninja', 'mini', trend, 0, false);
+    const noTrend = computeRevenue(60, 'action', 'ninja', 'mini', null, 0, false);
+    expect(withTrend).toBe(noTrend);
   });
 });
 
@@ -83,17 +115,18 @@ describe('computeRevenue', () => {
     expect(v).toBe(Math.round(SCALE_BALANCE.mini.baseRevenue * SALES_MULTIPLIER_BY_SCORE.normal));
   });
 
-  it('ソフトボーナスは +20% でキャップされる', () => {
-    // pr/pioneer を盛っても softMul は最大 1.2
-    const capped = computeRevenue(60, 'action', 'ninja', 'mini', null, 1_000_000, true, 1, 1);
-    const base = computeRevenue(60, 'action', 'ninja', 'mini', null, 0, false);
-    expect(capped).toBe(Math.round(base * 1.2));
+  it('各ボーナスは独立の倍率として掛かる（案B：共有 +20% 上限を廃止）', () => {
+    // ファン1万(+0.15) / ローンチ広告(+0.1) / 広報+0.22（+11%×2相当）/ 初回+0.05
+    const boosted = computeRevenue(60, 'action', 'ninja', 'mini', null, 1_000_000, true, 0.22, 0.05);
+    const raw = SCALE_BALANCE.mini.baseRevenue * SALES_MULTIPLIER_BY_SCORE.normal;
+    const expectedMul = (1 + 0.22) * (1 + 0.15) * (1 + 0.1) * (1 + 0.05);
+    expect(boosted).toBe(Math.round(raw * expectedMul)); // 約 ×1.62（上限で潰れない）
   });
 
-  it('マイナスボーナスは -30% で下げ止まる', () => {
-    const floored = computeRevenue(60, 'action', 'ninja', 'mini', null, 0, false, -5, 0);
+  it('マイナスの広報ボーナスは売上を下げない（0 で下げ止まる）', () => {
     const base = computeRevenue(60, 'action', 'ninja', 'mini', null, 0, false);
-    expect(floored).toBe(Math.round(base * 0.7));
+    const negative = computeRevenue(60, 'action', 'ninja', 'mini', null, 0, false, -5, 0);
+    expect(negative).toBe(base);
   });
 
   it('売上は 0 未満にならない', () => {

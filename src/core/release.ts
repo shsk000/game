@@ -5,7 +5,7 @@ import type { GenreId } from '../data/genres';
 import type { Scale } from '../data/scales';
 import { SCALE_BY_ID } from '../data/scales';
 import type { ThemeId } from '../data/themes';
-import { type Trend, trendMultiplier } from '../data/trend';
+import { type Trend, trendSalesMultiplier } from '../data/trend';
 import type {
   Achievement,
   CurrentProject,
@@ -29,11 +29,7 @@ import type { Records } from '../utils/storage';
 import { remainingBugPenalty } from './bugs';
 import { applyReleaseGrowth, type LevelUp } from './growth';
 import type { Deps } from './ports';
-import {
-  computeNewlyUnlockedCategories,
-  computeStageUnlocks,
-  evaluateAchievements,
-} from './progression';
+import { computeNewlyUnlockedCategories, evaluateAchievements } from './progression';
 
 /**
  * リリースパイプライン（品質→メタスコア→売上→ファン→解放→実績）。
@@ -43,8 +39,8 @@ import {
 
 export type ReleaseOpts = {
   launchAd?: boolean;
+  /** 発売時のマーケティング広告：売上を +10%（スコアには影響しない・softBonus 上限の外）。 */
   marketingAd?: boolean;
-  debugAd?: boolean;
 };
 
 /** リリース計算が読む状態のスナップショット */
@@ -109,13 +105,13 @@ export const computeRelease = (
     themeId: cur.themeId,
   });
   // 3) タイピング演技スコア（0..100）— spec §2-2
-  // 広告ボーナス（既存仕様）はパフォーマンス側に +5 ずつ寄せる
-  const adPerfBoost = (opts?.marketingAd ? 5 : 0) + (opts?.debugAd ? 5 : 0);
+  // 発売時の広告（マーケ/デバッグチーム）でスコアを +5 する旧仕様は撤去。
+  // 広告はスコアに影響させない（バグ削減はデバッグフェーズ、売上はローンチ広告で扱う）。
   // v0.17：バグゼロ（開発〜デバッグで残バグ 0）でタイピング演技 +5（既存 noBugs 判定に接続）
   const remainingBugs = cur.bugCount ?? 0;
   const performance = Math.min(
     100,
-    computePerformanceScore({ ...cur.perf, noBugs: remainingBugs === 0 }) + adPerfBoost,
+    computePerformanceScore({ ...cur.perf, noBugs: remainingBugs === 0 }),
   );
 
   // 4) computeQualityV10 で合成（運の基底 50 ± 揺らぎ）。神ゲーガチャは v0.10 で廃止。
@@ -153,7 +149,7 @@ export const computeRelease = (
   const meta = computeMetascore(quality, cur.genreId, cur.themeId, trend, deps.rng);
   const launchAdActive = !!opts?.launchAd;
   const pioneer = !ctx.library.some((w) => w.genreId === cur.genreId && w.themeId === cur.themeId);
-  const pioneerBonus = pioneer ? 0.3 : 0;
+  const pioneerBonus = pioneer ? 0.05 : 0;
   const baseTotalRevenue = computeRevenue(
     meta.metascore,
     cur.genreId,
@@ -171,7 +167,11 @@ export const computeRelease = (
     0.5,
     Math.min(2, 1 + (axes.salesForecast + axes.buzz) / 100 - effectiveReputationRisk / 100),
   );
-  const totalRevenue = Math.round(baseTotalRevenue * axisSalesMul);
+  // マーケティング広告：売上 +10%（スコアには効かせず売上のみ。上限の外で確実に効く）
+  const marketingMul = opts?.marketingAd ? 1.1 : 1;
+  // トレンド売上倍率（両方 ×1.10 / 片方 ×1.05）。スコア側 trendScoreBonus とは別枠で上限の外。
+  const trendSalesMul = trendSalesMultiplier(trend, cur.genreId, cur.themeId);
+  const totalRevenue = Math.round(baseTotalRevenue * axisSalesMul * marketingMul * trendSalesMul);
   const initialRevenue = Math.round(totalRevenue * INITIAL_SHARE);
   const salesPool = totalRevenue - initialRevenue;
   const decayPerSec = decayRateFor(meta.metascore);
@@ -196,7 +196,7 @@ export const computeRelease = (
   // イベントのコスト効果（costMod%）：開発費に対する追加徴収/返金をリリース時に精算
   const costAdjust = Math.round(SCALE_BY_ID[cur.scale].baseCost * (axes.costMod / 100));
 
-  const trendMul = trendMultiplier(trend, cur.genreId, cur.themeId);
+  const trendMul = trendSalesMul;
   const workBreakdown: WorkBreakdown = {
     ...qBreakdown,
     // v0.14 修正：Work.breakdown のフィールド名は performance。
@@ -237,14 +237,10 @@ export const computeRelease = (
   };
 
   const newLibrary = [work, ...ctx.library];
-  // v0.10 仕上げ §6-8：累計売上 + ヒット作のハイブリッドで解放判定
+  // v0.29：ジャンル/テーマの発売時自動解放（computeStageUnlocks）を廃止。
+  // stage2+ の解放は buyGenre/buyTheme（購入）が唯一の経路（案A→案B）。
+  // カテゴリの自動解放は据え置き（対象外）。docs/v29/spec.md。
   const projectedLifetimeRevenue = ctx.lifetimeRevenue + initialRevenue;
-  const stageUnlock = computeStageUnlocks(
-    ctx.unlockedGenres,
-    ctx.unlockedThemes,
-    newLibrary,
-    projectedLifetimeRevenue,
-  );
   const newCategoryUnlocks = computeNewlyUnlockedCategories(
     ctx.unlockedCategories,
     newLibrary,
@@ -278,8 +274,8 @@ export const computeRelease = (
     records: newRec,
     achievements: newAch.unlocked,
     newlyAchieved: [...ctx.newlyAchieved, ...newAch.newly],
-    unlockedGenres: [...ctx.unlockedGenres, ...stageUnlock.newGenres],
-    unlockedThemes: [...ctx.unlockedThemes, ...stageUnlock.newThemes],
+    unlockedGenres: [...ctx.unlockedGenres],
+    unlockedThemes: [...ctx.unlockedThemes],
     unlockedCategories: [...ctx.unlockedCategories, ...newCategoryUnlocks],
     employees: growth.employees,
     lastLevelUps: growth.levelUps,

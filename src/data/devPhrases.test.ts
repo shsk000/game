@@ -22,7 +22,7 @@ describe('pickBossPhrase（v0.20 C：ボス文章＝プール2文の連結）', 
   });
 });
 
-describe('pickPhrase（v0.29：規模で1文の長さ＝モーラ数が偏る）', () => {
+describe('pickPhrase（v0.30：規模で1文の長さ＝モーラ数が偏る）', () => {
   // 決定的 PRNG（mulberry32）でサンプルを再現可能にする
   const seeded = (seed: number) => {
     let a = seed >>> 0;
