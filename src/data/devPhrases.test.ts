@@ -6,8 +6,9 @@ import type { Scale } from './scales';
 describe('pickBossPhrase（v0.20 C：ボス文章＝プール2文の連結）', () => {
   it('プール内の2文をそのまま連結した文字列を返す', () => {
     const pool = CATEGORY_PHRASE_POOLS.program;
-    // rng を固定：1回目 0（先頭）・2回目 0.99（末尾）を返す
-    const calls: number[] = [0, 0.99];
+    // rng を固定：1回目 0（先頭）・2回目 ほぼ1（末尾）を返す
+    // ※ プール件数に依存しないよう 1 未満の最大級の値を使う（0.99 だと件数増で末尾に届かない）
+    const calls: number[] = [0, 0.999999];
     let i = 0;
     const rng = () => calls[i++];
     expect(pickBossPhrase('program', rng)).toBe(pool[0] + pool[pool.length - 1]);
