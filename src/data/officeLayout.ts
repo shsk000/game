@@ -110,14 +110,7 @@ export type PropTransform = {
  *
  * 🔧 south は現状どの座席でも使われていない（全席 north）ため未調整の既定値のまま。
  */
-export type PropKey =
-  | 'laptop'
-  | 'chair'
-  | 'desktop'
-  | 'gaming_rig'
-  | 'book'
-  | 'pentab'
-  | 'plant';
+export type PropKey = 'laptop' | 'chair' | 'desktop' | 'gaming_rig' | 'book' | 'pentab' | 'plant';
 
 export const PROP_TRANSFORMS: Record<PropKey, Record<SeatDir, PropTransform>> = {
   laptop: {
@@ -152,6 +145,29 @@ export const PROP_TRANSFORMS: Record<PropKey, Record<SeatDir, PropTransform>> = 
     south: { x: 50, y: -150, scale: 0.6, z: 1 },
   },
 };
+
+/**
+ * v0.25：奥行き遠近スケール。座席Y（大きい=手前）で 1.0、奥の列ほど小さく。
+ * 机上プロップ（PC・小物）の scale とオフセット(x,y)に掛けることで、1つの調整値で
+ * 手前/奥どちらのデスクにも比率で合う（絶対px運用のズレを解消）。椅子・人は等倍のまま。
+ */
+export const PERSPECTIVE_BACK_SCALE = 0.75; // 最奥列の倍率（手前列=1.0）🔧
+const SEAT_Y_MIN = Math.min(...OFFICE_LAYOUT.seats.map((s) => s.y));
+const SEAT_Y_MAX = Math.max(...OFFICE_LAYOUT.seats.map((s) => s.y));
+export const seatDepthScale = (seatY: number): number => {
+  if (SEAT_Y_MAX === SEAT_Y_MIN) return 1;
+  const t = (seatY - SEAT_Y_MIN) / (SEAT_Y_MAX - SEAT_Y_MIN); // 0=最奥, 1=最手前
+  return PERSPECTIVE_BACK_SCALE + (1 - PERSPECTIVE_BACK_SCALE) * t;
+};
+/** 遠近スケールを掛ける机上プロップ（椅子・人は着席ユニットとして対象外）。 */
+export const DEPTH_SCALED_PROPS = new Set<PropKey>([
+  'laptop',
+  'desktop',
+  'gaming_rig',
+  'book',
+  'pentab',
+  'plant',
+]);
 
 /** 立ち・歩行スプライトの8方向。 */
 export type Dir8 =

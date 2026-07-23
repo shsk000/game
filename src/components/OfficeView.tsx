@@ -16,6 +16,7 @@ import {
   pentabSprite,
   plantSprite,
   type SeatDir,
+  seatDepthScale,
   sitFootOffset,
   sittingSprite,
   spriteFolderFor,
@@ -109,15 +110,18 @@ function PropSprite({
   footY,
   t,
   z,
+  scaleMul = 1,
 }: {
   src: string;
   x: number;
   footY: number;
   t: PropTransform;
   z: number;
+  /** 遠近スケール（奥ほど小さく）。t.scale に掛ける。 */
+  scaleMul?: number;
 }) {
   const [natural, setNatural] = useState<number | null>(null);
-  const width = natural == null ? undefined : natural * t.scale;
+  const width = natural == null ? undefined : natural * t.scale * scaleMul;
   return (
     <img
       src={src}
@@ -235,24 +239,29 @@ function SeatedEmployee({
   // 椅子だけ遮蔽帯（脚が手前の机に隠れる）を使う。PC・小物は配置ツールと同じ単純 transform。
   const chairMargin = sitFootOffset(dir) + chair.y;
 
+  // v0.25：奥行き遠近。机上プロップは scale とオフセットに座席の遠近スケールを掛ける
+  // （手前=1.0、奥ほど小さく＆内側へ）。椅子・人は等倍。
+  const ds = seatDepthScale(seat.y);
   // PC・小物は配置ツール（/admin/props）と同じ座標系：footY = 座り足元 + t.y。
   const pcSprite = (
     <PropSprite
       src={pcSpriteFn(dir)}
-      x={seat.x + pcT.x}
-      footY={seat.y + sitFootOffset(dir) + pcT.y}
+      x={seat.x + pcT.x * ds}
+      footY={seat.y + sitFootOffset(dir) + pcT.y * ds}
       t={pcT}
       z={baseZ + pcT.z}
+      scaleMul={ds}
     />
   );
   const miscSprite =
     miscSpriteFn && miscT ? (
       <PropSprite
         src={miscSpriteFn(dir)}
-        x={seat.x + miscT.x}
-        footY={seat.y + sitFootOffset(dir) + miscT.y}
+        x={seat.x + miscT.x * ds}
+        footY={seat.y + sitFootOffset(dir) + miscT.y * ds}
         t={miscT}
         z={baseZ + miscT.z}
+        scaleMul={ds}
       />
     ) : null;
   const chairSprite_ = (
