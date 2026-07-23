@@ -142,7 +142,7 @@ export const PROP_TRANSFORMS: Record<PropKey, Record<SeatDir, PropTransform>> = 
     south: { x: -42, y: -118, scale: 0.6, z: 1 },
   },
   plant: {
-    north: { x: 54, y: -3, scale: 0.55, z: 1, tiltX: 26 },
+    north: { x: 54, y: 2, scale: 0.55, z: 1, tiltX: 26 },
     south: { x: 50, y: -150, scale: 0.6, z: 1 },
   },
 };
