@@ -39,7 +39,15 @@ import { GachaReveal } from './GachaReveal';
 
 const ICON_BASE = '/sprites/ui';
 
-type ModalKind = 'hire' | 'scale' | 'equipment' | 'achievements' | 'settings' | 'debt' | null;
+type ModalKind =
+  | 'hire'
+  | 'scale'
+  | 'equipment'
+  | 'achievements'
+  | 'settings'
+  | 'debt'
+  | 'officeUpgrade'
+  | null;
 
 // formatPower / ROLE_VISUAL / RANK_VISUAL は employeeDisplay.ts に共通化（v0.22）
 // SegGauge は src/components/ui/SegGauge.tsx に共通化（v0.11 開発フェーズと共用）
@@ -65,6 +73,10 @@ export const OfficeScreen = () => {
   const repayDebt = useGameStore((s) => s.repayDebt);
   const goTo = useGameStore((s) => s.goTo);
   const reset = useGameStore((s) => s.reset);
+  const muted = useGameStore((s) => s.muted);
+  const volume = useGameStore((s) => s.volume);
+  const setMuted = useGameStore((s) => s.setMuted);
+  const setVolume = useGameStore((s) => s.setVolume);
 
   const [modal, setModal] = useState<ModalKind>(null);
   const [debtAmountInput, setDebtAmountInput] = useState<string>('');
@@ -150,6 +162,15 @@ export const OfficeScreen = () => {
       emoji: '🌟',
       iconSrc: `${ICON_BASE}/icon_achievements.png`,
       onClick: () => setModal('achievements'),
+    },
+    {
+      // v0.xx：将来のオフィスアップグレード機能のティザー（薄グレー＋準備中バッジ）。
+      // 押すと「準備中／近日追加予定」モーダルを出すだけ（機能は未実装）。
+      id: 'office',
+      label: 'オフィス',
+      emoji: '🏢',
+      dimmed: true,
+      onClick: () => setModal('officeUpgrade'),
     },
     {
       id: 'settings',
@@ -758,6 +779,8 @@ export const OfficeScreen = () => {
                 style={{
                   padding: '6px 10px',
                   background: isUnlocked ? '#d0e8c0' : '#2e4568',
+                  // 濃色（青）背景では色未指定だと黒字継承で不可視になるため明色を明示
+                  color: isUnlocked ? '#0a1422' : '#e6ecf5',
                   border: '2px solid #0a1422',
                   borderRadius: 2,
                   fontSize: 13,
@@ -799,6 +822,8 @@ export const OfficeScreen = () => {
             padding: 10,
             marginBottom: 10,
             background: '#24395c',
+            // 濃紺背景では色未指定だと黒字継承で不可視になるため明色を明示
+            color: '#e6ecf5',
             border: '2px solid #0a1422',
             fontSize: 12,
             fontVariantNumeric: 'tabular-nums',
@@ -848,6 +873,8 @@ export const OfficeScreen = () => {
                   gap: 10,
                   padding: '8px 10px',
                   background: done ? '#24395c' : '#2e4568',
+                  // 濃紺背景では色未指定だと黒字継承で不可視になるため明色を明示
+                  color: '#e6ecf5',
                   border: '2px solid #0a1422',
                   borderRadius: 2,
                   opacity: done ? 1 : 0.7,
@@ -855,7 +882,7 @@ export const OfficeScreen = () => {
               >
                 <span style={{ fontSize: 22 }}>{a.emoji}</span>
                 <span style={{ fontWeight: 700, fontSize: 13, minWidth: 110 }}>{a.name}</span>
-                <span style={{ fontSize: 12, color: '#3a4452', flex: 1 }}>{a.desc}</span>
+                <span style={{ fontSize: 12, color: '#b3bccb', flex: 1 }}>{a.desc}</span>
               </li>
             );
           })}
@@ -945,6 +972,32 @@ export const OfficeScreen = () => {
       {/* ── 設定モーダル ── */}
       <PixelModal open={modal === 'settings'} onClose={closeModal} title="設定" maxWidth={400}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* v0.24：効果音のミュート/音量 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 13 }}>効果音</span>
+              <PixelButton variant="secondary" onClick={() => setMuted(!muted)}>
+                {muted ? 'OFF' : 'ON'}
+              </PixelButton>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, width: 40 }}>音量</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(volume * 100)}
+                disabled={muted}
+                onChange={(e) => setVolume(Number(e.target.value) / 100)}
+                style={{ flex: 1, accentColor: '#4a90d9' }}
+                aria-label="効果音音量"
+              />
+              <span style={{ fontSize: 12, width: 36, textAlign: 'right' }}>
+                {Math.round(volume * 100)}
+              </span>
+            </div>
+          </div>
+          <div style={{ height: 1, background: 'rgba(0,0,0,0.15)' }} />
           {/* 開発ビルド限定：お金デバッグ（動いているゲームに即反映。localStorage 経由の
               admin/econ と違いタブ上書き問題が起きない） */}
           {import.meta.env.DEV && (
@@ -1048,6 +1101,36 @@ export const OfficeScreen = () => {
             }}
           >
             セーブをリセット
+          </PixelButton>
+        </div>
+      </PixelModal>
+
+      {/* ── オフィスアップグレード（準備中ティザー） ── */}
+      <PixelModal
+        open={modal === 'officeUpgrade'}
+        onClose={closeModal}
+        title="オフィスアップグレード"
+        maxWidth={380}
+      >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 12,
+            textAlign: 'center',
+            color: '#1c2228',
+          }}
+        >
+          <div style={{ fontSize: 44, lineHeight: 1 }}>🏢</div>
+          <p style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>準備中</p>
+          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
+            オフィスを拡張・アップグレードできる機能を開発中です。
+            <br />
+            近日追加予定です！ 🛠️
+          </p>
+          <PixelButton variant="secondary" onClick={closeModal}>
+            とじる
           </PixelButton>
         </div>
       </PixelModal>

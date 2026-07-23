@@ -324,4 +324,41 @@ describe('computeRelease', () => {
     ).work;
     expect(fast.ghostBeaten).toBe(true); // 60 秒 ≤ 記録 120 秒
   });
+
+  // v0.29：ジャンル/テーマは発売で自動解放しない（解放は購入のみ）。docs/v29/spec.md
+  it('発売でジャンル/テーマは自動解放されない（累計売上・ヒット作が閾値を超えても不変）', () => {
+    const hitWork = (id: string): Work => ({
+      id,
+      title: 't',
+      genreId: 'puzzle',
+      themeId: 'sushi',
+      scale: 'mini',
+      quality: 90,
+      metascore: 90, // ヒット作（メタ 70+）: 旧ロジックなら stage 加速で一括解放
+      isMasterpiece: false,
+      developSec: 1,
+      initialRevenue: 0,
+      salesPool: 0,
+      initialSalesPool: 0,
+      decayPerSec: 0,
+      totalRevenue: 0,
+      selling: false,
+      fansGained: 0,
+      ghostBeaten: false,
+      launchAdUsed: false,
+      pioneer: false,
+      releasedAt: 0,
+      createdAt: 0,
+      breakdown: {},
+    });
+    // 累計売上 ¥2 億（旧 stage4 閾値 ¥1 億超）＋ ヒット作 5 本（旧 stage4 閾値）。
+    // 旧実装ならこの発売で stage4 到達＝全ジャンル/全テーマが一括解放されていた。
+    const c = ctx({
+      lifetimeRevenue: 200_000_000,
+      library: [hitWork('h1'), hitWork('h2'), hitWork('h3'), hitWork('h4'), hitWork('h5')],
+    });
+    const { patch } = computeRelease(c, undefined, deps());
+    expect(patch.unlockedGenres).toEqual(c.unlockedGenres); // 初期解放のまま増えない
+    expect(patch.unlockedThemes).toEqual(c.unlockedThemes);
+  });
 });

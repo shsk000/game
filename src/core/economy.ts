@@ -59,7 +59,8 @@ export const computeBorrow = (
   ctx: EconomyCtx,
   amount: number,
 ): { funds: number; debt: number } | null => {
-  if (amount <= 0) return null;
+  // 非有限（NaN/Infinity）や 0 以下は無効。NaN は `<= 0` を素通りするため明示的に弾く。
+  if (!Number.isFinite(amount) || amount <= 0) return null;
   const salaries = sumMonthlySalaries(ctx.employees);
   const rent = currentRent(ctx.unlockedScales);
   const limit = computeBorrowingLimit(salaries + rent);
@@ -72,10 +73,25 @@ export const computeRepay = (
   ctx: Pick<EconomyCtx, 'funds' | 'debt'>,
   amount: number,
 ): { funds: number; debt: number } | null => {
-  if (amount <= 0) return null;
+  // 非有限（NaN/Infinity）や 0 以下は無効。NaN は `<= 0` を素通りするため明示的に弾く。
+  if (!Number.isFinite(amount) || amount <= 0) return null;
   const pay = Math.min(amount, ctx.funds, ctx.debt);
   if (pay <= 0) return null;
   return { funds: ctx.funds - pay, debt: ctx.debt - pay };
+};
+
+/**
+ * コスト支払い（企画開始の前払い開発費 devCost 等）。computeMonthlyTick と同じ規則で、
+ * 資金がマイナスになった分は自動的に借金へ振替し、資金は 0 で下げ止まる。
+ * （ゲームオーバー判定は月初 computeMonthlyTick 側に委ねる＝ここでは行わない）
+ */
+export const computeSpend = (
+  ctx: { funds: number; debt: number },
+  amount: number,
+): { funds: number; debt: number } => {
+  const raw = ctx.funds - amount;
+  if (raw < 0) return { funds: 0, debt: ctx.debt + -raw };
+  return { funds: raw, debt: ctx.debt };
 };
 
 /** オフライン収益の反映猶予：これ未満の離席はレポートしない */

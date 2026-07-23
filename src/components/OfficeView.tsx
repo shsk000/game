@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { initWander, stepWander, type WanderEnv, type WanderState } from '../core/officeWander';
 import { EQUIPMENT_BY_ID } from '../data/equipment';
 import {
   bookSprite,
-  chairSprite,
   desktopSprite,
   gamingRigSprite,
+  isOpenFloor,
   laptopSprite,
   NATIVE_H,
   NATIVE_W,
@@ -17,11 +18,15 @@ import {
   pentabSprite,
   plantSprite,
   propScreenX,
+  type Seat,
   type SeatDir,
   seatDepthScale,
   sitFootOffset,
-  sittingSprite,
   spriteFolderFor,
+  standingSprite,
+  WALK_FRAMES,
+  WALKABLE_POINTS,
+  walkSheet,
 } from '../data/officeLayout';
 import type { Employee } from '../state/types';
 import {
@@ -32,29 +37,107 @@ import {
 } from './bandedSprite';
 
 /**
- * オフィスの床ビュー（v0.19・正面向き素材）。
+ * オフィスの床ビュー（v0.19・正面向き素材／v0.26・社員がランダムに歩き回る／v0.25・机に装備を表示）。
  * 世界観・座標系・素材規約は docs/v17/notes/office-front-facing-plan.md を参照。
  *
  * 背景は 1 枚絵（office_bg.png、机・壁・床・装飾を内蔵）。座標はすべて背景のネイティブ座標
  * （NATIVE_W×NATIVE_H）。表示コンポーネントはこの div をネイティブサイズのまま返し、
  * 呼び出し側（OfficeScreen）が既存の stageScale ロジックで 1280×720 に収まるよう縮小する。
  *
- * 座席（OFFICE_LAYOUT.seats）は「机の南側・北向き（背中が見える）」で確定。
- * 空席には机だけが背景として見える（社員なし＝椅子・PC・人を描画しないだけ）。
- * レイアウト調整は office-layout-tool.html で行い、出力 JSON を
- * src/data/officeLayoutData.json に転記する。
+ * v0.26 A：待機オフィス表示中は社員を着席させず、歩行可能グリッド上をランダムに歩かせる
+ * （生活感）。移動の状態遷移は core/officeWander の純粋関数 `stepWander` が持ち、ここは
+ * requestAnimationFrame で dt を供給して描くだけ（時刻・乱数は View 側に閉じ込め、
+ * ゲームロジックには一切影響しない表示専用の状態）。家具の前後の遮蔽は renderBandedSprite
+ * ＋OccluderMask で成立（参照実装：OfficeEditorTool の `?walk`）。
+ *
+ * v0.25 装備：社員は歩き回るが、各机（座席 index）は担当社員 employees[i] の「装備置き場」。
+ * その社員の装備（PC/小物）を机上に静的に描く（歩行位置とは独立）。配置は /admin/props で調整した
+ * PROP_TRANSFORMS。背景はアイソメ（並行投影）なので等倍（PERSPECTIVE_BACK_SCALE=1.0）で全机同一。
  */
 
 type Props = {
-  /** 在籍社員。座席数ぶんだけ手前から着席させる（未指定なら誰も座らない）。 */
+  /** 在籍社員。座席数を上限に歩かせる（未指定なら誰も居ない）。 */
   employees?: Employee[];
 };
 
+const CHAR_SCALE = OFFICE_LAYOUT.charScale;
+
+/** うろつきの調整値（spec §5-1「ゆっくり歩いて、回りをちょっと」）。 */
+const WANDER_ENV_BASE = {
+  speedPxPerSec: 80,
+  restMinMs: 1500,
+  restMaxMs: 5000,
+  arriveDist: 14,
+  stuckLimitMs: 450,
+} as const;
+/** 目標を選ぶ範囲（native px）。現在地からこの半径内の開けた床だけを次の目標にする＝近所をうろつく。 */
+const WANDER_RADIUS = 210;
+/** 歩行スプライトの1コマ表示時間(ms)。全社員で共有する歩行アニメの位相。 */
+const WALK_FRAME_MS = 120;
+
+/** from の半径 WANDER_RADIUS 内の開けた床点を1つ選ぶ（無ければ全体から）。 */
+function pickNearTarget(rng: () => number, from: { x: number; y: number }) {
+  const r2 = WANDER_RADIUS * WANDER_RADIUS;
+  const near = WALKABLE_POINTS.filter((p) => {
+    const dx = p.x - from.x;
+    const dy = p.y - from.y;
+    return dx * dx + dy * dy <= r2;
+  });
+  const pool = near.length > 0 ? near : WALKABLE_POINTS;
+  return pool[Math.floor(rng() * pool.length)];
+}
+
 export const OfficeView = ({ employees = [] }: Props) => {
-  const seated = employees.slice(0, OFFICE_LAYOUT.seats.length);
-  // 背景の家具（机・ソファ等）に手前を横切られた時に隠れるための遮蔽物。データは
-  // officeLayoutData.json（配置ツール④で作成）。レイアウトは不変なので一度だけ構築する。
+  const walkers = employees.slice(0, OFFICE_LAYOUT.seats.length);
+  // 背景の家具に手前を横切られた時に隠れるための遮蔽物。レイアウトは不変なので一度だけ構築する。
   const occluderLookup = useMemo(() => buildOccluderLookup(OFFICE_LAYOUT.occluders), []);
+
+  const env = useMemo<WanderEnv>(
+    () => ({
+      canStand: (x, y) => isOpenFloor(x, y),
+      pickSpawn: (rng) => WALKABLE_POINTS[Math.floor(rng() * WALKABLE_POINTS.length)],
+      pickTarget: pickNearTarget,
+      ...WANDER_ENV_BASE,
+    }),
+    [],
+  );
+
+  // 社員ごとのうろつき状態。id で引けるよう Map に持ち、採用/離職で位置がリセットされないようにする。
+  const statesRef = useRef<Map<string, WanderState>>(new Map());
+  const frameRef = useRef(0);
+  // 最新の walkers/env を RAF ループから参照する（ループ自体は張り替えず、毎フレームの再購読を避ける）。
+  const walkersRef = useRef(walkers);
+  walkersRef.current = walkers;
+  const envRef = useRef(env);
+  envRef.current = env;
+  // 毎フレーム再描画を起こすためのティック（値自体は使わない）。
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    const rng = Math.random; // 表示専用の揺らぎ。ゲーム状態には触れないので注入不要。
+    const tick = (now: number) => {
+      const dt = Math.min(50, now - last); // ms。タブ復帰などの巨大 dt をクランプ。
+      last = now;
+      const m = statesRef.current;
+      const alive = new Set<string>();
+      for (const w of walkersRef.current) {
+        alive.add(w.id);
+        const cur = m.get(w.id);
+        m.set(
+          w.id,
+          cur ? stepWander(cur, dt, rng, envRef.current) : initWander(rng, envRef.current),
+        );
+      }
+      for (const id of m.keys()) if (!alive.has(id)) m.delete(id);
+      frameRef.current = Math.floor(now / WALK_FRAME_MS) % WALK_FRAMES;
+      setTick((n) => (n + 1) & 0xffff);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   return (
     <div
@@ -78,19 +161,28 @@ export const OfficeView = ({ employees = [] }: Props) => {
       {OFFICE_LAYOUT.occluders.map((o) => (
         <OccluderMask key={`${o.baseline}-${o.cells[0]}`} cells={o.cells} bgSrc={officeBgSrc} />
       ))}
-      {seated.map((employee, idx) => (
-        <SeatedEmployee
-          key={employee.id}
-          employee={employee}
-          seat={OFFICE_LAYOUT.seats[idx]}
-          occluderLookup={occluderLookup}
-        />
-      ))}
+      {/* v0.25 装備：各机は担当社員 employees[i] の装備置き場。歩行位置と独立に机上へ静的描画。 */}
+      {OFFICE_LAYOUT.seats.map((seat, i) => {
+        const employee = walkers[i];
+        if (!employee) return null;
+        return <DeskEquipment key={`equip-${employee.id}`} seat={seat} employee={employee} />;
+      })}
+      {walkers.map((employee) => {
+        const state = statesRef.current.get(employee.id);
+        if (!state) return null; // 初回 RAF 前は未初期化（1フレームだけ非表示）。
+        return (
+          <WalkingEmployee
+            key={employee.id}
+            employee={employee}
+            state={state}
+            frame={frameRef.current}
+            occluderLookup={occluderLookup}
+          />
+        );
+      })}
     </div>
   );
 };
-
-const CHAR_SCALE = OFFICE_LAYOUT.charScale;
 
 /** 装備の sprite 基底名（＝PROP_TRANSFORMS キー）→ スプライトパス関数。 */
 const PROP_SPRITE_BY_BASE: Partial<Record<PropKey, (dir: SeatDir) => string>> = {
@@ -119,7 +211,7 @@ function PropSprite({
   footY: number;
   t: PropTransform;
   z: number;
-  /** 遠近スケール（奥ほど小さく）。t.scale に掛ける。 */
+  /** 遠近スケール（アイソメ＝等倍のとき 1）。t.scale に掛ける。 */
   scaleMul?: number;
 }) {
   const [natural, setNatural] = useState<number | null>(null);
@@ -145,89 +237,13 @@ function PropSprite({
 }
 
 /**
- * 遮蔽物を考慮して1枚のスプライトを描く。
- *
- * PixelLab 出力は要求サイズより大きいキャンバス（余白込み）で返るため、表示サイズは
- * 「実ピクセル数 × scale」で決める必要がある（固定値の決め打ち厳禁）。まず不可視の img で
- * naturalWidth/Height を実測し、確定してから帯分割して描く。
- *
- * 帯分割（部分遮蔽）の本体は bandedSprite.tsx。配置ツール⑤検証と同じ実装を共有していて、
- * 「検証ページの見え方＝本番の見え方」になる。
+ * 1つの机（座席）に、担当社員の装備（PC スロット＋小物スロット）を静的に描く。
+ * PC は未装備/ノートなら laptop。小物は book/pentab/plant のみ描画。位置は seat 基準の
+ * PROP_TRANSFORMS（配置ツールと同一の座標系＝机の面 PROP_ORIGIN_Y からの相対）。
  */
-function BandedSprite({
-  spriteKey,
-  src,
-  x,
-  trueFootY,
-  marginNative,
-  z,
-  scale,
-  occluderLookup,
-}: {
-  spriteKey: string;
-  src: string;
-  x: number;
-  /** 接地点のワールドY。遮蔽物の baseline と比較して前後を決める。 */
-  trueFootY: number;
-  /** 接地点より下のキャンバス余白。 */
-  marginNative: number;
-  /** 遮蔽されない帯の z（同じ座席内の重ね順を決め打ちするため明示する）。 */
-  z: number;
-  scale: number;
-  occluderLookup: OccluderLookup;
-}) {
-  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
-
-  if (!natural) {
-    // 実測用。読み込み前に等倍サイズがちらつかないよう不可視で置く。
-    return (
-      <img
-        src={src}
-        alt=""
-        style={{ position: 'absolute', width: 0, height: 0, opacity: 0 }}
-        onLoad={(e) =>
-          setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
-        }
-      />
-    );
-  }
-  const width = natural.w * scale;
-  const height = natural.h * scale;
-  return (
-    <>
-      {renderBandedSprite(
-        spriteKey,
-        x,
-        trueFootY,
-        marginNative,
-        width,
-        height,
-        src,
-        0,
-        width,
-        occluderLookup,
-        z,
-      )}
-    </>
-  );
-}
-
-function SeatedEmployee({
-  employee,
-  seat,
-  occluderLookup,
-}: {
-  employee: Employee;
-  seat: (typeof OFFICE_LAYOUT.seats)[number];
-  occluderLookup: OccluderLookup;
-}) {
-  const folder = spriteFolderFor(employee);
+function DeskEquipment({ seat, employee }: { seat: Seat; employee: Employee }) {
   const dir = seat.dir;
-  // z-order（painter's algorithm）: y が大きい（南＝手前）ほど前面。
   const baseZ = Math.round(seat.y);
-  const chair = PROP_TRANSFORMS.chair[dir];
-
-  // 装備の解決：PC スロット（未装備/ノートは laptop）と小物スロット（book/pentab/plant のみ描画）。
   const equipped = employee.equipped ?? {};
   const pcBase = ((equipped.pc && EQUIPMENT_BY_ID[equipped.pc]?.sprite) || 'laptop') as PropKey;
   const pcT = (PROP_TRANSFORMS[pcBase] ?? PROP_TRANSFORMS.laptop)[dir];
@@ -238,93 +254,83 @@ function SeatedEmployee({
   const miscSpriteFn = miscBase ? PROP_SPRITE_BY_BASE[miscBase] : undefined;
   const miscT = miscBase ? PROP_TRANSFORMS[miscBase]?.[dir] : undefined;
 
-  // 椅子だけ遮蔽帯（脚が手前の机に隠れる）を使う。PC・小物は配置ツールと同じ単純 transform。
-  const chairMargin = sitFootOffset(dir) + chair.y;
-
-  // v0.25：奥行き遠近。机上プロップは scale とオフセットに座席の遠近スケールを掛ける
-  // （手前=1.0、奥ほど小さく＆内側へ）。椅子・人は等倍。
+  // アイソメ＝等倍（PERSPECTIVE_BACK_SCALE=1.0）。将来 <1.0 にした時のため ds 経由で描く。
   const ds = seatDepthScale(seat.y);
-  // PC・小物は配置ツール（/admin/props）と同じ座標系：footY = 座り足元 + t.y。
-  const pcSprite = (
-    <PropSprite
-      src={pcSpriteFn(dir)}
-      x={propScreenX(seat.x, pcT.x, ds, seat.y)}
-      footY={seat.y + sitFootOffset(dir) + (PROP_ORIGIN_Y + pcT.y) * ds}
-      t={pcT}
-      z={baseZ + pcT.z}
-      scaleMul={ds}
-    />
-  );
-  const miscSprite =
-    miscSpriteFn && miscT ? (
-      <PropSprite
-        src={miscSpriteFn(dir)}
-        x={propScreenX(seat.x, miscT.x, ds, seat.y)}
-        footY={seat.y + sitFootOffset(dir) + (PROP_ORIGIN_Y + miscT.y) * ds}
-        t={miscT}
-        z={baseZ + miscT.z}
-        scaleMul={ds}
-      />
-    ) : null;
-  const chairSprite_ = (
-    <BandedSprite
-      spriteKey={`${employee.id}-chair`}
-      src={chairSprite(dir)}
-      x={seat.x + chair.x}
-      trueFootY={seat.y}
-      marginNative={chairMargin}
-      z={baseZ + chair.z}
-      scale={chair.scale}
-      occluderLookup={occluderLookup}
-    />
-  );
-  const person = (
-    <BandedSprite
-      spriteKey={`${employee.id}-sit`}
-      src={sittingSprite(folder, dir)}
-      x={seat.x}
-      trueFootY={seat.y}
-      marginNative={sitFootOffset(dir)}
-      z={baseZ}
-      scale={CHAR_SCALE}
-      occluderLookup={occluderLookup}
-    />
-  );
-
-  if (dir === 'north') {
-    // 背面向き：PC(奥)→人→椅子(手前、脚を隠す)→小物(手前)。前後は z が決める。
-    return (
-      <>
-        {pcSprite}
-        {person}
-        {chairSprite_}
-        {miscSprite}
-      </>
-    );
-  }
-
-  // 正面向き：椅子(奥)→人→机オーバーレイ(手前)→PC→小物。
   return (
     <>
-      {chairSprite_}
-      {person}
-      {seat.overlay && (
-        <div
-          style={{
-            position: 'absolute',
-            left: seat.overlay[0],
-            top: seat.overlay[1],
-            width: seat.overlay[2],
-            height: seat.overlay[3],
-            backgroundImage: `url(${officeBgSrc})`,
-            backgroundPosition: `${-seat.overlay[0]}px ${-seat.overlay[1]}px`,
-            imageRendering: 'pixelated',
-            zIndex: baseZ + 1,
-          }}
+      <PropSprite
+        src={pcSpriteFn(dir)}
+        x={propScreenX(seat.x, pcT.x, ds, seat.y)}
+        footY={seat.y + sitFootOffset(dir) + (PROP_ORIGIN_Y + pcT.y) * ds}
+        t={pcT}
+        z={baseZ + pcT.z}
+        scaleMul={ds}
+      />
+      {miscSpriteFn && miscT ? (
+        <PropSprite
+          src={miscSpriteFn(dir)}
+          x={propScreenX(seat.x, miscT.x, ds, seat.y)}
+          footY={seat.y + sitFootOffset(dir) + (PROP_ORIGIN_Y + miscT.y) * ds}
+          t={miscT}
+          z={baseZ + miscT.z}
+          scaleMul={ds}
         />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * 歩行/立ちスプライトを1人ぶん描く。歩行シートの実フレーム幅を計測してから
+ * renderBandedSprite に渡す（PixelLab 出力サイズを決め打ちしない）。移動中は walk シートの
+ * 現在コマを、停止中は立ち絵を出す。遮蔽（家具の前後）は renderBandedSprite が担う。
+ */
+function WalkingEmployee({
+  employee,
+  state,
+  frame,
+  occluderLookup,
+}: {
+  employee: Employee;
+  state: WanderState;
+  frame: number;
+  occluderLookup: OccluderLookup;
+}) {
+  const folder = spriteFolderFor(employee);
+  const [frameW, setFrameW] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFrameW(null);
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled) setFrameW(img.naturalWidth / WALK_FRAMES);
+    };
+    img.src = walkSheet(folder, 'south');
+    return () => {
+      cancelled = true;
+    };
+  }, [folder]);
+
+  if (frameW == null) return null;
+  const charSize = frameW * CHAR_SCALE;
+  const { x, y, dir, moving } = state;
+  return (
+    <>
+      {renderBandedSprite(
+        // 歩行↔立ちで key を変え、img を作り直させる。使い回すと幅だけ先に変わって画像デコードが
+        // 遅れ、8コマの歩行シートが1コマ幅に潰れて広がる残像が一瞬出る（stop 時のちらつき対策）。
+        `${employee.id}-${moving ? 'walk' : 'stand'}`,
+        x,
+        y,
+        OFFICE_LAYOUT.footOffsets.stand,
+        charSize,
+        charSize,
+        moving ? walkSheet(folder, dir) : standingSprite(folder, dir),
+        moving ? -frame * charSize : 0,
+        moving ? charSize * WALK_FRAMES : charSize,
+        occluderLookup,
       )}
-      {pcSprite}
-      {miscSprite}
     </>
   );
 }

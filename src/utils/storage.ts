@@ -81,6 +81,10 @@ export type Persisted = {
    * 各社員の割当は Employee.equipped に持つ（employees 配列と一緒に保存される）。
    */
   ownedItems: Record<string, number>;
+  /** v0.24：効果音ミュート（旧セーブは false 既定） */
+  muted: boolean;
+  /** v0.24：効果音音量 0..1（旧セーブは 1 既定） */
+  volume: number;
 };
 
 const emptyGhostsRecord = (): Record<Scale, number | null> => ({
@@ -126,6 +130,8 @@ export const defaults = (): Persisted => ({
   gachaPity: 0,
   investPurchaseCount: 0,
   ownedItems: {},
+  muted: false,
+  volume: 1,
 });
 
 type LegacyWork = Partial<Work> & {

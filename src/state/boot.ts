@@ -3,6 +3,8 @@ import type { Deps } from '../core/ports';
 import { defaultDeps, mulberry32 } from '../core/ports';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import { ensureTrend } from '../data/trend';
+import { startBgm } from '../utils/bgm';
+import { setSfxMuted, setSfxVolume } from '../utils/sfx';
 import * as storage from '../utils/storage';
 import { type GameState, setGameDeps, useGameStore } from './gameStore';
 import { INITIAL_GAME_DATE } from './types';
@@ -34,6 +36,8 @@ const persistedSnapshot = (s: GameState): Omit<storage.Persisted, 'version' | 'l
   gachaPity: s.gachaPity,
   investPurchaseCount: s.investPurchaseCount,
   ownedItems: s.ownedItems,
+  muted: s.muted,
+  volume: s.volume,
 });
 
 const saveNow = (s: GameState, nowMs: number) => {
@@ -76,6 +80,8 @@ export const buildBootPatch = (
     gachaPity: persisted.gachaPity ?? 0,
     investPurchaseCount: persisted.investPurchaseCount ?? 0,
     ownedItems: persisted.ownedItems ?? {},
+    muted: persisted.muted ?? false,
+    volume: persisted.volume ?? 1,
   };
 };
 
@@ -104,6 +110,10 @@ export const bootGameStore = (deps?: Deps): void => {
   const persisted = storage.load() ?? storage.defaults();
   useGameStore.setState(buildBootPatch(persisted, resolved));
 
+  // 永続化された音設定を SE レイヤ（sfx）へ反映（音は演出なので store の外側で保持）
+  setSfxMuted(persisted.muted ?? false);
+  setSfxVolume(persisted.volume ?? 1);
+
   // 自動保存①：セーブ対象フィールドが変わったら保存
   useGameStore.subscribe(
     persistedSnapshot,
@@ -121,6 +131,8 @@ export const bootGameStore = (deps?: Deps): void => {
   // 自動保存②：離席時刻（lastSeenAt）の定期更新（オフライン収益の基準点）
   if (typeof window !== 'undefined') {
     setInterval(() => saveNow(useGameStore.getState(), resolved.now()), AUTOSAVE_INTERVAL_MS);
+    // BGM：autoplay ポリシー回避のため最初のユーザー操作で開始（以降ループ。ミュート/音量に自動追従）
+    window.addEventListener('pointerdown', () => startBgm(), { once: true });
   }
 
   // e2e / dev 用：window.__gs() で現在の state を覗く
