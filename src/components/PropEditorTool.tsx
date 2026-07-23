@@ -20,6 +20,7 @@ import {
   PROP_H_SPREAD,
   PROP_ORIGIN_Y,
   PROP_TRANSFORMS,
+  PROP_VP_X,
   type PropKey,
   type PropTransform,
   pentabSprite,
@@ -116,6 +117,8 @@ export function PropEditorTool() {
   const [originY, setOriginY] = useState(PROP_ORIGIN_Y);
   // v0.25：横パース（手前ほど外へ広げる量）。→ PROP_H_SPREAD に転記。
   const [hSpread, setHSpread] = useState(PROP_H_SPREAD);
+  // v0.25：横パースの消失点X（部屋の水平中心・native）。→ PROP_VP_X に転記。
+  const [vpX, setVpX] = useState(PROP_VP_X);
   const [transforms, setTransforms] = useState<Transforms>(defaultTransforms);
   const [io, setIo] = useState('');
   const [drag, setDrag] = useState<{
@@ -136,6 +139,7 @@ export function PropEditorTool() {
       if (typeof d?.perspBack === 'number') setPerspBack(d.perspBack);
       if (typeof d?.originY === 'number') setOriginY(d.originY);
       if (typeof d?.hSpread === 'number') setHSpread(d.hSpread);
+      if (typeof d?.vpX === 'number') setVpX(d.vpX);
     } catch {
       /* 壊れていたら既定値のまま */
     }
@@ -144,11 +148,11 @@ export function PropEditorTool() {
     const t = window.setTimeout(() => {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ transforms, perspBack, originY, hSpread }),
+        JSON.stringify({ transforms, perspBack, originY, hSpread, vpX }),
       );
     }, 300);
     return () => window.clearTimeout(t);
-  }, [transforms, perspBack, originY, hSpread]);
+  }, [transforms, perspBack, originY, hSpread, vpX]);
 
   const seat = OFFICE_LAYOUT.seats[seatIndex] ?? OFFICE_LAYOUT.seats[0];
 
@@ -316,6 +320,19 @@ export function PropEditorTool() {
                   style={{ position: 'absolute', left: 0, top: 0, imageRendering: 'pixelated' }}
                 />
               )}
+              {/* 横パースの消失点X（縦ガイド線・配置ツールのみ）。部屋の水平中心に合わせる基準。 */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: vpX,
+                  top: 0,
+                  width: 1,
+                  height: NATIVE_H,
+                  background: 'rgba(255,80,220,0.6)',
+                  zIndex: 100000,
+                  pointerEvents: 'none',
+                }}
+              />
               {(allSeats ? OFFICE_LAYOUT.seats : [seat]).map((s, i) => {
                 const seatFolder = allSeats ? ROSTER[i % ROSTER.length].folder : folder;
                 const seatFootY = s.y + sitFootOffset(dir);
@@ -323,7 +340,7 @@ export function PropEditorTool() {
                 // 机上プロップの原点(机の面)＝座り足元 + originY（遠近スケール込み）。
                 const originScreenY = seatFootY + originY * seatDs;
                 // 原点(0,0)の横位置は横パース込み（x=0 が描画されるX）。
-                const markerX = propScreenX(s.x, 0, seatDs, s.y, hSpread);
+                const markerX = propScreenX(s.x, 0, seatDs, s.y, hSpread, vpX);
                 const editable = !allSeats || i === seatIndex;
                 const baseZ = Math.round(s.y);
                 return (
@@ -377,7 +394,7 @@ export function PropEditorTool() {
                         <Sprite
                           key={p.id}
                           src={p.sprite(dir)}
-                          x={propScreenX(s.x, t.x, ds, s.y, scaled ? hSpread : 0)}
+                          x={propScreenX(s.x, t.x, ds, s.y, scaled ? hSpread : 0, vpX)}
                           footY={seatFootY + (oy + t.y) * ds}
                           scale={t.scale * ds}
                           z={baseZ + t.z}
@@ -580,9 +597,27 @@ export function PropEditorTool() {
               onChange={(e) => setHSpread(Number(e.target.value) / 100)}
               style={{ width: '100%', marginTop: 6 }}
             />
+            <label style={{ ...fieldLbl, marginTop: 8 }}>
+              消失点X
+              <input
+                type="number"
+                step={1}
+                value={Math.round(vpX)}
+                onChange={(e) => setVpX(Number(e.target.value))}
+                style={numIn}
+              />
+            </label>
+            <input
+              type="range"
+              min={0}
+              max={NATIVE_W}
+              value={Math.round(vpX)}
+              onChange={(e) => setVpX(Number(e.target.value))}
+              style={{ width: '100%', marginTop: 6 }}
+            />
             <p style={{ color: '#888', fontSize: 11, margin: '6px 0 0' }}>
-              手前列ほど机上プロップを中心から外へ寄せる（0=中心そのまま／正=手前を外へ／負=内へ）。
-              決めたら PROP_H_SPREAD に転記。
+              マゼンタ縦線＝消失点X（部屋の水平中心）。ここから左右に広げる。広げ量：0=そのまま／正=手前を外へ／負=内へ。
+              決めたら PROP_H_SPREAD・PROP_VP_X に転記。
             </p>
           </div>
 
