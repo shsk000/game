@@ -8,6 +8,7 @@ import {
 import {
   bookSprite,
   chairSprite,
+  DEPTH_SCALED_PROPS,
   desktopSprite,
   gamingRigSprite,
   laptopSprite,
@@ -16,10 +17,12 @@ import {
   OFFICE_LAYOUT,
   officeBgSrc,
   PROP_TRANSFORMS,
+  type PropKey,
   type PropTransform,
   pentabSprite,
   plantSprite,
   type SeatDir,
+  seatDepthScale,
   sitFootOffset,
   sittingSprite,
 } from '../data/officeLayout';
@@ -153,8 +156,10 @@ export function PropEditorTool() {
   useEffect(() => {
     if (!drag) return;
     const onMove = (e: MouseEvent) => {
-      const dx = (e.clientX - drag.startX) / zoom;
-      const dy = (e.clientY - drag.startY) / zoom;
+      // 遠近スケールを掛けて表示している物体は、ドラッグ量を割り戻して base 値を更新する。
+      const dsDrag = DEPTH_SCALED_PROPS.has(drag.id as PropKey) ? seatDepthScale(seat.y) : 1;
+      const dx = (e.clientX - drag.startX) / zoom / dsDrag;
+      const dy = (e.clientY - drag.startY) / zoom / dsDrag;
       setTransforms((prev) => ({
         ...prev,
         [drag.id]: {
@@ -174,7 +179,7 @@ export function PropEditorTool() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [drag, zoom, dir]);
+  }, [drag, zoom, dir, seat.y]);
 
   const startDrag = (e: ReactMouseEvent, id: string) => {
     e.preventDefault();
@@ -325,13 +330,15 @@ export function PropEditorTool() {
                     {PROPS.map((p) => {
                       if (p.id !== selected && !coShow[p.id]) return null;
                       const t = transforms[p.id][dir];
+                      // 奥行き遠近（本番 OfficeView と同じ）。机上プロップは奥席ほど小さく＆内側へ。
+                      const ds = DEPTH_SCALED_PROPS.has(p.id) ? seatDepthScale(s.y) : 1;
                       return (
                         <Sprite
                           key={p.id}
                           src={p.sprite(dir)}
-                          x={s.x + t.x}
-                          footY={seatFootY + t.y}
-                          scale={t.scale}
+                          x={s.x + t.x * ds}
+                          footY={seatFootY + t.y * ds}
+                          scale={t.scale * ds}
                           z={baseZ + t.z}
                           tiltX={t.tiltX}
                           scaleY={t.scaleY}
