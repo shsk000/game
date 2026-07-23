@@ -7,6 +7,7 @@ import {
   rollBugOnMiss,
 } from '../core/bugs';
 import { computeBorrow, computeMonthlyTick, computeRepay, computeSpend } from '../core/economy';
+import { simulateAverageDevRun } from '../core/devSimulate';
 import { gachaPrice, nextPityCount, rollRank } from '../core/gacha';
 import type { LevelUp } from '../core/growth';
 import { investPrice } from '../core/invest';
@@ -143,6 +144,12 @@ type Actions = {
   reportWPM: (wpm: number) => void;
   reportAccuracy: (acc: number) => void;
   finishDevelopment: () => void;
+  /**
+   * DEV 専用：タイピングを飛ばし、平均的な開発プレイ相当の成績（perf/devStats）を
+   * 積んでから発売フェーズへ即到達する。品質ほぼ0のまま発売する finishDevelopment 単体と違い、
+   * “それなりの品質”で発売できる（バランス／発売フロー検証用）。docs/qa/bug-hunt.md 参照。
+   */
+  devSkipDevelopment: () => void;
   /**
    * v0.14：開発フェーズを次へ進める。
    * planning→development→testing→debugging の遷移はテイクオーバー内で完結。
@@ -515,6 +522,16 @@ export const useGameStore = create<GameState>()(
         ghosts: { ...get().ghosts, [cur.scale]: newGhost },
         screen: 'release',
       });
+    },
+
+    devSkipDevelopment: () => {
+      const cur = get().current;
+      if (!cur || cur.finishedAt !== null) return;
+      // DEV 専用：平均的な開発プレイ相当の成績を積む（乱数なし・決定的）。
+      const sim = simulateAverageDevRun();
+      set({ current: { ...cur, perf: sim.perf, devStats: sim.devStats } });
+      // 発売遷移（doneLoC 充填・phase=release・ゴースト更新）は既存フローに委譲。
+      get().finishDevelopment();
     },
 
     advancePhase: () => {

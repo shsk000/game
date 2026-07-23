@@ -128,8 +128,9 @@ export const DevelopScreen = () => {
   const addDevelopLoC = useGameStore((s) => s.addDevelopLoC);
   const addDevStat = useGameStore((s) => s.addDevStat);
   const advancePhase = useGameStore((s) => s.advancePhase);
-  // DEV 検証用：タイピングを飛ばして発売フェーズへ即到達する（docs/qa/bug-hunt.md 参照）
-  const finishDevelopment = useGameStore((s) => s.finishDevelopment);
+  // DEV 検証用：タイピングを飛ばし、平均成績を積んで“それなりの品質”で
+  // 発売フェーズへ即到達する（docs/qa/bug-hunt.md 参照）
+  const devSkipDevelopment = useGameStore((s) => s.devSkipDevelopment);
   const noteBugOnMiss = useGameStore((s) => s.noteBugOnMiss);
   const noteBugOnKeystroke = useGameStore((s) => s.noteBugOnKeystroke);
   const fixBug = useGameStore((s) => s.fixBug);
@@ -594,6 +595,33 @@ export const DevelopScreen = () => {
     >
       <PixelStatusBar />
 
+      {/* 開発ビルド限定：タイピングを飛ばし“それなりの品質”で発売フェーズへ即到達する QA フック
+          （タイピング律速＋リアルタイム固定費で AI 検証が back-half に届かない問題への対処。
+          docs/qa/bug-hunt.md）。左サイドの overflow に巻き込まれて枠外へ出ないよう、
+          1280×720 枠内に position:absolute で固定する。 */}
+      {import.meta.env.DEV && (
+        <button
+          type="button"
+          onClick={() => devSkipDevelopment()}
+          title="タイピングを飛ばし、平均的な開発成績で発売フェーズへ（DEVビルドのみ）"
+          style={{
+            position: 'absolute',
+            top: 38,
+            right: 12,
+            zIndex: 60,
+            padding: '5px 9px',
+            border: '1px dashed #6a7686',
+            background: '#141b26',
+            color: '#c8d2e0',
+            fontSize: 10,
+            borderRadius: 2,
+            cursor: 'pointer',
+          }}
+        >
+          🛠 [DEV] 開発スキップ（平均成績で発売）
+        </button>
+      )}
+
       {flash > 0 && <div key={`flash-${flash}`} className="dev-flash-vignette" />}
 
       {/* v0.20 A：コンボ節目の称号ポップ（打鍵は止めない。目線の少し上に一瞬出て消える） */}
@@ -703,26 +731,6 @@ export const DevelopScreen = () => {
             <span style={{ fontSize: 10, fontWeight: 700, color: periodColor }}>{periodNote}</span>
           </div>
 
-          {/* 開発ビルド限定：バグ検証用に発売フェーズへ即到達（タイピング律速＋リアルタイム
-              固定費でAI検証が back-half に届かない問題への QA フック。docs/qa/bug-hunt.md） */}
-          {import.meta.env.DEV && (
-            <button
-              type="button"
-              onClick={() => finishDevelopment()}
-              style={{
-                marginTop: 'auto',
-                padding: '6px 8px',
-                border: '1px dashed #6a7686',
-                background: '#141b26',
-                color: '#c8d2e0',
-                fontSize: 10,
-                borderRadius: 2,
-                cursor: 'pointer',
-              }}
-            >
-              🛠 [DEV] 開発を即完了（発売へ）
-            </button>
-          )}
         </aside>
 
         {/* 中央：フェーズ別メインパネル */}

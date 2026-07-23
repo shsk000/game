@@ -81,6 +81,39 @@ describe('finishDevelopment（DEV検証フック：タイピングを飛ばし�
   });
 });
 
+describe('devSkipDevelopment（DEV検証フック：平均成績で“それなり品質”発売へ）', () => {
+  beforeEach(() => resetStore());
+
+  it('企画フェーズからでも発売へ飛び、perf/devStats が平均成績で埋まる', () => {
+    resetStore({
+      current: devProject({
+        phase: 'planning',
+        workTarget: 100,
+        doneLoC: 10,
+        perf: { wpm: 0, maxCombo: 0, accuracy: 1 },
+        devStats: { program: 0, graphics: 0, sound: 0, design: 0 },
+      }),
+    });
+    useGameStore.getState().devSkipDevelopment();
+    const s = useGameStore.getState();
+    expect(s.current?.phase).toBe('release');
+    expect(s.current?.doneLoC).toBe(100);
+    expect(s.screen).toBe('release');
+    // 品質のもと（perf / devStats）が 0 のままでない＝“それなり品質”で発売できる
+    expect(s.current?.perf.wpm).toBeGreaterThan(0);
+    expect(s.current?.perf.maxCombo).toBeGreaterThan(0);
+    const st = s.current?.devStats;
+    expect((st?.program ?? 0) + (st?.graphics ?? 0) + (st?.sound ?? 0) + (st?.design ?? 0)).toBeGreaterThan(0);
+  });
+
+  it('プロジェクトが無ければ何もしない（発売に飛ばない）', () => {
+    resetStore({ current: null });
+    useGameStore.getState().devSkipDevelopment();
+    expect(useGameStore.getState().current).toBeNull();
+    expect(useGameStore.getState().screen).not.toBe('release');
+  });
+});
+
 describe('startProject（前払い開発費 devCost の徴収）', () => {
   beforeEach(() => {
     resetStore();
