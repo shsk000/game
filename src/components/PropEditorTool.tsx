@@ -321,12 +321,12 @@ export function PropEditorTool() {
               />
             </label>
             <label style={lbl}>
-              skew°
+              傾き°
               <input
                 type="number"
                 step={1}
-                value={cur.skewX ?? 0}
-                onChange={(e) => update(selected, 'skewX', Number(e.target.value))}
+                value={cur.tiltX ?? 0}
+                onChange={(e) => update(selected, 'tiltX', Number(e.target.value))}
                 style={{ width: 56 }}
               />
             </label>
@@ -351,7 +351,7 @@ export function PropEditorTool() {
                 style={{ width: 56 }}
               />
             </label>
-            <span style={{ color: '#888' }}>z: 負=奥 / 正=手前｜skew/縦scale/回転で平面物を机に寝かせる</span>
+            <span style={{ color: '#888' }}>z: 負=奥 / 正=手前｜傾き(パース)/縦scale/回転で平面物を机の面に寝かせる</span>
             <button type="button" onClick={() => resetOne(selected)} style={btn(false)}>
               ↺ この物体を既定値
             </button>
@@ -462,7 +462,7 @@ export function PropEditorTool() {
                         footY={seatFootY + t.y}
                         scale={t.scale}
                         z={baseZ + t.z}
-                        skewX={t.skewX}
+                        tiltX={t.tiltX}
                         scaleY={t.scaleY}
                         rotate={t.rotate}
                         outline={editable && selected === p.id}
@@ -508,7 +508,7 @@ function Sprite({
   z,
   outline,
   onMouseDown,
-  skewX,
+  tiltX,
   scaleY,
   rotate,
 }: {
@@ -519,7 +519,7 @@ function Sprite({
   z: number;
   outline?: boolean;
   onMouseDown?: (e: ReactMouseEvent) => void;
-  skewX?: number;
+  tiltX?: number;
   scaleY?: number;
   rotate?: number;
 }) {
@@ -530,7 +530,8 @@ function Sprite({
     left: x,
     top: footY,
     width,
-    transform: `translate(-50%, -100%) rotate(${rotate ?? 0}deg) skewX(${skewX ?? 0}deg) scaleY(${scaleY ?? 1})`,
+    // perspective + rotateX で「奥行きに寝かせる」＝上辺が中央に寄るパース（skew の平行四辺形ではない）
+    transform: `translate(-50%, -100%) perspective(600px) rotateX(${tiltX ?? 0}deg) rotate(${rotate ?? 0}deg) scaleY(${scaleY ?? 1})`,
     zIndex: z,
     imageRendering: 'pixelated',
     visibility: width === undefined ? 'hidden' : 'visible',

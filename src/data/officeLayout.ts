@@ -87,8 +87,11 @@ export type PropTransform = {
   y: number;
   scale: number;
   z: number;
-  /** v0.25：平らな物（液タブ・本）を机の面に寝かせる CSS skewX（度）。既定 0。 */
-  skewX?: number;
+  /**
+   * v0.25：奥行きへの傾き（rotateX 度）。平らな物（液タブ・本）を机の面に寝かせる。
+   * perspective 併用で上辺が中央に寄る＝パース（遠近）に合う。既定 0。
+   */
+  tiltX?: number;
   /** v0.25：奥行き方向の潰し（縦 scale）。iso の面に合わせる。既定 1。 */
   scaleY?: number;
   /** v0.25：回転（度・時計回り）。向きの微調整に。既定 0。 */
@@ -127,21 +130,21 @@ export const PROP_TRANSFORMS: Record<PropKey, Record<SeatDir, PropTransform>> = 
     // 🔧 south は旧素材（48×64・グレー）のまま。使う席が出たら north と同じ発注から差し替える。
     south: { x: 0, y: 10, scale: OFFICE_LAYOUT.charScale, z: -1 },
   },
-  // v0.25 装備プロップ。初期値は仮（/admin/props で実機調整して JSON を転記する）。
+  // v0.25 装備プロップ。/admin/props で実機調整した値を転記（2026-07-23・調整途中）。
   desktop: {
-    north: { x: -3, y: -160, scale: 1, z: -1 },
+    north: { x: -1, y: -125, scale: 1.6, z: -48 },
     south: { x: 0, y: -230, scale: 1, z: 2 },
   },
   gaming_rig: {
-    north: { x: -3, y: -160, scale: 1, z: -1 },
+    north: { x: -3, y: -136, scale: 1.55, z: -1 },
     south: { x: 0, y: -230, scale: 1, z: 2 },
   },
   book: {
-    north: { x: 42, y: -120, scale: 0.55, z: 1 },
+    north: { x: -63, y: -161, scale: 0.4, z: 1, rotate: 0 },
     south: { x: 42, y: -120, scale: 0.55, z: 1 },
   },
   pentab: {
-    north: { x: -42, y: -118, scale: 0.6, z: 1 },
+    north: { x: -42, y: -118, scale: 0.6, z: 1, tiltX: 0 },
     south: { x: -42, y: -118, scale: 0.6, z: 1 },
   },
   plant: {
