@@ -121,7 +121,7 @@ export type PropKey =
 
 export const PROP_TRANSFORMS: Record<PropKey, Record<SeatDir, PropTransform>> = {
   laptop: {
-    north: { x: -3, y: -155, scale: 1.4, z: -1 },
+    north: { x: -3, y: -170, scale: 1.15, z: -1, tiltX: 10 },
     south: { x: 0, y: -230, scale: OFFICE_LAYOUT.charScale, z: 2 },
   },
   chair: {
@@ -132,23 +132,23 @@ export const PROP_TRANSFORMS: Record<PropKey, Record<SeatDir, PropTransform>> = 
   },
   // v0.25 装備プロップ。/admin/props で実機調整した値を転記（2026-07-23・調整途中）。
   desktop: {
-    north: { x: -1, y: -125, scale: 1.6, z: -48 },
+    north: { x: -1, y: -134, scale: 1.6, z: -48 },
     south: { x: 0, y: -230, scale: 1, z: 2 },
   },
   gaming_rig: {
-    north: { x: -3, y: -136, scale: 1.55, z: -1 },
+    north: { x: -3, y: -145, scale: 1.55, z: -1 },
     south: { x: 0, y: -230, scale: 1, z: 2 },
   },
   book: {
-    north: { x: -63, y: -161, scale: 0.4, z: 1, rotate: 0 },
+    north: { x: -66, y: -166, scale: 0.35, z: 1, rotate: 0 },
     south: { x: 42, y: -120, scale: 0.55, z: 1 },
   },
   pentab: {
-    north: { x: -42, y: -118, scale: 0.6, z: 1, tiltX: 0 },
+    north: { x: -5, y: -150, scale: 0.55, z: 1, tiltX: 30 },
     south: { x: -42, y: -118, scale: 0.6, z: 1 },
   },
   plant: {
-    north: { x: 50, y: -150, scale: 0.6, z: 1 },
+    north: { x: 61, y: -157, scale: 0.45, z: 1, tiltX: 26 },
     south: { x: 50, y: -150, scale: 0.6, z: 1 },
   },
 };
