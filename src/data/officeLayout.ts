@@ -115,7 +115,7 @@ export type PropKey = 'laptop' | 'chair' | 'desktop' | 'gaming_rig' | 'book' | '
 // v0.25：机上プロップ(PC/小物)の north 値は原点＝机の面(PROP_ORIGIN_Y)からの相対。0,0=机の面。
 export const PROP_TRANSFORMS: Record<PropKey, Record<SeatDir, PropTransform>> = {
   laptop: {
-    north: { x: -3, y: -20, scale: 1.15, z: -1, tiltX: 10 },
+    north: { x: 1, y: -14, scale: 1.15, z: -1, tiltX: 10 },
     south: { x: 0, y: -230, scale: OFFICE_LAYOUT.charScale, z: 2 },
   },
   chair: {
@@ -138,11 +138,11 @@ export const PROP_TRANSFORMS: Record<PropKey, Record<SeatDir, PropTransform>> = 
     south: { x: 42, y: -120, scale: 0.55, z: 1 },
   },
   pentab: {
-    north: { x: -5, y: 0, scale: 0.55, z: 1, tiltX: 30 },
+    north: { x: -5, y: 7, scale: 0.6, z: 1, tiltX: 30 },
     south: { x: -42, y: -118, scale: 0.6, z: 1 },
   },
   plant: {
-    north: { x: 61, y: -7, scale: 0.45, z: 1, tiltX: 26 },
+    north: { x: 57, y: -1, scale: 0.45, z: 1, tiltX: 26 },
     south: { x: 50, y: -150, scale: 0.6, z: 1 },
   },
 };
