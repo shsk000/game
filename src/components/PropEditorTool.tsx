@@ -260,8 +260,16 @@ export function PropEditorTool() {
         </div>
       </div>
 
-      {/* ── メイン：左キャンバス／右操作パネル ── */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: 12 }}>
+      {/* ── メイン：左操作パネル／右キャンバス（row-reverse で DOM順=canvas,panel を左右反転） ── */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'row-reverse',
+          gap: 12,
+          alignItems: 'flex-start',
+          padding: 12,
+        }}
+      >
         {/* キャンバス */}
         <div style={{ overflow: 'auto', flex: 1 }}>
           <div style={{ width: NATIVE_W * zoom, height: NATIVE_H * zoom }}>
