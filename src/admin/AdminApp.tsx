@@ -1,5 +1,6 @@
 import { AdminCompatMatrix } from './AdminCompatMatrix';
 import { AdminEcon } from './AdminEcon';
+import { AdminEmotes } from './AdminEmotes';
 import { AdminImageGallery } from './AdminImageGallery';
 
 /**
@@ -32,6 +33,9 @@ const AdminNav = () => (
     <a href="/admin/econ" style={linkStyle}>
       お金デバッグ
     </a>
+    <a href="/admin/emotes" style={linkStyle}>
+      吹き出し一覧
+    </a>
   </nav>
 );
 
@@ -57,6 +61,12 @@ const AdminIndex = () => (
         </a>
         　お金デバッグ（セーブの資金を追加/セット。リロードで反映）
       </li>
+      <li>
+        <a href="/admin/emotes" style={linkStyle}>
+          /admin/emotes
+        </a>
+        　企画会議の吹き出し（エモート）一覧プレビュー
+      </li>
     </ul>
   </div>
 );
@@ -71,6 +81,8 @@ export const AdminApp = () => {
     body = <AdminCompatMatrix />;
   } else if (path === '/admin/econ') {
     body = <AdminEcon />;
+  } else if (path === '/admin/emotes') {
+    body = <AdminEmotes />;
   } else {
     body = <AdminIndex />;
   }

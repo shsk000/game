@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { PlanEmoteEvent } from '../core/planEmote';
 import { WHITEBOARD_MEETING_SPOTS } from '../data/meetingScene';
 import type { EmployeeRole } from '../state/types';
 import { MeetingScene, WhiteboardNotes } from './MeetingScene';
@@ -22,10 +23,13 @@ export const PlanMeetingBoard = ({
   employees,
   memos,
   cards,
+  emote = null,
 }: {
   employees: { id: string; role: EmployeeRole }[];
   memos: string[];
   cards: string[];
+  /** ワード確定ごとに社員頭上へ出すアイコン吹き出し */
+  emote?: PlanEmoteEvent | null;
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const [panelW, setPanelW] = useState(680);
@@ -90,7 +94,7 @@ export const PlanMeetingBoard = ({
           transformOrigin: 'top left',
         }}
       >
-        <MeetingScene employees={cast} />
+        <MeetingScene employees={cast} emote={emote} />
         {/* アイデア付箋：ホワイトボード板面に貼る（native 座標） */}
         <WhiteboardNotes cards={cards} />
       </div>
