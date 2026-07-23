@@ -16,6 +16,7 @@ import {
   type PropTransform,
   pentabSprite,
   plantSprite,
+  propScreenX,
   type SeatDir,
   seatDepthScale,
   sitFootOffset,
@@ -247,7 +248,7 @@ function SeatedEmployee({
   const pcSprite = (
     <PropSprite
       src={pcSpriteFn(dir)}
-      x={seat.x + pcT.x * ds}
+      x={propScreenX(seat.x, pcT.x, ds, seat.y)}
       footY={seat.y + sitFootOffset(dir) + (PROP_ORIGIN_Y + pcT.y) * ds}
       t={pcT}
       z={baseZ + pcT.z}
@@ -258,7 +259,7 @@ function SeatedEmployee({
     miscSpriteFn && miscT ? (
       <PropSprite
         src={miscSpriteFn(dir)}
-        x={seat.x + miscT.x * ds}
+        x={propScreenX(seat.x, miscT.x, ds, seat.y)}
         footY={seat.y + sitFootOffset(dir) + (PROP_ORIGIN_Y + miscT.y) * ds}
         t={miscT}
         z={baseZ + miscT.z}

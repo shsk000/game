@@ -180,6 +180,42 @@ export const DEPTH_SCALED_PROPS = new Set<PropKey>([
  */
 export const PROP_ORIGIN_Y = -150;
 
+/** 机クラスタの水平中心（native）。「手前ほど外へ広げる」横パースの基準X。 */
+const SEAT_XS = OFFICE_LAYOUT.seats.map((s) => s.x);
+export const SEAT_X_CENTER = (Math.min(...SEAT_XS) + Math.max(...SEAT_XS)) / 2;
+
+/** 座席Yの遠近パラメータ t（0=最奥, 1=最手前）。seatDepthScale と同じ正規化。 */
+export const seatDepthT = (seatY: number): number => {
+  if (SEAT_Y_MAX === SEAT_Y_MIN) return 1;
+  return (seatY - SEAT_Y_MIN) / (SEAT_Y_MAX - SEAT_Y_MIN);
+};
+
+/**
+ * v0.25：横方向パース（手前ほど外へ広げる量）。机アートの列が部屋の広がりに対して
+ * ほぼ縦一直線のため、机上プロップを手前列ほど中心(SEAT_X_CENTER)から外へ寄せてパースに乗せる。
+ * 0=無効（机中心そのまま）。0.3 なら最手前列で中心からの距離を 1.3 倍にする。
+ */
+export const PROP_H_SPREAD = 0; // 🔧（/admin/props で調整→ここに転記）
+
+/** 横パースの拡大率（手前=1+hSpread、最奥=1.0）。 */
+export const seatHSpread = (seatY: number, hSpread: number = PROP_H_SPREAD): number =>
+  1 + hSpread * seatDepthT(seatY);
+
+/**
+ * 机上プロップの最終スクリーンX（奥行き遠近スケール ds ＋横パース込み）。
+ * 本番（OfficeView）と配置ツール（/admin/props）の唯一の出所。
+ */
+export const propScreenX = (
+  seatX: number,
+  tx: number,
+  ds: number,
+  seatY: number,
+  hSpread: number = PROP_H_SPREAD,
+): number => {
+  const baseX = seatX + tx * ds;
+  return SEAT_X_CENTER + (baseX - SEAT_X_CENTER) * seatHSpread(seatY, hSpread);
+};
+
 /** 立ち・歩行スプライトの8方向。 */
 export type Dir8 =
   | 'south'

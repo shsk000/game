@@ -17,14 +17,17 @@ import {
   OFFICE_LAYOUT,
   officeBgSrc,
   PERSPECTIVE_BACK_SCALE,
+  PROP_H_SPREAD,
   PROP_ORIGIN_Y,
   PROP_TRANSFORMS,
   type PropKey,
   type PropTransform,
   pentabSprite,
   plantSprite,
+  propScreenX,
   type SeatDir,
   seatDepthScale,
+  seatHSpread,
   sitFootOffset,
   sittingSprite,
 } from '../data/officeLayout';
@@ -111,6 +114,8 @@ export function PropEditorTool() {
   const [perspBack, setPerspBack] = useState(PERSPECTIVE_BACK_SCALE);
   // v0.25：机上プロップの原点（机の面）Y。座り足元からのオフセット。→ PROP_ORIGIN_Y に転記。
   const [originY, setOriginY] = useState(PROP_ORIGIN_Y);
+  // v0.25：横パース（手前ほど外へ広げる量）。→ PROP_H_SPREAD に転記。
+  const [hSpread, setHSpread] = useState(PROP_H_SPREAD);
   const [transforms, setTransforms] = useState<Transforms>(defaultTransforms);
   const [io, setIo] = useState('');
   const [drag, setDrag] = useState<{
@@ -130,16 +135,20 @@ export function PropEditorTool() {
       if (d?.transforms) setTransforms((prev) => ({ ...prev, ...d.transforms }));
       if (typeof d?.perspBack === 'number') setPerspBack(d.perspBack);
       if (typeof d?.originY === 'number') setOriginY(d.originY);
+      if (typeof d?.hSpread === 'number') setHSpread(d.hSpread);
     } catch {
       /* 壊れていたら既定値のまま */
     }
   }, []);
   useEffect(() => {
     const t = window.setTimeout(() => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ transforms, perspBack, originY }));
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ transforms, perspBack, originY, hSpread }),
+      );
     }, 300);
     return () => window.clearTimeout(t);
-  }, [transforms, perspBack, originY]);
+  }, [transforms, perspBack, originY, hSpread]);
 
   const seat = OFFICE_LAYOUT.seats[seatIndex] ?? OFFICE_LAYOUT.seats[0];
 
@@ -163,10 +172,11 @@ export function PropEditorTool() {
     if (!drag) return;
     const onMove = (e: MouseEvent) => {
       // 遠近スケールを掛けて表示している物体は、ドラッグ量を割り戻して base 値を更新する。
-      const dsDrag = DEPTH_SCALED_PROPS.has(drag.id as PropKey)
-        ? seatDepthScale(seat.y, perspBack)
-        : 1;
-      const dx = (e.clientX - drag.startX) / zoom / dsDrag;
+      const scaled = DEPTH_SCALED_PROPS.has(drag.id as PropKey);
+      const dsDrag = scaled ? seatDepthScale(seat.y, perspBack) : 1;
+      // X は横パース（手前ほど外）も掛かっているので、その分も割り戻す。Y は無関係。
+      const hsDrag = scaled ? seatHSpread(seat.y, hSpread) : 1;
+      const dx = (e.clientX - drag.startX) / zoom / (dsDrag * hsDrag);
       const dy = (e.clientY - drag.startY) / zoom / dsDrag;
       setTransforms((prev) => ({
         ...prev,
@@ -187,7 +197,7 @@ export function PropEditorTool() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [drag, zoom, dir, seat.y, perspBack]);
+  }, [drag, zoom, dir, seat.y, perspBack, hSpread]);
 
   const startDrag = (e: ReactMouseEvent, id: string) => {
     e.preventDefault();
@@ -312,6 +322,8 @@ export function PropEditorTool() {
                 const seatDs = seatDepthScale(s.y, perspBack);
                 // 机上プロップの原点(机の面)＝座り足元 + originY（遠近スケール込み）。
                 const originScreenY = seatFootY + originY * seatDs;
+                // 原点(0,0)の横位置は横パース込み（x=0 が描画されるX）。
+                const markerX = propScreenX(s.x, 0, seatDs, s.y, hSpread);
                 const editable = !allSeats || i === seatIndex;
                 const baseZ = Math.round(s.y);
                 return (
@@ -321,7 +333,7 @@ export function PropEditorTool() {
                     <div
                       style={{
                         position: 'absolute',
-                        left: s.x - 14,
+                        left: markerX - 14,
                         top: originScreenY,
                         width: 28,
                         height: 2,
@@ -334,7 +346,7 @@ export function PropEditorTool() {
                     <div
                       style={{
                         position: 'absolute',
-                        left: s.x,
+                        left: markerX,
                         top: originScreenY - 14,
                         width: 2,
                         height: 28,
@@ -365,7 +377,7 @@ export function PropEditorTool() {
                         <Sprite
                           key={p.id}
                           src={p.sprite(dir)}
-                          x={s.x + t.x * ds}
+                          x={propScreenX(s.x, t.x, ds, s.y, scaled ? hSpread : 0)}
                           footY={seatFootY + (oy + t.y) * ds}
                           scale={t.scale * ds}
                           z={baseZ + t.z}
@@ -543,6 +555,34 @@ export function PropEditorTool() {
             <p style={{ color: '#888', fontSize: 11, margin: '6px 0 0' }}>
               手前列=1.0・最奥列=この値。小さいほど奥が縮む。決めたら PERSPECTIVE_BACK_SCALE
               に転記。
+            </p>
+          </div>
+
+          <div style={sectionBox}>
+            <div style={sectionTitle}>横パース（手前ほど外）</div>
+            <label style={fieldLbl}>
+              広げ量
+              <input
+                type="number"
+                step={0.01}
+                min={-0.5}
+                max={1}
+                value={hSpread}
+                onChange={(e) => setHSpread(Number(e.target.value))}
+                style={numIn}
+              />
+            </label>
+            <input
+              type="range"
+              min={-50}
+              max={100}
+              value={Math.round(hSpread * 100)}
+              onChange={(e) => setHSpread(Number(e.target.value) / 100)}
+              style={{ width: '100%', marginTop: 6 }}
+            />
+            <p style={{ color: '#888', fontSize: 11, margin: '6px 0 0' }}>
+              手前列ほど机上プロップを中心から外へ寄せる（0=中心そのまま／正=手前を外へ／負=内へ）。
+              決めたら PROP_H_SPREAD に転記。
             </p>
           </div>
 
