@@ -152,7 +152,9 @@ export const PROP_TRANSFORMS: Record<PropKey, Record<SeatDir, PropTransform>> = 
  * 机上プロップ（PC・小物）の scale とオフセット(x,y)に掛けることで、1つの調整値で
  * 手前/奥どちらのデスクにも比率で合う（絶対px運用のズレを解消）。椅子・人は等倍のまま。
  */
-export const PERSPECTIVE_BACK_SCALE = 0.75; // 最奥列の倍率（手前列=1.0）🔧（/admin/props で調整→ここに転記）
+// アイソメ（並行投影）の背景に合わせ等倍。キャラが奥行きで縮まないのでプロップも縮めない。
+// 1.0=全机で同一サイズ。うっすら奥行きを付けたい時だけ <1.0 に（/admin/props で調整→転記）。
+export const PERSPECTIVE_BACK_SCALE = 1.0; // 最奥列の倍率（手前列=1.0）
 const SEAT_Y_MIN = Math.min(...OFFICE_LAYOUT.seats.map((s) => s.y));
 const SEAT_Y_MAX = Math.max(...OFFICE_LAYOUT.seats.map((s) => s.y));
 export const seatDepthScale = (
