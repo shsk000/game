@@ -10,6 +10,7 @@ import {
   NATIVE_W,
   OFFICE_LAYOUT,
   officeBgSrc,
+  PROP_ORIGIN_Y,
   PROP_TRANSFORMS,
   type PropKey,
   type PropTransform,
@@ -247,7 +248,7 @@ function SeatedEmployee({
     <PropSprite
       src={pcSpriteFn(dir)}
       x={seat.x + pcT.x * ds}
-      footY={seat.y + sitFootOffset(dir) + pcT.y * ds}
+      footY={seat.y + sitFootOffset(dir) + (PROP_ORIGIN_Y + pcT.y) * ds}
       t={pcT}
       z={baseZ + pcT.z}
       scaleMul={ds}
@@ -258,7 +259,7 @@ function SeatedEmployee({
       <PropSprite
         src={miscSpriteFn(dir)}
         x={seat.x + miscT.x * ds}
-        footY={seat.y + sitFootOffset(dir) + miscT.y * ds}
+        footY={seat.y + sitFootOffset(dir) + (PROP_ORIGIN_Y + miscT.y) * ds}
         t={miscT}
         z={baseZ + miscT.z}
         scaleMul={ds}

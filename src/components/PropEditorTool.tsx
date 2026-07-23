@@ -17,6 +17,7 @@ import {
   OFFICE_LAYOUT,
   officeBgSrc,
   PERSPECTIVE_BACK_SCALE,
+  PROP_ORIGIN_Y,
   PROP_TRANSFORMS,
   type PropKey,
   type PropTransform,
@@ -74,9 +75,8 @@ const ROSTER = [
   { folder: 'pr_f', label: '広報(女)' },
 ] as const;
 
-// v1 には PROP_TRANSFORMS 統合前の古い既定値（椅子 scale 2.5 など）が保存されている。
-// キーを上げて、開いた時に必ず現在の本番値から始まるようにする。
-const STORAGE_KEY = 'office-prop-tool-v2';
+// 座標系を変えた時（v3=原点を机の面に移動）はキーを上げ、旧値で壊れないよう新デフォルトから始める。
+const STORAGE_KEY = 'office-prop-tool-v3';
 
 type Transforms = Record<string, Record<SeatDir, PropTransform>>;
 
@@ -109,6 +109,8 @@ export function PropEditorTool() {
   const [allSeats, setAllSeats] = useState(true);
   // v0.25：奥行き遠近の強さ（最奥列の倍率）。ここで調整→ officeLayout の PERSPECTIVE_BACK_SCALE に転記。
   const [perspBack, setPerspBack] = useState(PERSPECTIVE_BACK_SCALE);
+  // v0.25：机上プロップの原点（机の面）Y。座り足元からのオフセット。→ PROP_ORIGIN_Y に転記。
+  const [originY, setOriginY] = useState(PROP_ORIGIN_Y);
   const [transforms, setTransforms] = useState<Transforms>(defaultTransforms);
   const [io, setIo] = useState('');
   const [drag, setDrag] = useState<{
@@ -127,19 +129,19 @@ export function PropEditorTool() {
       const d = JSON.parse(raw);
       if (d?.transforms) setTransforms((prev) => ({ ...prev, ...d.transforms }));
       if (typeof d?.perspBack === 'number') setPerspBack(d.perspBack);
+      if (typeof d?.originY === 'number') setOriginY(d.originY);
     } catch {
       /* 壊れていたら既定値のまま */
     }
   }, []);
   useEffect(() => {
     const t = window.setTimeout(() => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ transforms, perspBack }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ transforms, perspBack, originY }));
     }, 300);
     return () => window.clearTimeout(t);
-  }, [transforms, perspBack]);
+  }, [transforms, perspBack, originY]);
 
   const seat = OFFICE_LAYOUT.seats[seatIndex] ?? OFFICE_LAYOUT.seats[0];
-  const footY = seat.y + sitFootOffset(dir);
 
   const update = (id: string, key: keyof PropTransform, value: number) => {
     setTransforms((prev) => ({
@@ -304,33 +306,23 @@ export function PropEditorTool() {
                   style={{ position: 'absolute', left: 0, top: 0, imageRendering: 'pixelated' }}
                 />
               )}
-              {/* 基準線：キャラの座り足元 */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: seat.x - 60,
-                  top: footY,
-                  width: 120,
-                  height: 1,
-                  background: 'rgba(255,80,80,0.9)',
-                  zIndex: 100000,
-                  pointerEvents: 'none',
-                }}
-              />
               {(allSeats ? OFFICE_LAYOUT.seats : [seat]).map((s, i) => {
                 const seatFolder = allSeats ? ROSTER[i % ROSTER.length].folder : folder;
                 const seatFootY = s.y + sitFootOffset(dir);
+                const seatDs = seatDepthScale(s.y, perspBack);
+                // 机上プロップの原点(机の面)＝座り足元 + originY（遠近スケール込み）。
+                const originScreenY = seatFootY + originY * seatDs;
                 const editable = !allSeats || i === seatIndex;
                 const baseZ = Math.round(s.y);
                 return (
                   <Fragment key={i}>
-                    {/* 基準点(0,0)＝座り足元のマーカー（配置ツールのみ・本番には出さない）。
+                    {/* 基準点(0,0)＝机の面のマーカー（配置ツールのみ・本番には出さない）。
                         x,y オフセットはこの十字を原点に計る（下端中央がここに来る）。 */}
                     <div
                       style={{
                         position: 'absolute',
                         left: s.x - 14,
-                        top: seatFootY,
+                        top: originScreenY,
                         width: 28,
                         height: 2,
                         marginTop: -1,
@@ -343,7 +335,7 @@ export function PropEditorTool() {
                       style={{
                         position: 'absolute',
                         left: s.x,
-                        top: seatFootY - 14,
+                        top: originScreenY - 14,
                         width: 2,
                         height: 28,
                         marginLeft: -1,
@@ -365,13 +357,16 @@ export function PropEditorTool() {
                       if (p.id !== selected && !coShow[p.id]) return null;
                       const t = transforms[p.id][dir];
                       // 奥行き遠近（本番 OfficeView と同じ）。机上プロップは奥席ほど小さく＆内側へ。
-                      const ds = DEPTH_SCALED_PROPS.has(p.id) ? seatDepthScale(s.y, perspBack) : 1;
+                      // 原点は机の面（originY）。非対象（椅子）は原点0・等倍。
+                      const scaled = DEPTH_SCALED_PROPS.has(p.id);
+                      const ds = scaled ? seatDs : 1;
+                      const oy = scaled ? originY : 0;
                       return (
                         <Sprite
                           key={p.id}
                           src={p.sprite(dir)}
                           x={s.x + t.x * ds}
-                          footY={seatFootY + t.y * ds}
+                          footY={seatFootY + (oy + t.y) * ds}
                           scale={t.scale * ds}
                           z={baseZ + t.z}
                           tiltX={t.tiltX}
@@ -497,6 +492,31 @@ export function PropEditorTool() {
               </p>
             </div>
           )}
+
+          <div style={sectionBox}>
+            <div style={sectionTitle}>原点（机の面）</div>
+            <label style={fieldLbl}>
+              原点Y（足元から）
+              <input
+                type="number"
+                step={1}
+                value={originY}
+                onChange={(e) => setOriginY(Number(e.target.value))}
+                style={numIn}
+              />
+            </label>
+            <input
+              type="range"
+              min={-260}
+              max={0}
+              value={originY}
+              onChange={(e) => setOriginY(Number(e.target.value))}
+              style={{ width: '100%', marginTop: 6 }}
+            />
+            <p style={{ color: '#888', fontSize: 11, margin: '6px 0 0' }}>
+              シアン十字＝原点(0,0)。上げると机の面に合う。決めたら PROP_ORIGIN_Y に転記。
+            </p>
+          </div>
 
           <div style={sectionBox}>
             <div style={sectionTitle}>遠近（奥行き）</div>
