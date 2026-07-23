@@ -97,7 +97,9 @@ export function PropEditorTool() {
   const [showChar, setShowChar] = useState(true); // キャラの裏に隠れた物体を見るために消せる
   // v0.25：既定で「選択中の物体だけ」表示。laptop/desktop 等は排他（実ゲームでPCは1つ）なので
   // 全部同時に出すと重なって編集しづらい。OFF で全物体を重ねて相対位置も確認できる。
-  const [soloProp, setSoloProp] = useState(true);
+  // v0.25：同時表示する物体（編集中の物体は常に表示、ここでチェックした物体を重ねて表示）。
+  // 既定は空＝編集中のみ（laptop/desktop など排他プロップが重ならない）。
+  const [coShow, setCoShow] = useState<Record<string, boolean>>({});
   // 全席に ROSTER 6人を並べて、調整値がどのキャラでも破綻しないかまとめて確認する。
   // 1席1キャラだけだと「そのキャラでは合っているが他で浮く」に気づけない。
   const [allSeats, setAllSeats] = useState(true);
@@ -245,14 +247,18 @@ export function PropEditorTool() {
             />
             キャラ
           </label>
-          <label style={lbl}>
-            <input
-              type="checkbox"
-              checked={soloProp}
-              onChange={(e) => setSoloProp(e.target.checked)}
-            />
-            選択中のみ
-          </label>
+          <span style={{ color: '#aaa', marginLeft: 6 }}>同時表示</span>
+          {PROPS.map((p) => (
+            <label key={p.id} style={lbl}>
+              <input
+                type="checkbox"
+                checked={p.id === selected || !!coShow[p.id]}
+                disabled={p.id === selected}
+                onChange={(e) => setCoShow((m) => ({ ...m, [p.id]: e.target.checked }))}
+              />
+              {p.label}
+            </label>
+          ))}
           <label style={lbl}>
             表示 <span style={val}>{Math.round(zoom * 100)}%</span>
             <input
@@ -452,7 +458,7 @@ export function PropEditorTool() {
                     />
                   )}
                   {PROPS.map((p) => {
-                    if (soloProp && p.id !== selected) return null;
+                    if (p.id !== selected && !coShow[p.id]) return null;
                     const t = transforms[p.id][dir];
                     return (
                       <Sprite
