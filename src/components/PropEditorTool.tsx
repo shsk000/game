@@ -324,6 +324,34 @@ export function PropEditorTool() {
                 const baseZ = Math.round(s.y);
                 return (
                   <Fragment key={i}>
+                    {/* 基準点(0,0)＝座り足元のマーカー（配置ツールのみ・本番には出さない）。
+                        x,y オフセットはこの十字を原点に計る（下端中央がここに来る）。 */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: s.x - 14,
+                        top: seatFootY,
+                        width: 28,
+                        height: 2,
+                        marginTop: -1,
+                        background: 'rgba(0,224,255,0.95)',
+                        zIndex: 100001,
+                        pointerEvents: 'none',
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: s.x,
+                        top: seatFootY - 14,
+                        width: 2,
+                        height: 28,
+                        marginLeft: -1,
+                        background: 'rgba(0,224,255,0.95)',
+                        zIndex: 100001,
+                        pointerEvents: 'none',
+                      }}
+                    />
                     {showChar && (
                       <Sprite
                         src={sittingSprite(seatFolder, dir)}
