@@ -16,6 +16,7 @@ import {
   NATIVE_W,
   OFFICE_LAYOUT,
   officeBgSrc,
+  PERSPECTIVE_BACK_SCALE,
   PROP_TRANSFORMS,
   type PropKey,
   type PropTransform,
@@ -106,6 +107,8 @@ export function PropEditorTool() {
   // 全席に ROSTER 6人を並べて、調整値がどのキャラでも破綻しないかまとめて確認する。
   // 1席1キャラだけだと「そのキャラでは合っているが他で浮く」に気づけない。
   const [allSeats, setAllSeats] = useState(true);
+  // v0.25：奥行き遠近の強さ（最奥列の倍率）。ここで調整→ officeLayout の PERSPECTIVE_BACK_SCALE に転記。
+  const [perspBack, setPerspBack] = useState(PERSPECTIVE_BACK_SCALE);
   const [transforms, setTransforms] = useState<Transforms>(defaultTransforms);
   const [io, setIo] = useState('');
   const [drag, setDrag] = useState<{
@@ -123,16 +126,17 @@ export function PropEditorTool() {
       if (!raw) return;
       const d = JSON.parse(raw);
       if (d?.transforms) setTransforms((prev) => ({ ...prev, ...d.transforms }));
+      if (typeof d?.perspBack === 'number') setPerspBack(d.perspBack);
     } catch {
       /* 壊れていたら既定値のまま */
     }
   }, []);
   useEffect(() => {
     const t = window.setTimeout(() => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ transforms }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ transforms, perspBack }));
     }, 300);
     return () => window.clearTimeout(t);
-  }, [transforms]);
+  }, [transforms, perspBack]);
 
   const seat = OFFICE_LAYOUT.seats[seatIndex] ?? OFFICE_LAYOUT.seats[0];
   const footY = seat.y + sitFootOffset(dir);
@@ -157,7 +161,9 @@ export function PropEditorTool() {
     if (!drag) return;
     const onMove = (e: MouseEvent) => {
       // 遠近スケールを掛けて表示している物体は、ドラッグ量を割り戻して base 値を更新する。
-      const dsDrag = DEPTH_SCALED_PROPS.has(drag.id as PropKey) ? seatDepthScale(seat.y) : 1;
+      const dsDrag = DEPTH_SCALED_PROPS.has(drag.id as PropKey)
+        ? seatDepthScale(seat.y, perspBack)
+        : 1;
       const dx = (e.clientX - drag.startX) / zoom / dsDrag;
       const dy = (e.clientY - drag.startY) / zoom / dsDrag;
       setTransforms((prev) => ({
@@ -179,7 +185,7 @@ export function PropEditorTool() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [drag, zoom, dir, seat.y]);
+  }, [drag, zoom, dir, seat.y, perspBack]);
 
   const startDrag = (e: ReactMouseEvent, id: string) => {
     e.preventDefault();
@@ -331,7 +337,7 @@ export function PropEditorTool() {
                       if (p.id !== selected && !coShow[p.id]) return null;
                       const t = transforms[p.id][dir];
                       // 奥行き遠近（本番 OfficeView と同じ）。机上プロップは奥席ほど小さく＆内側へ。
-                      const ds = DEPTH_SCALED_PROPS.has(p.id) ? seatDepthScale(s.y) : 1;
+                      const ds = DEPTH_SCALED_PROPS.has(p.id) ? seatDepthScale(s.y, perspBack) : 1;
                       return (
                         <Sprite
                           key={p.id}
@@ -463,6 +469,34 @@ export function PropEditorTool() {
               </p>
             </div>
           )}
+
+          <div style={sectionBox}>
+            <div style={sectionTitle}>遠近（奥行き）</div>
+            <label style={fieldLbl}>
+              最奥の倍率
+              <input
+                type="number"
+                step={0.01}
+                min={0.3}
+                max={1}
+                value={perspBack}
+                onChange={(e) => setPerspBack(Number(e.target.value))}
+                style={numIn}
+              />
+            </label>
+            <input
+              type="range"
+              min={30}
+              max={100}
+              value={Math.round(perspBack * 100)}
+              onChange={(e) => setPerspBack(Number(e.target.value) / 100)}
+              style={{ width: '100%', marginTop: 6 }}
+            />
+            <p style={{ color: '#888', fontSize: 11, margin: '6px 0 0' }}>
+              手前列=1.0・最奥列=この値。小さいほど奥が縮む。決めたら PERSPECTIVE_BACK_SCALE
+              に転記。
+            </p>
+          </div>
 
           <div style={sectionBox}>
             <div style={sectionTitle}>同時表示（重ねて確認）</div>
