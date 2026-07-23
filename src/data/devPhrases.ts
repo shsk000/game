@@ -1,5 +1,7 @@
+import { splitMorae } from '../core/kanaProgress';
 import type { Rng } from '../core/ports';
 import type { GenreId } from './genres';
+import type { Scale } from './scales';
 
 /**
  * v0.15.2「作業チケット」システム（オーナー改修指示 2026-07-08）：
@@ -105,7 +107,7 @@ export const CATEGORY_PHRASE_POOLS: Record<TicketCategory, string[]> = {
     'がめんゆれをつける',
     'びょうがじゅんをそろえる',
     'ふれーむをどうきさせる',
-    'でるたたいむをはかる',
+    'ふれーむじかんをはかる',
     'ふれーむおちをふせぐ',
     'くえすとをしんこうさせる',
     'ふらぐをかんりする',
@@ -118,6 +120,46 @@ export const CATEGORY_PHRASE_POOLS: Record<TicketCategory, string[]> = {
     'ろぐをしゅつりょくする',
     'しょりをさいてきかする',
     'めもりをかいほうする',
+    'だんまくをうつ',
+    'たまをはっしゃする',
+    'れんしゃをせいぎょする',
+    'くーるたいむをかんりする',
+    'ちゃーじをためる',
+    'がーどをじっそうする',
+    'じゃすとがーどをとる',
+    'かいひをじっそうする',
+    'むてきじかんをつくる',
+    'のけぞりをつくる',
+    'ひっとすとっぷをいれる',
+    'あしばはんていをとる',
+    'はしごをのぼらせる',
+    'しやをけいさんする',
+    'ちけいをせいせいする',
+    'まっぷをじどうせいせいする',
+    'のいずでちけいをつくる',
+    'おしだしをけいさんする',
+    'れいきゃすとをとばす',
+    'あたりばんいをくぎる',
+    'あたりはんていをまびく',
+    'しょうとつをかいけつする',
+    'おぶじぇくとをつかいまわす',
+    'どうきずれをおぎなう',
+    'すてーとましんをくむ',
+    'せんいじょうけんをきめる',
+    'いべんときゅーをさばく',
+    'こーるばっくをとうろくする',
+    'びょうがしょりをまとめる',
+    'てくすちゃをまとめる',
+    'はっしゅちをけいさんする',
+    'しーどをこていする',
+    'のいずかんすうをくむ',
+    'ほかんでいちをうごかす',
+    'よそくいちをけいさんする',
+    'たすくをすけじゅーるする',
+    'ちくじしょりをまわす',
+    'せっていをよみこむ',
+    'しょりじかんをそくていする',
+    'めもりのむだをおさえる',
   ],
   graphics: [
     'どっとえをかきこむ',
@@ -148,8 +190,8 @@ export const CATEGORY_PHRASE_POOLS: Record<TicketCategory, string[]> = {
     'ますめにあわせる',
     'どっとのつぶをそろえる',
     'いろみをちょうせいする',
-    'めいどをあげる',
-    'さいどをおさえる',
+    'あかるさをあげる',
+    'あざやかさをおさえる',
     'ぐらでーしょんをつくる',
     'しきそうをそろえる',
     'こんとらすとをつける',
@@ -191,15 +233,55 @@ export const CATEGORY_PHRASE_POOLS: Record<TicketCategory, string[]> = {
     'ろごをかく',
     'ますこっとをかく',
     'すぷらいとしーとをくむ',
-    'あとらすをまとめる',
+    'すぷらいとをまとめる',
     'ますくをきる',
     'れいやーをわける',
-    'ずおーだーをそろえる',
+    'えがくじゅんをそろえる',
     'とうめいどをちょうせいする',
     'いろすうをへらす',
     'ぱれっとをへらす',
     'どっとうちをしあげる',
     'えをしあげる',
+    'せっちかげをかく',
+    'つやをいれる',
+    'ぬののひだをかく',
+    'きんにくをかく',
+    'かみをなびかせる',
+    'まゆをうごかす',
+    'くちぱくをつくる',
+    'たいきもーしょんをつくる',
+    'ひっさつもーしょんをかく',
+    'のけぞりもーしょんをかく',
+    'かいひもーしょんをかく',
+    'ちゃくちもーしょんをかく',
+    'じゃんぷのよびどうさをかく',
+    'ふちのひかりをいれる',
+    'おちかげをかく',
+    'りったいかんのかげをかく',
+    'はっぱのゆれをつくる',
+    'みずめんをゆらす',
+    'かげろうをかける',
+    'ぶらーをかける',
+    'ぶるーむをかける',
+    'まわりをくらくする',
+    'しゅうちゅうせんをひく',
+    'しょうてんをぼかす',
+    'ゆきをふらせる',
+    'あめをふらせる',
+    'かみなりをひからせる',
+    'たいまつをゆらす',
+    'ねおんをてんめつさせる',
+    'れんずふれあをそえる',
+    'のいずをのせる',
+    'すきゃんらいんをかける',
+    'あみかけでぼかす',
+    'あうとらいんをかきこむ',
+    'ふちどりをつける',
+    'ぐろーをそえる',
+    'こうかせんをひく',
+    'ずーむいんをつくる',
+    'がめんあんてんをつくる',
+    'とらんじしょんをかく',
   ],
   sound: [
     'こうかおんをつける',
@@ -215,17 +297,17 @@ export const CATEGORY_PHRASE_POOLS: Record<TicketCategory, string[]> = {
     'こーどをつける',
     'べーすらいんをくむ',
     'どらむをうちこむ',
-    'おかずをいれる',
+    'ふぃるをいれる',
     'ぶりっじをつくる',
     'さびをつくる',
     'あうとろをつくる',
     'てんかいをつける',
     'こーどしんこうをきめる',
     'おんかいをえらぶ',
-    'ちょうをきめる',
+    'きーをきめる',
     'ぶれいくをいれる',
     'おんしょくをえらぶ',
-    'しんせをつくる',
+    'しんせのおとをつくる',
     'おとをかさねる',
     'げんがくをくわえる',
     'ぴあののねをそえる',
@@ -238,10 +320,10 @@ export const CATEGORY_PHRASE_POOLS: Record<TicketCategory, string[]> = {
     'はくをそろえる',
     'ぐるーぶをだす',
     'くおんたいずをかける',
-    'せをつくる',
+    'じゃんぷおんをつくる',
     'あしおとをつくる',
     'とびらのおとをつくる',
-    'けんげきおんをつくる',
+    'つるぎのおとをつくる',
     'ばくはつおんをつくる',
     'こいんおんをつくる',
     'けっていおんをつくる',
@@ -272,7 +354,7 @@ export const CATEGORY_PHRASE_POOLS: Record<TicketCategory, string[]> = {
     'じんぐるをつくる',
     'ふぁんふぁーれをつくる',
     'かんきょうおんをつくる',
-    'あんびえんとをしきつめる',
+    'かんきょうおんをしきつめる',
     'めいんてーまをかく',
     'ぼすきょくをつくる',
     'どうちゅうきょくをつくる',
@@ -282,6 +364,46 @@ export const CATEGORY_PHRASE_POOLS: Record<TicketCategory, string[]> = {
     'みっくすをしあげる',
     'おとをかきだす',
     'きょくをしあげる',
+    'こーらすをかける',
+    'びぶらーとをかける',
+    'とれもろをいれる',
+    'ぴっちをそろえる',
+    'うらはくをきざむ',
+    'さんれんぷをいれる',
+    'やすみをいれる',
+    'すらーをかける',
+    'あくせんとをつける',
+    'べつのせんりつをかさねる',
+    'てんかいぶをつくる',
+    'へんちょうをいれる',
+    'わおんをつむ',
+    'てんしょんをつむ',
+    'わおんのつみかたをきめる',
+    'あるぺじおをきざむ',
+    'はんぷくふれーずをしく',
+    'かうんためろでぃをかく',
+    'もちーふをはってんさせる',
+    'おとにすきまをつくる',
+    'おーとめーしょんをかく',
+    'おとのつよさをそろえる',
+    'にんげんらしくゆらす',
+    'すうぃんぐをかける',
+    'くれっしぇんどをつける',
+    'でぃみぬえんどをつける',
+    'きょうじゃくをつける',
+    'きっくをそろえる',
+    'すねあをつくる',
+    'はいはっとをきざむ',
+    'しんばるをそえる',
+    'りむしょっとをいれる',
+    'くらっぷをかさねる',
+    'しぇいかーをふる',
+    'たむをまわす',
+    'ぐりっちをちりばめる',
+    'さんぷるをきりはりする',
+    'さいせいそくどをかえる',
+    'こえをがっきにする',
+    'おとにあたたかみをたす',
   ],
   design: [
     'ばらんすをかんがえる',
@@ -317,11 +439,11 @@ export const CATEGORY_PHRASE_POOLS: Record<TicketCategory, string[]> = {
     'しげんばらんすをとる',
     'ほうしゅうかんかくをきめる',
     'ちゅーとりあるをせっけいする',
-    'おんぼーでぃんぐをくむ',
+    'さいしょのながれをくむ',
     'がくしゅうこすとをさげる',
     'そうさせつめいをかく',
     'ひんとのだしかたをきめる',
-    'すくいそちをいれる',
+    'きゅうさいそちをいれる',
     'りだつてんをへらす',
     'めたしんこうをせっけいする',
     'かいほうじゅんをきめる',
@@ -338,10 +460,10 @@ export const CATEGORY_PHRASE_POOLS: Record<TicketCategory, string[]> = {
     'きゃらづけをかんがえる',
     'てごたえをせっけいする',
     'えんしゅつをかんがえる',
-    'こうかいかんをたかめる',
+    'こうようかんをたかめる',
     'てんぽをととのえる',
     'こんぼをせっけいする',
-    'じゅーしーにする',
+    'てざわりをよくする',
     'ぷれいてすとをする',
     'ふぃーどばっくをまとめる',
     'ばぐをせいりする',
@@ -364,6 +486,46 @@ export const CATEGORY_PHRASE_POOLS: Record<TicketCategory, string[]> = {
     'くせのつよさをちょうせいする',
     'あそびのはばをひろげる',
     'ぜんたいばらんすをととのえる',
+    'こんせぷとをかためる',
+    'せっけいのはしらをきめる',
+    'たーげっとそうをきめる',
+    'せーるすぽいんとをきめる',
+    'あそびのかなめをきめる',
+    'かちすじをきめる',
+    'まけかたをせっけいする',
+    'ぺーしんぐをくむ',
+    'やまばをおく',
+    'がくしゅうきょくせんをひく',
+    'ふらすとれーしょんをへらす',
+    'せいこうたいけんをつくる',
+    'ほうしゅうるーぷをくむ',
+    'くえすとらいんをくむ',
+    'さぶくえすとをはいちする',
+    'すうちきんこうをとる',
+    'なんいどべつにわける',
+    'ちゅーとりあるのながれをくむ',
+    'ぷれいやーどうきをせっけいする',
+    'もくひょうていじをせっけいする',
+    'せんたくしをよういする',
+    'とれーどおふをせっけいする',
+    'りすくにみあうほうしゅうをおく',
+    'さくさくかんをせっけいする',
+    'だればをなくす',
+    'しゅうばんのはりをつくる',
+    'くりあごのめあてをつくる',
+    'かへんせいをもたせる',
+    'らんだむせいをちょうせいする',
+    'うんとぎじゅつをはいぶんする',
+    'しゅうにゅうげんをせっけいする',
+    'こうこくわくをせっけいする',
+    'しんこうどをみえるかする',
+    'たっせいかんをたかめる',
+    'さいゆうせんじこうをきめる',
+    'どうきづけをくふうする',
+    'きゅうそくのりずむをつくる',
+    'ちがうあそびかたをうながす',
+    'けいぞくりつをあげる',
+    'なかだるみをけす',
   ],
 };
 
@@ -986,20 +1148,98 @@ export const getTicketAt = (
   return { category, flavor };
 };
 
-export const pickPhrase = (category: TicketCategory, rng: Rng = Math.random): string => {
+/**
+ * v0.30「規模で打鍵の重みを変える」：1文の長さ（モーラ数）を規模に連動させる。
+ *
+ * 総量（workTarget）は既に規模連動（gameStore）。ここでは「1文あたりの重み」を規模で変える。
+ * v0.27 で各プールは短/中/長が均等に整備済みなので、抽選の重み付けだけで実現できる（新規データ不要）。
+ */
+export type PhraseLenBand = 'short' | 'mid' | 'long';
+
+const BANDS: PhraseLenBand[] = ['short', 'mid', 'long'];
+
+/**
+ * カテゴリ×バンドのプール分割（モジュール読み込み時に 1 回だけ計算）。
+ * 各カテゴリのプールをモーラ数（＝打鍵単位数）の昇順に並べて三等分し、短/中/長の三分位に割る。
+ * 絶対モーラ数ではなく分位で分けるので、カテゴリ間で文長の絶対値が違っても各バンドが必ず非空になる
+ * （例：program/design は全体的に長く「短文」が絶対値では存在しないが、相対的な短さで short 帯を作れる）。
+ */
+const BANDED_POOLS: Record<TicketCategory, Record<PhraseLenBand, string[]>> = CATEGORY_ORDER.reduce(
+  (acc, cat) => {
+    const sorted = [...CATEGORY_PHRASE_POOLS[cat]].sort(
+      (a, b) => splitMorae(a).length - splitMorae(b).length,
+    );
+    const n = sorted.length;
+    const a = Math.floor(n / 3);
+    const b = Math.floor((2 * n) / 3);
+    acc[cat] = { short: sorted.slice(0, a), mid: sorted.slice(a, b), long: sorted.slice(b) };
+    return acc;
+  },
+  {} as Record<TicketCategory, Record<PhraseLenBand, string[]>>,
+);
+
+/** 規模別バンド重み（叩き台 🔧）。規模が上がるほど long へ寄る。 */
+const SCALE_BAND_WEIGHTS: Record<Scale, Record<PhraseLenBand, number>> = {
+  mini: { short: 0.6, mid: 0.3, long: 0.1 },
+  mobile: { short: 0.45, mid: 0.35, long: 0.2 },
+  indie: { short: 0.3, mid: 0.4, long: 0.3 },
+  hit: { short: 0.2, mid: 0.4, long: 0.4 },
+  aaa: { short: 0.1, mid: 0.35, long: 0.55 },
+};
+
+/**
+ * 規模の重みに従って 1 文を選ぶ。空バンドは除外して重みを再正規化する。
+ * 万一すべての重みが 0（データ想定外）の場合はプール全体から一様抽選にフォールバック。
+ */
+const pickWeighted = (category: TicketCategory, scale: Scale, rng: Rng): string => {
+  const buckets = BANDED_POOLS[category];
+  const weights = SCALE_BAND_WEIGHTS[scale];
+  const avail = BANDS.filter((b) => buckets[b].length > 0);
+  const total = avail.reduce((s, b) => s + weights[b], 0);
+  if (total <= 0) {
+    const flat = CATEGORY_PHRASE_POOLS[category];
+    return flat[Math.floor(rng() * flat.length)];
+  }
+  let r = rng() * total;
+  for (const b of avail) {
+    r -= weights[b];
+    if (r < 0) {
+      const bucket = buckets[b];
+      return bucket[Math.floor(rng() * bucket.length)];
+    }
+  }
+  const last = buckets[avail[avail.length - 1]];
+  return last[Math.floor(rng() * last.length)];
+};
+
+/**
+ * 開発フェーズの 1 文を選ぶ。scale を渡すと規模に応じて長さが偏る（v0.30）。
+ * scale 省略時は従来どおりプール全体から一様抽選（後方互換）。
+ */
+export const pickPhrase = (
+  category: TicketCategory,
+  rng: Rng = Math.random,
+  scale?: Scale,
+): string => {
+  if (scale) return pickWeighted(category, scale, rng);
   const pool = CATEGORY_PHRASE_POOLS[category];
   return pool[Math.floor(rng() * pool.length)];
 };
 
 /**
  * v0.20 C：ボス文章（クランチタイム中に混じる長文）。
- * 新規コンテンツを追加せず、既存プールから2文を連結して「長め」を作る（最小変更）。
+ * 新規コンテンツを追加せず、既存プールから 2 文を連結して「長め」を作る（最小変更）。
+ * v0.30：scale を渡すと連結元の各文も規模の重みに従う（連結本数は 2 のまま）。
  */
-export const pickBossPhrase = (category: TicketCategory, rng: Rng = Math.random): string => {
+export const pickBossPhrase = (
+  category: TicketCategory,
+  rng: Rng = Math.random,
+  scale?: Scale,
+): string => {
   const pool = CATEGORY_PHRASE_POOLS[category];
-  const a = pool[Math.floor(rng() * pool.length)];
-  const b = pool[Math.floor(rng() * pool.length)];
-  return a + b;
+  const one = (): string =>
+    scale ? pickWeighted(category, scale, rng) : pool[Math.floor(rng() * pool.length)];
+  return one() + one();
 };
 
 /** コンボ倍率（数字インフレ）：10 で×1.5、30 で×2、100 で×3（叩き台 🔧） */
