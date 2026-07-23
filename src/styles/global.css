@@ -1492,6 +1492,40 @@ body,
   animation: dev-sprite-idle-kf 700ms steps(4) infinite alternate;
 }
 
+/* 企画会議：ワード確定ごとに社員頭上へ出すアイコン吹き出し（！/💡等） */
+@keyframes emote-bubble-pop-kf {
+  0% {
+    transform: scale(0.2) translateY(6px);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15) translateY(-2px);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+/* 吹き出し枠は PixelLab 製のドット絵フキダシ（48×48・下中央にしっぽ）を 9-slice で伸縮。
+   枠色・地色・しっぽは素材に内包されるので CSS 側では描かない。 */
+.emote-bubble {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border-style: solid;
+  border-width: 13px;
+  border-image-source: url('/sprites/ui/emote_bubble.png');
+  border-image-slice: 9 fill;
+  border-image-repeat: stretch;
+  image-rendering: pixelated;
+}
+.emote-bubble-pop {
+  animation: emote-bubble-pop-kf 260ms steps(4) both;
+}
+
 /* v0.15.2：グラフィック作業中パネルのスパークル（ドット絵スター）が回転しながら明滅 */
 @keyframes dev-sparkle-twinkle-kf {
   0% {

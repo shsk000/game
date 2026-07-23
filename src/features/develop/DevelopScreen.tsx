@@ -14,7 +14,9 @@ import {
   rollRare,
 } from '../../core/juice';
 import { splitMorae } from '../../core/kanaProgress';
+import { type PlanEmoteEvent, pickPlanEmote } from '../../core/planEmote';
 import { BUG_CONFIG, JUICE_CONFIG, planWeeksAllowance } from '../../data/balance';
+import { WHITEBOARD_MEETING_SPOTS } from '../../data/meetingScene';
 import { buildLine } from '../../data/codeSnippets';
 import {
   ATTR_BASE_GAIN,
@@ -179,6 +181,14 @@ export const DevelopScreen = () => {
   const [planDecided, setPlanDecided] = useState<{ category: PlanCategory; decided: string }[]>([]);
   const [planMemos, setPlanMemos] = useState<string[]>([]);
   const [planCards, setPlanCards] = useState<string[]>([]);
+  // 企画会議：ワード確定ごとに社員1人の頭上へ出すアイコン吹き出し（純表示演出。数値には影響しない）
+  const [planEmote, setPlanEmote] = useState<PlanEmoteEvent | null>(null);
+  const planEmoteKeyRef = useRef(0);
+  useEffect(() => {
+    if (!planEmote) return;
+    const t = window.setTimeout(() => setPlanEmote(null), 1500);
+    return () => window.clearTimeout(t);
+  }, [planEmote?.key]);
   const planCtx = useMemo(
     () => ({ genreName: GENRE_BY_ID[genreId]?.name ?? '', projectTitle: current?.title ?? '' }),
     [genreId, current?.title],
@@ -295,6 +305,19 @@ export const DevelopScreen = () => {
     return () => window.clearInterval(timer);
   }, [isDevelopment, isPlanning, !current]);
 
+  // 企画会議：タイプ完了と無関係に、ランダムな間隔で「考え中」吹き出し（💭🤔）を1人ずつ出す。
+  // ワード確定の「ひらめき」と同じ吹き出しスロットを共有する（同時に出るのは1つ）。
+  useEffect(() => {
+    if (!isPlanning || !current) return;
+    let timer = window.setTimeout(function tick() {
+      planEmoteKeyRef.current += 1;
+      const pick = pickPlanEmote(Math.random, WHITEBOARD_MEETING_SPOTS.length, 'thinking');
+      setPlanEmote({ ...pick, key: planEmoteKeyRef.current });
+      timer = window.setTimeout(tick, 1600 + Math.random() * 2200);
+    }, 900 + Math.random() * 1200);
+    return () => window.clearTimeout(timer);
+  }, [isPlanning, !current]);
+
   const currentInputPhrase = activeEvent
     ? activeEvent.mission
     : isPlanning
@@ -341,6 +364,11 @@ export const DevelopScreen = () => {
         setPlanMemos((l) => [...l, pickPlanMemo(t.category, planPhraseCountRef.current)].slice(-4));
         const keywords = (GENRE_PLAN_CONTENT[genreId] ?? GENRE_PLAN_CONTENT.action).ideaKeywords;
         setPlanCards((l) => (l.length < keywords.length ? [...l, keywords[l.length]] : l));
+
+        // ワードを1つ打ち切った → ランダムな1人の社員の頭上に「ひらめき」吹き出し（！/💡等）を出す
+        planEmoteKeyRef.current += 1;
+        const emotePick = pickPlanEmote(Math.random, WHITEBOARD_MEETING_SPOTS.length, 'idea');
+        setPlanEmote({ ...emotePick, key: planEmoteKeyRef.current });
 
         const nextCount = planPhraseCountRef.current + 1;
         const finishing = nextCount >= PHRASES_PER_PLAN_TICKET;
@@ -793,6 +821,7 @@ export const DevelopScreen = () => {
               memos={planMemos}
               cards={planCards}
               team={employees}
+              planEmote={planEmote}
               lastResult={lastResult}
             />
           ) : phase === 'debugging' ? (
@@ -1978,6 +2007,7 @@ const PlanningCenter = ({
   memos,
   cards,
   team,
+  planEmote,
   lastResult,
 }: {
   litPhaseDots: number;
@@ -1994,6 +2024,7 @@ const PlanningCenter = ({
   memos: string[];
   cards: string[];
   team: { id: string; role: EmployeeRole }[];
+  planEmote: PlanEmoteEvent | null;
   lastResult: LastResult | null;
 }) => {
   const catMeta = PLAN_CATEGORY_META[ticket.category];
@@ -2269,7 +2300,7 @@ const PlanningCenter = ({
         </div>
 
         {/* 企画中の様子：ホワイトボードを社員が囲む会議シーン。付箋は板面に増える */}
-        <PlanMeetingBoard employees={team} memos={memos} cards={cards} />
+        <PlanMeetingBoard employees={team} memos={memos} cards={cards} emote={planEmote} />
 
         {/* ③今回の結果（入力した結果、企画がどう良くなったか） */}
         <ResultCard result={lastResult} />

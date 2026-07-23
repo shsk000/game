@@ -13,6 +13,7 @@ import {
   spriteFolderFor,
   standingSprite,
 } from '../data/officeLayout';
+import type { PlanEmoteEvent } from '../core/planEmote';
 import type { EmployeeRole } from '../state/types';
 import {
   buildOccluderLookup,
@@ -20,6 +21,7 @@ import {
   OccluderMask,
   renderBandedSprite,
 } from './bandedSprite';
+import { EmoteBubble } from './EmoteBubble';
 
 /**
  * v0.26 B：オフィス背景のホワイトボードを社員が取り囲む「会議シーン」。
@@ -109,16 +111,30 @@ export function WhiteboardNotes({
 }
 
 /** 立ち絵1枚を会議スポットに描く。実ピクセルを計測してから scale する（PixelLab 出力サイズを決め打ちしない）。 */
+/** 吹き出し枠の一辺（native px）。頭上に浮かべる大きさ。 */
+const EMOTE_BUBBLE_SIZE = 52;
+/**
+ * スプライト画像は上部に透明パディングを含むため、キャンバス上端（spriteTop）＝実頭頂ではない。
+ * 実際の頭のてっぺんはキャンバス上端から `charSize * この比率` だけ下。立ち絵の不透明が始まる行を
+ * 実測すると約 0.25（頭頂）。吹き出しはこの頭頂の上に EMOTE_HEAD_GAP だけ浮かせて置く。
+ */
+const HEAD_TOP_FRAC = 0.25;
+/** 頭頂と吹き出し下端の隙間（native px）。小さすぎると頭にくっつく／大きすぎると離れる。 */
+const EMOTE_HEAD_GAP = 16;
+
 function MeetingCharacter({
   employee,
   spot,
   spotIndex,
   occluderLookup,
+  showEmote,
 }: {
   employee: { id: string; role: EmployeeRole };
   spot: MeetingSpot;
   spotIndex: number;
   occluderLookup: OccluderLookup;
+  /** このスポットに出す吹き出し（null なら出さない） */
+  showEmote?: PlanEmoteEvent | null;
 }) {
   const folder = spriteFolderFor(employee);
   const [natural, setNatural] = useState<number | null>(null);
@@ -138,6 +154,11 @@ function MeetingCharacter({
 
   if (natural == null) return null;
   const charSize = natural * CHAR_SCALE;
+  // 頭上吹き出しの native 座標。canvasBottom＝足元+margin、spriteTop＝キャンバス上端。
+  const canvasBottom = spot.y + OFFICE_LAYOUT.footOffsets.stand;
+  const spriteTop = canvasBottom - charSize;
+  const headTop = spriteTop + charSize * HEAD_TOP_FRAC;
+  const bubbleTop = headTop - EMOTE_BUBBLE_SIZE - EMOTE_HEAD_GAP;
   return (
     <>
       {renderBandedSprite(
@@ -152,6 +173,15 @@ function MeetingCharacter({
         charSize,
         occluderLookup,
       )}
+      {showEmote ? (
+        <EmoteBubble
+          animKey={showEmote.key}
+          def={showEmote.def}
+          x={spot.x}
+          top={bubbleTop}
+          size={EMOTE_BUBBLE_SIZE}
+        />
+      ) : null}
     </>
   );
 }
@@ -163,9 +193,12 @@ function MeetingCharacter({
 export const MeetingScene = ({
   employees,
   spots = WHITEBOARD_MEETING_SPOTS,
+  emote = null,
 }: {
   employees: { id: string; role: EmployeeRole }[];
   spots?: MeetingSpot[];
+  /** ワード確定ごとに出すアイコン吹き出し（spot index で対象社員を指定） */
+  emote?: PlanEmoteEvent | null;
 }) => {
   const occluderLookup = useMemo(() => buildOccluderLookup(OFFICE_LAYOUT.occluders), []);
   return (
@@ -191,6 +224,7 @@ export const MeetingScene = ({
             spot={spot}
             spotIndex={i}
             occluderLookup={occluderLookup}
+            showEmote={emote && emote.spot === i ? emote : null}
           />
         ) : null,
       )}
