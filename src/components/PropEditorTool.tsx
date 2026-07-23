@@ -15,10 +15,10 @@ import {
   NATIVE_W,
   OFFICE_LAYOUT,
   officeBgSrc,
-  pentabSprite,
-  plantSprite,
   PROP_TRANSFORMS,
   type PropTransform,
+  pentabSprite,
+  plantSprite,
   type SeatDir,
   sitFootOffset,
   sittingSprite,
@@ -247,18 +247,6 @@ export function PropEditorTool() {
             />
             キャラ
           </label>
-          <span style={{ color: '#aaa', marginLeft: 6 }}>同時表示</span>
-          {PROPS.map((p) => (
-            <label key={p.id} style={lbl}>
-              <input
-                type="checkbox"
-                checked={p.id === selected || !!coShow[p.id]}
-                disabled={p.id === selected}
-                onChange={(e) => setCoShow((m) => ({ ...m, [p.id]: e.target.checked }))}
-              />
-              {p.label}
-            </label>
-          ))}
           <label style={lbl}>
             表示 <span style={val}>{Math.round(zoom * 100)}%</span>
             <input
@@ -272,231 +260,260 @@ export function PropEditorTool() {
         </div>
       </div>
 
-      <div style={{ ...bar, borderTop: '1px solid #333' }}>
-        <div style={group}>
-          <span style={{ color: '#aaa' }}>物体</span>
-          {PROPS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setSelected(p.id)}
-              style={btn(selected === p.id)}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-        {cur && (
-          <div style={group}>
-            <label style={lbl}>
-              X
-              <input
-                type="number"
-                value={cur.x}
-                onChange={(e) => update(selected, 'x', Number(e.target.value))}
-                style={{ width: 64 }}
-              />
-            </label>
-            <label style={lbl}>
-              Y
-              <input
-                type="number"
-                value={cur.y}
-                onChange={(e) => update(selected, 'y', Number(e.target.value))}
-                style={{ width: 64 }}
-              />
-            </label>
-            <label style={lbl}>
-              倍率
-              <input
-                type="number"
-                step={0.05}
-                min={0.1}
-                value={cur.scale}
-                onChange={(e) => update(selected, 'scale', Number(e.target.value))}
-                style={{ width: 64 }}
-              />
-            </label>
-            <label style={lbl}>
-              奥行き(z)
-              <input
-                type="number"
-                value={cur.z}
-                onChange={(e) => update(selected, 'z', Number(e.target.value))}
-                style={{ width: 56 }}
-              />
-            </label>
-            <label style={lbl}>
-              傾き°
-              <input
-                type="number"
-                step={1}
-                value={cur.tiltX ?? 0}
-                onChange={(e) => update(selected, 'tiltX', Number(e.target.value))}
-                style={{ width: 56 }}
-              />
-            </label>
-            <label style={lbl}>
-              縦scale
-              <input
-                type="number"
-                step={0.05}
-                min={0.1}
-                value={cur.scaleY ?? 1}
-                onChange={(e) => update(selected, 'scaleY', Number(e.target.value))}
-                style={{ width: 56 }}
-              />
-            </label>
-            <label style={lbl}>
-              回転°
-              <input
-                type="number"
-                step={1}
-                value={cur.rotate ?? 0}
-                onChange={(e) => update(selected, 'rotate', Number(e.target.value))}
-                style={{ width: 56 }}
-              />
-            </label>
-            <span style={{ color: '#888' }}>z: 負=奥 / 正=手前｜傾き(パース)/縦scale/回転で平面物を机の面に寝かせる</span>
-            <button type="button" onClick={() => resetOne(selected)} style={btn(false)}>
-              ↺ この物体を既定値
-            </button>
-          </div>
-        )}
-        <div style={group}>
-          <button
-            type="button"
-            onClick={() => setIo(JSON.stringify(transforms, null, 2))}
-            style={btn(false)}
-          >
-            📋 JSON出力
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              try {
-                setTransforms(JSON.parse(io));
-              } catch {
-                alert('JSON を解釈できませんでした');
-              }
-            }}
-            style={btn(false)}
-          >
-            読込
-          </button>
-          <button
-            type="button"
-            onClick={() => setTransforms(defaultTransforms())}
-            style={btn(false)}
-          >
-            ↺ 全部既定値
-          </button>
-        </div>
-      </div>
-
-      <p style={{ margin: '8px 12px', color: '#aaa' }}>
-        物体をドラッグして移動、または上の数値で調整。位置はキャラの座り足元が基準なので、座席を変えても相対位置は保たれます。
-        {allSeats
-          ? '「全席に全員」ON：全席に6キャラを並べ、同じ調整値の見え方をまとめて確認できます（ドラッグできるのは「編集する席」だけ）。'
-          : ''}
-      </p>
-
-      <div style={{ padding: 12, overflow: 'auto' }}>
-        <div style={{ width: NATIVE_W * zoom, height: NATIVE_H * zoom }}>
-          <div
-            style={{
-              position: 'relative',
-              width: NATIVE_W,
-              height: NATIVE_H,
-              transform: `scale(${zoom})`,
-              transformOrigin: 'top left',
-              background: showBg ? undefined : '#2a2a2a',
-              outline: '1px solid #444',
-            }}
-          >
-            {showBg && (
-              <img
-                src={officeBgSrc}
-                alt=""
-                width={NATIVE_W}
-                height={NATIVE_H}
-                style={{ position: 'absolute', left: 0, top: 0, imageRendering: 'pixelated' }}
-              />
-            )}
-
-            {/* 基準線：キャラの座り足元 */}
+      {/* ── メイン：左キャンバス／右操作パネル ── */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: 12 }}>
+        {/* キャンバス */}
+        <div style={{ overflow: 'auto', flex: 1 }}>
+          <div style={{ width: NATIVE_W * zoom, height: NATIVE_H * zoom }}>
             <div
               style={{
-                position: 'absolute',
-                left: seat.x - 60,
-                top: footY,
-                width: 120,
-                height: 1,
-                background: 'rgba(255,80,80,0.9)',
-                zIndex: 100000,
-                pointerEvents: 'none',
+                position: 'relative',
+                width: NATIVE_W,
+                height: NATIVE_H,
+                transform: `scale(${zoom})`,
+                transformOrigin: 'top left',
+                background: showBg ? undefined : '#2a2a2a',
+                outline: '1px solid #444',
+              }}
+            >
+              {showBg && (
+                <img
+                  src={officeBgSrc}
+                  alt=""
+                  width={NATIVE_W}
+                  height={NATIVE_H}
+                  style={{ position: 'absolute', left: 0, top: 0, imageRendering: 'pixelated' }}
+                />
+              )}
+              {/* 基準線：キャラの座り足元 */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: seat.x - 60,
+                  top: footY,
+                  width: 120,
+                  height: 1,
+                  background: 'rgba(255,80,80,0.9)',
+                  zIndex: 100000,
+                  pointerEvents: 'none',
+                }}
+              />
+              {(allSeats ? OFFICE_LAYOUT.seats : [seat]).map((s, i) => {
+                const seatFolder = allSeats ? ROSTER[i % ROSTER.length].folder : folder;
+                const seatFootY = s.y + sitFootOffset(dir);
+                const editable = !allSeats || i === seatIndex;
+                const baseZ = Math.round(s.y);
+                return (
+                  <Fragment key={i}>
+                    {showChar && (
+                      <Sprite
+                        src={sittingSprite(seatFolder, dir)}
+                        x={s.x}
+                        footY={seatFootY}
+                        scale={CHAR_SCALE}
+                        z={baseZ}
+                      />
+                    )}
+                    {PROPS.map((p) => {
+                      if (p.id !== selected && !coShow[p.id]) return null;
+                      const t = transforms[p.id][dir];
+                      return (
+                        <Sprite
+                          key={p.id}
+                          src={p.sprite(dir)}
+                          x={s.x + t.x}
+                          footY={seatFootY + t.y}
+                          scale={t.scale}
+                          z={baseZ + t.z}
+                          tiltX={t.tiltX}
+                          scaleY={t.scaleY}
+                          rotate={t.rotate}
+                          outline={editable && selected === p.id}
+                          onMouseDown={editable ? (e) => startDrag(e, p.id) : undefined}
+                        />
+                      );
+                    })}
+                  </Fragment>
+                );
+              })}
+            </div>
+          </div>
+          <p style={{ margin: '8px 2px 0', color: '#888', fontSize: 11 }}>
+            物体をドラッグして移動、または右の数値で調整。位置はキャラの座り足元が基準です。
+            {allSeats ? '「全席に全員」ON：全席で見え方を確認（ドラッグは編集席のみ）。' : ''}
+          </p>
+        </div>
+
+        {/* 操作パネル */}
+        <div style={panel}>
+          <div style={sectionBox}>
+            <div style={sectionTitle}>編集する物体</div>
+            <div style={group}>
+              {PROPS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setSelected(p.id)}
+                  style={btn(selected === p.id)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {cur && (
+            <div style={sectionBox}>
+              <div style={sectionTitle}>調整（{PROPS.find((p) => p.id === selected)?.label}）</div>
+              <div style={fieldGrid}>
+                <label style={fieldLbl}>
+                  X
+                  <input
+                    type="number"
+                    value={cur.x}
+                    onChange={(e) => update(selected, 'x', Number(e.target.value))}
+                    style={numIn}
+                  />
+                </label>
+                <label style={fieldLbl}>
+                  Y
+                  <input
+                    type="number"
+                    value={cur.y}
+                    onChange={(e) => update(selected, 'y', Number(e.target.value))}
+                    style={numIn}
+                  />
+                </label>
+                <label style={fieldLbl}>
+                  倍率
+                  <input
+                    type="number"
+                    step={0.05}
+                    min={0.1}
+                    value={cur.scale}
+                    onChange={(e) => update(selected, 'scale', Number(e.target.value))}
+                    style={numIn}
+                  />
+                </label>
+                <label style={fieldLbl}>
+                  奥行きz
+                  <input
+                    type="number"
+                    value={cur.z}
+                    onChange={(e) => update(selected, 'z', Number(e.target.value))}
+                    style={numIn}
+                  />
+                </label>
+                <label style={fieldLbl}>
+                  傾き°
+                  <input
+                    type="number"
+                    step={1}
+                    value={cur.tiltX ?? 0}
+                    onChange={(e) => update(selected, 'tiltX', Number(e.target.value))}
+                    style={numIn}
+                  />
+                </label>
+                <label style={fieldLbl}>
+                  縦scale
+                  <input
+                    type="number"
+                    step={0.05}
+                    min={0.1}
+                    value={cur.scaleY ?? 1}
+                    onChange={(e) => update(selected, 'scaleY', Number(e.target.value))}
+                    style={numIn}
+                  />
+                </label>
+                <label style={fieldLbl}>
+                  回転°
+                  <input
+                    type="number"
+                    step={1}
+                    value={cur.rotate ?? 0}
+                    onChange={(e) => update(selected, 'rotate', Number(e.target.value))}
+                    style={numIn}
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                onClick={() => resetOne(selected)}
+                style={{ ...btn(false), marginTop: 8 }}
+              >
+                ↺ この物体を既定値
+              </button>
+              <p style={{ color: '#888', fontSize: 11, margin: '8px 0 0' }}>
+                z: 負=奥 / 正=手前｜傾き(パース)・縦scale・回転で平面物を机の面に寝かせる
+              </p>
+            </div>
+          )}
+
+          <div style={sectionBox}>
+            <div style={sectionTitle}>同時表示（重ねて確認）</div>
+            <div style={group}>
+              {PROPS.map((p) => (
+                <label key={p.id} style={lbl}>
+                  <input
+                    type="checkbox"
+                    checked={p.id === selected || !!coShow[p.id]}
+                    disabled={p.id === selected}
+                    onChange={(e) => setCoShow((m) => ({ ...m, [p.id]: e.target.checked }))}
+                  />
+                  {p.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div style={sectionBox}>
+            <div style={sectionTitle}>入出力</div>
+            <div style={group}>
+              <button
+                type="button"
+                onClick={() => setIo(JSON.stringify(transforms, null, 2))}
+                style={btn(false)}
+              >
+                📋 JSON出力
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    setTransforms(JSON.parse(io));
+                  } catch {
+                    alert('JSON を解釈できませんでした');
+                  }
+                }}
+                style={btn(false)}
+              >
+                読込
+              </button>
+              <button
+                type="button"
+                onClick={() => setTransforms(defaultTransforms())}
+                style={btn(false)}
+              >
+                ↺ 全部既定値
+              </button>
+            </div>
+            <textarea
+              value={io}
+              onChange={(e) => setIo(e.target.value)}
+              placeholder="ここに JSON が出ます / 貼り付けて「読込」も可"
+              style={{
+                width: '100%',
+                marginTop: 8,
+                height: 160,
+                background: '#111',
+                color: '#ddd',
+                border: '1px solid #333',
+                font: '12px monospace',
               }}
             />
-
-            {(allSeats ? OFFICE_LAYOUT.seats : [seat]).map((s, i) => {
-              // 全席モードでは席ごとに別のキャラを座らせる（1人ずつ確認する手間を無くす）。
-              const seatFolder = allSeats ? ROSTER[i % ROSTER.length].folder : folder;
-              const seatFootY = s.y + sitFootOffset(dir);
-              // ドラッグできるのは編集中の1席だけ。他席は同じ調整値の見え方を確認するための表示。
-              const editable = !allSeats || i === seatIndex;
-              // 席どうしの前後は OfficeView と同じく y 順（南＝手前）。
-              const baseZ = Math.round(s.y);
-              return (
-                <Fragment key={i}>
-                  {showChar && (
-                    <Sprite
-                      src={sittingSprite(seatFolder, dir)}
-                      x={s.x}
-                      footY={seatFootY}
-                      scale={CHAR_SCALE}
-                      z={baseZ}
-                    />
-                  )}
-                  {PROPS.map((p) => {
-                    if (p.id !== selected && !coShow[p.id]) return null;
-                    const t = transforms[p.id][dir];
-                    return (
-                      <Sprite
-                        key={p.id}
-                        src={p.sprite(dir)}
-                        x={s.x + t.x}
-                        footY={seatFootY + t.y}
-                        scale={t.scale}
-                        z={baseZ + t.z}
-                        tiltX={t.tiltX}
-                        scaleY={t.scaleY}
-                        rotate={t.rotate}
-                        outline={editable && selected === p.id}
-                        onMouseDown={editable ? (e) => startDrag(e, p.id) : undefined}
-                      />
-                    );
-                  })}
-                </Fragment>
-              );
-            })}
           </div>
         </div>
       </div>
-
-      <textarea
-        value={io}
-        onChange={(e) => setIo(e.target.value)}
-        placeholder="ここに JSON が出ます / 貼り付けて「読込」も可"
-        style={{
-          width: 'calc(100% - 24px)',
-          margin: 12,
-          height: 140,
-          background: '#111',
-          color: '#ddd',
-          border: '1px solid #333',
-          font: '12px monospace',
-        }}
-      />
     </div>
   );
 }
@@ -568,6 +585,38 @@ const bar: CSSProperties = {
 const group: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' };
 const lbl: CSSProperties = { display: 'flex', gap: 4, alignItems: 'center' };
 const val: CSSProperties = { color: '#ffd479', minWidth: 40, display: 'inline-block' };
+// v0.25：右操作パネルのレイアウト（キャンバス左・操作右）。
+const panel: CSSProperties = {
+  flex: '0 0 340px',
+  width: 340,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+};
+const sectionBox: CSSProperties = {
+  background: '#232323',
+  border: '1px solid #383838',
+  borderRadius: 6,
+  padding: 10,
+};
+const sectionTitle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 700,
+  color: '#ffd479',
+  margin: '0 0 8px',
+};
+const fieldGrid: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr',
+  gap: '6px 10px',
+};
+const fieldLbl: CSSProperties = {
+  display: 'flex',
+  gap: 6,
+  alignItems: 'center',
+  justifyContent: 'space-between',
+};
+const numIn: CSSProperties = { width: 72 };
 const btn = (active: boolean): CSSProperties => ({
   padding: '4px 10px',
   borderRadius: 4,
