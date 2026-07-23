@@ -1,12 +1,21 @@
 import { useMemo, useState } from 'react';
+import { EQUIPMENT_BY_ID } from '../data/equipment';
 import {
+  bookSprite,
   chairSprite,
+  desktopSprite,
+  gamingRigSprite,
   laptopSprite,
   NATIVE_H,
   NATIVE_W,
   OFFICE_LAYOUT,
   officeBgSrc,
   PROP_TRANSFORMS,
+  type PropKey,
+  type PropTransform,
+  pentabSprite,
+  plantSprite,
+  type SeatDir,
   sitFootOffset,
   sittingSprite,
   spriteFolderFor,
@@ -79,6 +88,55 @@ export const OfficeView = ({ employees = [] }: Props) => {
 };
 
 const CHAR_SCALE = OFFICE_LAYOUT.charScale;
+
+/** 装備の sprite 基底名（＝PROP_TRANSFORMS キー）→ スプライトパス関数。 */
+const PROP_SPRITE_BY_BASE: Partial<Record<PropKey, (dir: SeatDir) => string>> = {
+  laptop: laptopSprite,
+  desktop: desktopSprite,
+  gaming_rig: gamingRigSprite,
+  book: bookSprite,
+  pentab: pentabSprite,
+  plant: plantSprite,
+};
+
+/**
+ * 装備プロップを机上に描く。配置ツール（/admin/props）と同じ単純 transform で WYSIWYG。
+ * 傾き(tiltX)・縦scale・回転を適用し、前後は z-index（遮蔽帯は使わない）。
+ */
+function PropSprite({
+  src,
+  x,
+  footY,
+  t,
+  z,
+}: {
+  src: string;
+  x: number;
+  footY: number;
+  t: PropTransform;
+  z: number;
+}) {
+  const [natural, setNatural] = useState<number | null>(null);
+  const width = natural == null ? undefined : natural * t.scale;
+  return (
+    <img
+      src={src}
+      alt=""
+      draggable={false}
+      onLoad={(e) => setNatural(e.currentTarget.naturalWidth)}
+      style={{
+        position: 'absolute',
+        left: x,
+        top: footY,
+        width,
+        transform: `translate(-50%, -100%) perspective(600px) rotateX(${t.tiltX ?? 0}deg) rotate(${t.rotate ?? 0}deg) scaleY(${t.scaleY ?? 1})`,
+        zIndex: z,
+        imageRendering: 'pixelated',
+        visibility: width === undefined ? 'hidden' : 'visible',
+      }}
+    />
+  );
+}
 
 /**
  * 遮蔽物を考慮して1枚のスプライトを描く。
@@ -161,34 +219,49 @@ function SeatedEmployee({
   const dir = seat.dir;
   // z-order（painter's algorithm）: y が大きい（南＝手前）ほど前面。
   const baseZ = Math.round(seat.y);
-  const laptop = PROP_TRANSFORMS.laptop[dir];
   const chair = PROP_TRANSFORMS.chair[dir];
 
-  // 遮蔽の判定に使う接地点は座席で1つ（seat.y）。人も椅子もPCも「同じ床位置に居る」ので、
-  // どれも seat.y を基準に前後を決め、スプライトごとの下端の違いは marginNative で表す
-  // （canvasBottom = seat.y + marginNative）。物体の下端を接地点にすると、椅子は seat.y より
-  // 南に沈んで手前の机より手前と誤判定され、机の上に描かれてしまう（実機で発覚）。
-  const propMargin = (p: { y: number }) => sitFootOffset(dir) + p.y;
+  // 装備の解決：PC スロット（未装備/ノートは laptop）と小物スロット（book/pentab/plant のみ描画）。
+  const equipped = employee.equipped ?? {};
+  const pcBase = ((equipped.pc && EQUIPMENT_BY_ID[equipped.pc]?.sprite) || 'laptop') as PropKey;
+  const pcT = (PROP_TRANSFORMS[pcBase] ?? PROP_TRANSFORMS.laptop)[dir];
+  const pcSpriteFn = PROP_SPRITE_BY_BASE[pcBase] ?? laptopSprite;
+  const miscBase = equipped.misc
+    ? (EQUIPMENT_BY_ID[equipped.misc]?.sprite as PropKey | undefined)
+    : undefined;
+  const miscSpriteFn = miscBase ? PROP_SPRITE_BY_BASE[miscBase] : undefined;
+  const miscT = miscBase ? PROP_TRANSFORMS[miscBase]?.[dir] : undefined;
 
-  const laptopSprite_ = (
-    <BandedSprite
-      spriteKey={`${employee.id}-laptop`}
-      src={laptopSprite(dir)}
-      x={seat.x + laptop.x}
-      trueFootY={seat.y}
-      marginNative={propMargin(laptop)}
-      z={baseZ + laptop.z}
-      scale={laptop.scale}
-      occluderLookup={occluderLookup}
+  // 椅子だけ遮蔽帯（脚が手前の机に隠れる）を使う。PC・小物は配置ツールと同じ単純 transform。
+  const chairMargin = sitFootOffset(dir) + chair.y;
+
+  // PC・小物は配置ツール（/admin/props）と同じ座標系：footY = 座り足元 + t.y。
+  const pcSprite = (
+    <PropSprite
+      src={pcSpriteFn(dir)}
+      x={seat.x + pcT.x}
+      footY={seat.y + sitFootOffset(dir) + pcT.y}
+      t={pcT}
+      z={baseZ + pcT.z}
     />
   );
+  const miscSprite =
+    miscSpriteFn && miscT ? (
+      <PropSprite
+        src={miscSpriteFn(dir)}
+        x={seat.x + miscT.x}
+        footY={seat.y + sitFootOffset(dir) + miscT.y}
+        t={miscT}
+        z={baseZ + miscT.z}
+      />
+    ) : null;
   const chairSprite_ = (
     <BandedSprite
       spriteKey={`${employee.id}-chair`}
       src={chairSprite(dir)}
       x={seat.x + chair.x}
       trueFootY={seat.y}
-      marginNative={propMargin(chair)}
+      marginNative={chairMargin}
       z={baseZ + chair.z}
       scale={chair.scale}
       occluderLookup={occluderLookup}
@@ -208,17 +281,18 @@ function SeatedEmployee({
   );
 
   if (dir === 'north') {
-    // 背面向き：机は奥（北）。PC(奥)→人→椅子(手前、脚を隠す)の順（順序は z が決める）。
+    // 背面向き：PC(奥)→人→椅子(手前、脚を隠す)→小物(手前)。前後は z が決める。
     return (
       <>
-        {laptopSprite_}
+        {pcSprite}
         {person}
         {chairSprite_}
+        {miscSprite}
       </>
     );
   }
 
-  // 正面向き：机は手前（南）。椅子(奥)→人→机オーバーレイ(手前、脚を隠す)→PC(最前面)の順。
+  // 正面向き：椅子(奥)→人→机オーバーレイ(手前)→PC→小物。
   return (
     <>
       {chairSprite_}
@@ -238,7 +312,8 @@ function SeatedEmployee({
           }}
         />
       )}
-      {laptopSprite_}
+      {pcSprite}
+      {miscSprite}
     </>
   );
 }
