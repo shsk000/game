@@ -94,15 +94,6 @@ export const MISC_ITEMS: EquipmentDef[] = [
     sprite: 'book',
   },
   {
-    id: 'misc-speaker',
-    slot: 'misc',
-    name: 'モニタースピーカー',
-    tier: 1,
-    cost: 25_000_000,
-    categoryMul: { sound: 1.25 },
-    sprite: 'speaker',
-  },
-  {
     id: 'misc-pentab',
     slot: 'misc',
     name: '液タブ',
