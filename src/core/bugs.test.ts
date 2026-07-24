@@ -111,3 +111,25 @@ describe('pickBugFixPhrase', () => {
     expect(pickBugFixPhrase(mulberry32(1))).toBe(a);
   });
 });
+
+// v0.27 系「言葉を増やす」の健全性ガード（phrasePools.test.ts と同方針）。
+// BUG_FIX_PHRASES は phrasePools.test.ts の対象外なので、ここで機械検査する。
+describe('BUG_FIX_PHRASES（デバッグ打鍵プールの健全性）', () => {
+  it('十分な語数がある（「少なすぎ」の再発防止）', () => {
+    expect(BUG_FIX_PHRASES.length).toBeGreaterThanOrEqual(30);
+  });
+
+  it('全文がひらがな＋長音符のみ（タイピングコアの入力モデルを崩さない）', () => {
+    const bad = BUG_FIX_PHRASES.filter((p) => !/^[ぁ-んゔー]+$/.test(p));
+    expect(bad).toEqual([]);
+  });
+
+  it('プール内に完全重複がない（体感の「またこれ」を避ける）', () => {
+    expect(new Set(BUG_FIX_PHRASES).size).toBe(BUG_FIX_PHRASES.length);
+  });
+
+  it('1フレーズは UI 幅に収まる長さ（11 文字以内）', () => {
+    const tooLong = BUG_FIX_PHRASES.filter((p) => [...p].length > 11);
+    expect(tooLong).toEqual([]);
+  });
+});
