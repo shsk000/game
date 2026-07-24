@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AXIS_QUALITY_BONUS_CAP } from '../data/balance';
+import { AXIS_QUALITY_BONUS_CAP, EQUIP_QUALITY_BONUS_CAP } from '../data/balance';
 import type { Employee, EmployeeRole } from '../state/types';
 import { computeCharacterScore } from '../utils/character';
 import { computeMetascore, computeQualityV10 } from '../utils/metascore';
@@ -39,6 +39,8 @@ type Persona = {
   statBonus: number;
   /** トレンド完全一致ボーナス（メタ +3.5 相当）を得ているか */
   trendMatch: boolean;
+  /** v0.25 装備の独立品質枠（フル装備で最大 EQUIP_QUALITY_BONUS_CAP）。既定 0＝非装備。 */
+  equipBonus?: number;
 };
 
 /** 1 試行：quality 合成 → メタスコア（トレンドは boost 相当を quality に直接加算して近似） */
@@ -47,7 +49,7 @@ const rollMeta = (p: Persona, rng: Rng): number => {
     { charPower: p.charPower, genreAffinity: p.affinity, typingScore: p.typingScore },
     rng,
   );
-  const quality = Math.max(0, Math.min(100, Math.round(Q + p.statBonus)));
+  const quality = Math.max(0, Math.min(100, Math.round(Q + p.statBonus + (p.equipBonus ?? 0))));
   const meta = computeMetascore(quality, 'puzzle', 'sushi', null, rng);
   return meta.metascore + (p.trendMatch ? 3.5 : 0);
 };
@@ -150,5 +152,37 @@ describe('能力帯別のメタスコア分布（spec v16 §2-3）', () => {
   it('95 の壁は能力でしか越えられない：序盤・中盤モデルの 95+ は 0%', () => {
     expect(distribution(earlyGame(), 7).over95).toBe(0);
     expect(distribution(midGame(), 7).over95).toBe(0);
+  });
+});
+
+/**
+ * v0.25 装備（設備）の分布への影響。
+ * 装備は「金で買う加速」（数千万〜1.5億）で、mini の初期資金では手が出ない＝序盤/中盤は非装備モデルのまま。
+ * 終盤（資金潤沢）はフル装備で独立枠 EQUIP_QUALITY_BONUS_CAP を得るが、上限付きなので青天井にならない。
+ */
+const lateGameEquipped = (): Persona => ({
+  ...lateGame(),
+  name: '終盤・フル装備',
+  equipBonus: EQUIP_QUALITY_BONUS_CAP,
+});
+
+describe('v0.25 装備の分布ガード（金で買う加速・上限付き）', () => {
+  it('装備は序盤の壁を壊さない（高価で mini では買えない＝非装備で over70=0）', () => {
+    expect(distribution(earlyGame(), 42).over70).toBe(0);
+    expect(distribution(earlyGame(), 7).over70).toBe(0);
+  });
+
+  it('終盤フル装備は 95+ 到達を後押しする（非装備以上）', () => {
+    const plain = distribution(lateGame(), 42);
+    const eq = distribution(lateGameEquipped(), 42);
+    expect(eq.over95).toBeGreaterThanOrEqual(plain.over95);
+  });
+
+  it('終盤フル装備でも 95+ は青天井にならない（全作 95 にはならない・上限 50%）', () => {
+    // 実測 ≈0.48：Lv10×3・神相性・タイピング92・statBonus満額 ＋ 装備枠満額(+6) の理論上限シナリオ。
+    // 数億の設備投資に見合う「maxチームの到達点」。強すぎる場合は EQUIP_QUALITY_BONUS_CAP を下げる（spec §9-1）。
+    const eq = distribution(lateGameEquipped(), 42);
+    expect(eq.over95).toBeGreaterThan(0);
+    expect(eq.over95).toBeLessThanOrEqual(0.5);
   });
 });

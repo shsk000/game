@@ -21,6 +21,7 @@ import { nextLockedScale, SCALE_BY_ID, SCALES } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
 import { formatYen } from '../../utils/format';
+import { EquipmentModal } from './EquipmentModal';
 import { formatPower, RANK_VISUAL, ROLE_VISUAL } from './employeeDisplay';
 import { GachaReveal } from './GachaReveal';
 
@@ -41,6 +42,7 @@ const ICON_BASE = '/sprites/ui';
 type ModalKind =
   | 'hire'
   | 'scale'
+  | 'equipment'
   | 'achievements'
   | 'settings'
   | 'debt'
@@ -133,6 +135,12 @@ export const OfficeScreen = () => {
       emoji: '🏆',
       iconSrc: `${ICON_BASE}/icon_scale.png`,
       onClick: () => setModal('scale'),
+    },
+    {
+      id: 'equipment',
+      label: '装備',
+      emoji: '🛠',
+      onClick: () => setModal('equipment'),
     },
     {
       id: 'library',
@@ -748,6 +756,9 @@ export const OfficeScreen = () => {
         )}
       </PixelModal>
 
+      {/* ── 装備モーダル（v0.25 装備システム） ── */}
+      <EquipmentModal open={modal === 'equipment'} onClose={closeModal} />
+
       {/* ── 規模解放モーダル ── */}
       <PixelModal open={modal === 'scale'} onClose={closeModal} title="規模解放" maxWidth={520}>
         <ul
@@ -963,9 +974,7 @@ export const OfficeScreen = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {/* v0.24：効果音のミュート/音量 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-            >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 13 }}>効果音</span>
               <PixelButton variant="secondary" onClick={() => setMuted(!muted)}>
                 {muted ? 'OFF' : 'ON'}

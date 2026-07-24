@@ -1,4 +1,8 @@
-import { AXIS_QUALITY_BONUS_CAP, STAT_QUALITY_BONUS_CAP } from '../data/balance';
+import {
+  AXIS_QUALITY_BONUS_CAP,
+  EQUIP_QUALITY_BONUS_CAP,
+  STAT_QUALITY_BONUS_CAP,
+} from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { sumPrBonus } from '../data/employees';
 import type { GenreId } from '../data/genres';
@@ -27,6 +31,7 @@ import {
 import { decayRateFor, INITIAL_SHARE } from '../utils/sales';
 import type { Records } from '../utils/storage';
 import { remainingBugPenalty } from './bugs';
+import { computeEquipCategoryMul } from './equip';
 import { applyReleaseGrowth, type LevelUp } from './growth';
 import type { Deps } from './ports';
 import { computeNewlyUnlockedCategories, evaluateAchievements } from './progression';
@@ -143,7 +148,21 @@ export const computeRelease = (
     (axes.funFactor + axes.usability + axes.balance) * 0.3 + statQualityBonus,
   );
   const axisQualityBonus = positiveAxisBonus - axes.bugRate * 0.2 - bugPenalty.qualityPenalty;
-  const quality = Math.max(0, Math.min(100, Math.round(quality0 + axisQualityBonus)));
+  // v0.25：装備（設備）ボーナス。参加社員のロードアウトを集約したカテゴリ倍率で、
+  // devStats の「増えた分だけ」を**既存8点枠とは別枠**で加点する（未装備なら 0＝挙動不変）。
+  // 独立枠 EQUIP_QUALITY_BONUS_CAP で頭打ち（青天井にすると分布ガードが壊れる）。docs/v25 §4-2。
+  const equipMul = computeEquipCategoryMul(assignedEmployees.map((e) => e.equipped ?? {}));
+  const equipQualityBonus = Math.min(
+    EQUIP_QUALITY_BONUS_CAP,
+    stats.program * 0.12 * (equipMul.program - 1) +
+      stats.graphics * 0.08 * (equipMul.graphics - 1) +
+      stats.sound * 0.08 * (equipMul.sound - 1) +
+      stats.design * 0.05 * (equipMul.design - 1),
+  );
+  const quality = Math.max(
+    0,
+    Math.min(100, Math.round(quality0 + axisQualityBonus + equipQualityBonus)),
+  );
 
   const trend = ctx.trend;
   const meta = computeMetascore(quality, cur.genreId, cur.themeId, trend, deps.rng);
