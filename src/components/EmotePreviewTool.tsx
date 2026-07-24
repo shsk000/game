@@ -98,8 +98,8 @@ export function EmotePreviewTool() {
             今：{current.def.id}（{current.kind}）
           </span>
         </div>
-        {/* 開発フェーズ中央と同じ横幅・高さ感（約 590×150）で表示 */}
-        <div style={{ width: 590, height: 150, border: '2px solid #2b3a1c' }}>
+        {/* 開発フェーズ中央と同じ横幅・高さ感（約 590×170）で表示 */}
+        <div style={{ width: 590, height: 170, border: '2px solid #2b3a1c' }}>
           <DevDeskScene employees={DUMMY_TEAM} emote={emote} />
         </div>
       </section>

@@ -78,7 +78,7 @@ const TICKET_CARD_HEIGHT = 76;
 
 /** 結果カードの固定高さ。未入力(短)↔完了時(チップ4列)で高さが変わると、下のデスクシーン(flex)が
  *  伸縮して「出題ごとにオフィスの縦幅が変わる」ため固定する（v0.32・オーナー指摘 2026-07-24）。 */
-const RESULT_CARD_HEIGHT = 88;
+const RESULT_CARD_HEIGHT = 62;
 
 /**
  * v0.20 G：ボス文章の間だけ「RPGの戦闘っぽさ」を出すための挿絵（オーナー発注・PixelLab生成）。
@@ -2844,8 +2844,8 @@ const PhaseShell = ({
     <div style={{ padding: 16, minHeight: 0 }}>{children}</div>
     {team && (
       // 実装中のオフィス（着席＋アイドル揺れ）。内容の直下に置く（下に離しすぎない）。
-      // 開発フェーズと同じシーンを他フェーズでも見せる。
-      <div style={{ height: 150, padding: '0 10px 10px', flexShrink: 0 }}>
+      // 開発フェーズと同じズーム・高さで見せる（170px。キャラ 161px が切れない）。
+      <div style={{ height: 170, padding: '0 10px 10px', flexShrink: 0 }}>
         <DevDeskScene employees={team} />
       </div>
     )}
