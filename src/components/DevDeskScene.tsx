@@ -30,10 +30,12 @@ import { EmoteBubble } from './EmoteBubble';
 const CHAR_SCALE = OFFICE_LAYOUT.charScale;
 
 // パネルの見せ方（native 座標）。座席群がすべて収まる中心・高さ。/admin で微調整可能。
-// 高さは親（中央カラムの余白）に追従する（固定にすると中央が 1280×720 枠を超えてしまう）。
 const FOCUS_CX = 858; // 座席群の中心 X（席 x=751..966）
 const FOCUS_CY = 560; // 縦の中心（後列の頭が切れないよう上寄せ。前列の足元は机に隠れるので多少切れて可）
-const FOCUS_H = 520; // 縦に見せる native 高さ
+// ズーム（native→表示の縮小率）は**固定**にする。パネル高さに追従させると、フェーズ間で
+// パネル高さが数px違うだけでスケールと位置がズレて「開発とテストで見え方が違う」原因になる
+// （オーナー指摘 2026-07-25）。定数にして全フェーズ・admin で同一の見え方に統一する。
+const OFFICE_SCALE = 0.27;
 
 /** 吹き出し枠の一辺（native px）。 */
 const EMOTE_BUBBLE_SIZE = 52;
@@ -211,7 +213,7 @@ export const DevDeskScene = ({
     return () => ro.disconnect();
   }, []);
 
-  const k = panelH / FOCUS_H; // 縦をパネル実高さに合わせる縮小率（親の余白に追従）
+  const k = OFFICE_SCALE; // 固定ズーム（フェーズ間で見え方が変わらない）
   const tx = panelW / 2 - k * FOCUS_CX;
   const ty = panelH / 2 - k * FOCUS_CY;
 

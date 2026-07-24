@@ -171,11 +171,7 @@ export const DevelopScreen = () => {
   const ticketIndexRef = useRef(0);
   const [ticketPhraseCount, setTicketPhraseCount] = useState(0);
   const ticketPhraseCountRef = useRef(0);
-  const [completedTickets, setCompletedTickets] = useState<
-    { title: string; category: TicketCategory }[]
-  >([]);
   const currentTicket = useMemo(() => getTicketAt(genreId, ticketIndex), [genreId, ticketIndex]);
-  const nextTicket = useMemo(() => getTicketAt(genreId, ticketIndex + 1), [genreId, ticketIndex]);
 
   const [ticketPhrase, setTicketPhrase] = useState(() =>
     pickPhrase(currentTicket.category, undefined, current?.scale),
@@ -496,9 +492,6 @@ export const DevelopScreen = () => {
         setDevEmote({ ...devEmotePick, key: devEmoteKeyRef.current });
 
         if (finishing) {
-          setCompletedTickets((l) =>
-            [...l, { title: currentTicket.flavor.title, category }].slice(-6),
-          );
           ticketIndexRef.current += 1;
           setTicketIndex(ticketIndexRef.current);
           ticketPhraseCountRef.current = 0;
@@ -930,33 +923,10 @@ export const DevelopScreen = () => {
                 </span>
               </div>
 
-              <div style={{ ...devBox(), gap: 4, flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>
-                  現在の開発内容
-                </span>
-                {completedTickets.length === 0 ? (
-                  <span style={{ fontSize: 11, color: '#5a6e3a' }}>まだ着手した作業がない…</span>
-                ) : (
-                  completedTickets.map((t, i) => (
-                    <span key={i} style={{ fontSize: 11, color: CATEGORY_META[t.category].color }}>
-                      ✓ {t.title}
-                    </span>
-                  ))
-                )}
-                {isDevelopment && (
-                  <span style={{ fontSize: 11, color: DEV.white, fontWeight: 700 }}>
-                    ▶ {currentTicket.flavor.title}
-                  </span>
-                )}
-                <span style={{ fontSize: 10, color: DEV.sub, marginTop: 6 }}>次の目標</span>
-                <span style={{ fontSize: 12, color: DEV.cream, fontWeight: 700 }}>
-                  {nextTicket.flavor.title}
-                </span>
-              </div>
-
-              {/* v0.32：カテゴリ別「実装中の様子」演出を中央から右カラムへ移設（中央は着席デスクシーンに）。 */}
+              {/* v0.32：カテゴリ別「実装中の様子」演出を中央から右カラムへ移設（中央は着席デスクシーンに）。
+                  「現在の開発内容」パネルはオーナー指摘で撤去（2026-07-25）。 */}
               {isDevelopment && (
-                <div style={{ ...devBox(), gap: 4 }}>
+                <div style={{ ...devBox(), gap: 4, flex: 1, minHeight: 0 }}>
                   <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>
                     {'</> '}実装中の様子
                   </span>
