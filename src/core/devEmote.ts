@@ -12,18 +12,26 @@
 
 import type { PlanEmoteDef } from './planEmote';
 
-/** できた系（チケット文の完了時）。 */
+/** できた系（チケット文の完了時）。✨❗💡 に加え v0.32 で ✓（完了）・❤（いいね）を新規発注。 */
 export const DEV_DONE_EMOTES: readonly PlanEmoteDef[] = [
   { id: 'spark', src: '/sprites/ui/emote_spark.png', emoji: '✨' },
   { id: 'excl', src: '/sprites/ui/emote_excl.png', emoji: '❗' },
   { id: 'bulb', src: '/sprites/ui/emote_bulb.png', emoji: '💡' },
+  { id: 'check', src: '/sprites/ui/emote_check.png', emoji: '✅' },
+  { id: 'heart', src: '/sprites/ui/emote_heart.png', emoji: '❤️' },
 ];
 
-/** 集中中系（アンビエント）。既存 UI エモートを可能な限り使い回してワンパターンを避ける。 */
+/** 集中中系（アンビエント）。…❓💤 に加え v0.32 で ☕（休憩）・⚙（実装中）・💦（難航）・♪（ノッてる）を新規発注。 */
 export const DEV_FOCUS_EMOTES: readonly PlanEmoteDef[] = [
   { id: 'dots', src: '/sprites/ui/emote_dots.png', emoji: '…' },
   { id: 'question', src: '/sprites/ui/emote_question.png', emoji: '❓' },
   { id: 'zzz', src: '/sprites/ui/emote_zzz.png', emoji: '💤' },
+  { id: 'coffee', src: '/sprites/ui/emote_coffee.png', emoji: '☕' },
+  { id: 'gear', src: '/sprites/ui/emote_gear.png', emoji: '⚙️' },
+  { id: 'sweat', src: '/sprites/ui/emote_sweat.png', emoji: '💦' },
+  { id: 'note', src: '/sprites/ui/emote_note.png', emoji: '🎵' },
+  { id: 'flame', src: '/sprites/ui/emote_flame.png', emoji: '🔥' },
+  { id: 'muscle', src: '/sprites/ui/emote_muscle.png', emoji: '💪' },
 ];
 
 /** 全エモート（admin プレビュー用）。 */
