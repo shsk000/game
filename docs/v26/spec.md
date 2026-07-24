@@ -32,7 +32,7 @@
 
 ## 1. 事業目的と前提
 
-- 北極星：「速さと品質を競うゲーム会社経営シム／作業感をなくす」（[[game-design]] スキル）。本版はコア体験を変えず、**オフィスの生命感**だけを底上げする磨き版（v0.25 机アイテムと同じ「生活感」系列）。
+- 最上位の目的：「速さと品質を競うゲーム会社経営シム／作業感をなくす」（[[game-design]] スキル）。本版はコア体験を変えず、**オフィスの生命感**だけを底上げする磨き版（v0.25 机アイテムと同じ「生活感」系列）。
 - 前提：オフィス描画は v0.19 の正面向き素材・アイソメ規格（[[office-visual-design]]）。roadmap 判断ゲート「**純演出・ロジック無変更（安全）**」を厳守。
 - 制約：1280×720 固定・スクロール禁止（[[feedback_no_scroll_game_ui]]）。多人数同時アニメ・移動のパフォーマンスに注意（roadmap 明記）。濃色背景に暗い文字を置かない（[[feedback_dark_bg_light_text]]）＝会議図を敷く時の可読性ゲート。
 
@@ -153,6 +153,6 @@
 
 - タスク: [tasks.md](./tasks.md)
 - 上位計画: `docs/roadmap.md` §v0.26
-- スキル: [[game-design]]（北極星）／[[office-visual-design]]（オフィス規格）／[[game-ui-design]]（planning画面のUI規格）／[[playwright-verify]]（実機検証）／[[logic-architecture]]（層分離・rng注入）／[[testing-rules]]（3層）
+- スキル: [[game-design]]（最上位の目的）／[[office-visual-design]]（オフィス規格）／[[game-ui-design]]（planning画面のUI規格）／[[playwright-verify]]（実機検証）／[[logic-architecture]]（層分離・rng注入）／[[testing-rules]]（3層）
 - 足場コード: `OfficeView.tsx`（`SeatedEmployee`/`BandedSprite`）／`OfficeEditorTool.tsx`（歩行参照実装・`?walk`）／`officeLayout.ts`（`walkSheet`/`isWalkable`/`vectorToDir8`）／`DevelopScreen.tsx`（planning Center）／`state/types.ts`（`DEV_PHASE_META`）
 - 既存アセット: `public/sprites/office/<folder>/walk_<dir8>.png`（歩行）／`public/phase/planning.png` ほか（会議図・全フェーズ背景）

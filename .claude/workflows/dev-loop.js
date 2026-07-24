@@ -157,7 +157,7 @@ const GIT_SCHEMA = {
 function producerPrompt(focus, count) {
   return [
     'あなたは producer ロール（責任者/プロデューサー）。まず Skill(game-design) を憲章として読み、',
-    'ロール・目的・北極星をそこから採用する（再発明しない）。',
+    'ロール・目的・最上位の目的をそこから採用する（再発明しない）。',
     'docs/roadmap.md・最大版の docs/vNN/spec.md と tasks.md・docs/v08/gaps.md・実コード(src/core, src/data)を分析し、',
     '目的に対する差分を優先度付けして返す。',
     focus ? `分析の焦点: 「${focus}」を最優先の観点にする。` : '',

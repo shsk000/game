@@ -13,7 +13,7 @@ tools: Read, Grep, Glob, Bash, Skill
 ## 必ず読む
 
 - `Skill(dev-flow)` のアンチパターン集（このプロジェクトで実際に起きた失敗）
-- `Skill(game-design)`（この変更が北極星＝目的に本当に効いているか）
+- `Skill(game-design)`（この変更が最上位の目的＝目的に本当に効いているか）
 
 ## 敵対的チェック項目（1つでも真なら reject 方向）
 
