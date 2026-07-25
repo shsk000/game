@@ -247,6 +247,7 @@ function commitItemPrompt(r) {
     '2. このタスクで変更・追加されたコード（この範囲だけ add。"git add -A" は禁止＝未追跡スクショを巻き込むため）:',
     JSON.stringify(files, null, 2),
     `   と docs/plans/${r.item.id}/plan.md を "git add <paths>"。存在しない/差分のないパスは飛ばす。`,
+    `   さらに docs/plans/${r.item.id}/proposal.md 冒頭メタの「- **ステータス**: …」行を「- **ステータス**: 完了」に更新して "git add" する（開発ループ通過の記録）。`,
     '3. 日本語で簡潔なコミットメッセージ。1行目は「' + (r.plan && r.plan.title ? r.plan.title : r.item.id) + '」。末尾に Co-Authored-By フッターを付ける規約に従う。',
     '4. "git commit" を実行。add できる変更が無ければ ok:false と note（理由）を返す。成功なら ok:true と sha。',
     '注意: 未追跡の *.png など、このタスク外のファイルは絶対に add しない。',

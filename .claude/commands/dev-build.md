@@ -23,6 +23,12 @@ Workflow({ scriptPath: ".claude/workflows/dev-build.js", args: { ids: ["<id>", .
 - per-item コミット隔離（`git add -A`/`git clean` は使わない＝未追跡スクショを巻き込まない）。
 - planner は proposal の **UI 置き場所・狙いを勝手に変えない**（審査もそこを見る）。
 
+## ステータス管理（proposal）
+proposal は `未完了 → 進行中 → 完了` の3状態を冒頭メタに持つ（定義は `docs/dev-plan.md`）。
+- **起動前**：対象 id の `docs/plans/<id>/proposal.md` を **進行中** に更新（メインセッション）。
+- **通過**：開発ループ通過（PR作成）で workflow が per-item コミットに **完了** への更新を含める。
+- **不通過**：PRに載らなかった id は **未完了** に戻す（メインセッション）。
+
 ## 完了後：dev server を起動したまま残す
 社長は最終的に**ゲームで実機チェックしてからマージ**する。PR 作成後、**dev server を落とさず起動したまま**にし、起動 URL を社長に伝える（サーバー起動はメインセッション側で管理。背景エージェントに任せない）。
 
