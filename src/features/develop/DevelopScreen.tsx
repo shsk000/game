@@ -2846,7 +2846,7 @@ const PhaseShell = ({
       // 実装中のオフィス（着席＋アイドル揺れ）。内容の直下に置く（下に離しすぎない）。
       // 開発フェーズのオフィス実高さ(≈168px)と一致させる（下パディング10込みで height=178→内容168）。
       <div style={{ height: 178, padding: '0 10px 10px', flexShrink: 0 }}>
-        <DevDeskScene employees={team} />
+        <DevDeskScene employees={team} autoAmbient />
       </div>
     )}
   </div>

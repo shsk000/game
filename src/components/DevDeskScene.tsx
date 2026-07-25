@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { DevEmoteEvent } from '../core/devEmote';
+import { type DevEmoteEvent, pickDevEmote } from '../core/devEmote';
 import {
   chairSprite,
   laptopSprite,
@@ -191,14 +191,42 @@ function SeatedCharacter({
 export const DevDeskScene = ({
   employees,
   emote = null,
+  autoAmbient = false,
 }: {
   employees: { id: string; role: EmployeeRole }[];
-  /** チケット文の完了/アンビエントで座席の社員頭上に出すエモート */
+  /** チケット文の完了/アンビエントで座席の社員頭上に出すエモート（開発フェーズが外部から制御） */
   emote?: DevEmoteEvent | null;
+  /** true なら自前で「集中中」エモートを巡回表示する（テスト/デバッグ用。開発と見え方を揃える） */
+  autoAmbient?: boolean;
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const [panelW, setPanelW] = useState(680);
   const [panelH, setPanelH] = useState(200);
+
+  // 自前アンビエント：外部から emote 制御が無いフェーズ（テスト/デバッグ）でも、開発と同じく
+  // 頭上に「集中中」エモートを一定間隔で出す。着席している席にのみ出す。
+  const [autoEmote, setAutoEmote] = useState<DevEmoteEvent | null>(null);
+  const autoKeyRef = useRef(0);
+  const occupiedSeats = Math.max(
+    1,
+    employees.length > 0 ? Math.min(employees.length, OFFICE_LAYOUT.seats.length) : 1,
+  );
+  useEffect(() => {
+    if (!autoAmbient) return;
+    let t = window.setTimeout(function tick() {
+      autoKeyRef.current += 1;
+      const pick = pickDevEmote(Math.random, occupiedSeats, 'focus');
+      setAutoEmote({ ...pick, key: autoKeyRef.current });
+      t = window.setTimeout(tick, 1800 + Math.random() * 2400);
+    }, 1000 + Math.random() * 1400);
+    return () => window.clearTimeout(t);
+  }, [autoAmbient, occupiedSeats]);
+  useEffect(() => {
+    if (!autoEmote) return;
+    const t = window.setTimeout(() => setAutoEmote(null), 1500);
+    return () => window.clearTimeout(t);
+  }, [autoEmote?.key]);
+  const activeEmote = autoAmbient ? autoEmote : emote;
 
   useEffect(() => {
     const el = panelRef.current;
@@ -280,7 +308,7 @@ export const DevDeskScene = ({
               employee={cast[i]}
               seat={seat}
               seatIndex={i}
-              emote={emote && emote.seat === i ? emote : null}
+              emote={activeEmote && activeEmote.seat === i ? activeEmote : null}
             />
           ) : null,
         )}
