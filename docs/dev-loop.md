@@ -4,15 +4,19 @@
 > ゲーム仕様は `docs/vNN/spec.md`、開発フローの思想は `.claude/skills/dev-flow/`。
 > このドキュメントは「**5つのロール（別エージェント）で dev-flow の4ゲートを回す開発ループ**」の**共通の土台**（なぜ多エージェントか・ロール定義・通信方式・人間ゲートの位置）。ループごとの手順は下記2docへ分割した。
 
-## 構成：企画ループ ↔（社長ゲート）↔ 開発ループ
+## 構成：企画ループ ↔（社長ゲート）↔ 管理ループ ↔ 開発ループ
 
-| フェーズ | 設計doc | コマンド | 中身 |
-|---|---|---|---|
-| **企画ループ** | `docs/dev-plan.md` | `/dev-plan` | 責任者が実プレイ＋コードで軽量PRDを提案 → 社長承認 |
-| （人間ゲート） | — | — | 社長が **承認 / 修正 / 却下** |
-| **開発ループ** | `docs/dev-build.md` | `/dev-build <id>` | 承認PRDを planner→実装→検証→審査3体→PR。PR後もserver維持 |
+| フェーズ | 設計doc | コマンド | 中身 | 作業場所 |
+|---|---|---|---|---|
+| **企画ループ** | `docs/dev-plan.md` | `/dev-plan` | 責任者が実プレイ＋コードで軽量PRDを提案 → 社長承認 | `worktrees/plan-<日付>` |
+| （人間ゲート） | — | — | 社長が **承認 / 修正 / 却下** | — |
+| **管理ループ** | `docs/dev-pm.md` | `/dev-pm ids=<id>` | PM が優先度判断・衝突検出→キュー化、build worktree を払い出して開発チームへ渡し結果を回収 | メインセッション |
+| **開発ループ** | `docs/dev-build.md` | `/dev-build` | 渡された1件を planner→実装→検証→審査3体→PR。PR後もserver維持 | `worktrees/build-<id>` |
 
-> 旧「責任者→…→PR を一気通貫で自動」（§3-5）は、この2ループ化で**企画↔開発の間に社長ゲートを挟む形に更新**。§3-5 は各ループ内の品質ゲート機構として引き続き有効。
+> 旧「責任者→…→PR を一気通貫で自動」（§3-5）は、この3ループ化で**企画↔開発の間に社長ゲート（承認）と PM（引き渡し）を挟む形に更新**。§3-5 は各ループ内の品質ゲート機構として引き続き有効。
+>
+> **メイン作業ツリー（リポジトリ直下）では実装しない。** 企画も開発も worktree の中で完結させ、
+> 直下は「参照と PR マージ」だけに使う（並走セッションの `reset`/`clean` で作業を失わないため）。
 
 ---
 
@@ -34,7 +38,7 @@
 
 ---
 
-## 2. 5つのロール（agent）
+## 2. 6つのロール（agent）
 
 各ロールは `.claude/agents/*.md` の Subagent 定義。独立 context・専用 tool・専用システムプロンプトを持つ。
 既存スキルをそのままロール憲章として読み込む。
@@ -42,13 +46,15 @@
 | ロール | ファイル | 担当ゲート | 憲章（読むスキル） | 権限 |
 |---|---|---|---|---|
 | **責任者 / Producer** | `producer.md` | ループ頂点（何を作るか） | game-design（最上位の目的）+ roadmap/gaps | 読み取り専用（コード変更しない） |
+| **PM / 開発マネージャ** | `pm.md` | 企画→開発の引き渡し（どの順で・どこで） | game-design + docs/dev-pm.md | 読み取り専用（キューを出力） |
 | **企画 / Planner** | `planner.md` | [1] 計画 | game-design + dev-flow + docs/CLAUDE.md | 読み取り専用（計画を出力） |
 | **実装 / Engineer** | `engineer.md` | [2] 実装 | logic-architecture + testing-rules | 全権（コード＋unitテスト） |
 | **検証 / QA** | `qa.md` | [3] 検証 | testing-rules + playwright-verify | 検証のみ（コード編集禁止） |
 | **審査 / Reviewer** | `reviewer.md` | [4] ゲート番人 | dev-flow アンチパターン集 | 読み取り専用（3体多数決） |
 
 > Anthropic の推奨（役割は3〜4体まで、増やしすぎは逆効果）に沿い、
-> 中核は5ロール。審査だけは独立性のため同一ロールを3インスタンス並列で走らせ多数決する。
+> 1つのループ内で同時に働くのは3〜4ロール。審査だけは独立性のため同一ロールを3インスタンス並列で走らせ多数決する。
+> PM は「作る」側ではなく**引き渡しと回収**の担当で、ループ間の境界に1体だけ立つ。
 
 ---
 
@@ -102,16 +108,16 @@
 ## 5. 起動方法
 
 ```
-/dev-loop                    # 責任者おまかせで3タスク、PR作成まで
-/dev-loop count=1            # 1タスクだけ
-/dev-loop focus=経済バランス   # 責任者の分析焦点を指定
-/dev-loop branch=dev-loop/x  # 作業ブランチを明示（省略時は自動命名）
+/dev-plan count=3 focus=経済バランス   # 企画：plan worktree で実プレイ→提案→社長承認
+/dev-pm  ids=<id>,<id> count=2         # 管理：優先度判断→build worktree 払い出し→開発へ→回収
+/dev-build ids=<id> worktree=<絶対パス> port=5180   # 開発：通常は /dev-pm が渡す（直叩きしない）
 ```
 
-> 起動時に作業ブランチを用意する。`branch=` 省略時、現在ブランチが main/master なら `dev-loop/<短SHA>` を自動作成、
-> feature ブランチ上ならそれをそのまま使う。ハードコードされたブランチに毎回上書きすることはない。
+> 作業ブランチは**払い出された worktree のブランチをそのまま使う**（開発ループはブランチを切らない）。
+> `plan-<日付>` → `worktree-plan-<日付>` / `build-<id>` → `worktree-build-<id>`。
+> build worktree は `origin/main` から切り、承認された id の proposal だけを企画ブランチから取り込む（`docs/dev-pm.md` §4）。
 
-内部的には Workflow ツール（`.claude/workflows/dev-loop.js`）を実行する。
+内部的には Workflow ツール（`.claude/workflows/dev-build.js`）を実行する。
 Workflow は Max/Team/Enterprise で利用可。ロール agent 定義を読み込んだセッション（新規セッション推奨）で起動する。
 
 > **参考**: [Claude Code Workflows](https://code.claude.com/docs/en/workflows) /
@@ -176,11 +182,14 @@ micro の品質ゲートは Workflow のまま残す hybrid** が最適。現状
 
 ## 7. 既知の制約 / 今後
 
-- **`parallel=true` は現状「未実装」**。指定しても逐次実行にフォールバックする（`dev-loop.js` が警告を出す）。
-  複数 engineer を同一作業ツリーで同時に走らせると、①ファイル編集の競合、②後述の per-item コミット隔離（§4）の破綻、
-  が起きるため。将来 `isolation:'worktree'`（node_modules 分離まで含む）を実装したら解禁する。
-  それまで「複数エージェント」は**1タスクを5ロール＋審査3体で回す縦の多エージェント**で満たす。
-- **統合は git worktree でなくブランチ上で逐次**。起動時に作業ブランチを用意し（`branch=` 指定 or 自動 `dev-loop/<sha>`）、
-  main/master 上での直接実装を避ける（§4）。
+- **1つの開発ループの中は逐次**。同じ build worktree で engineer を同時に走らせると、①ファイル編集の競合、
+  ②per-item コミット隔離（§4）の破綻、が起きるため。「複数エージェント」は**1タスクを縦に回す多エージェント**で満たす。
+- **提案をまたぐ並列も現状はやらない**（PM が直列にキューを消化する）。worktree とポートは分離済みだが、
+  **Playwright は1本しか掴めず QA 同士が壊し合う**ため。ブラウザまで分離できたら解禁する（`docs/dev-pm.md` §6）。
+- **作業場所は worktree**。企画は `plan-<日付>`、開発は `build-<id>`（1提案＝1 worktree＝1 PR）。
+  払い出し（`git worktree add` / `npm ci` / proposal 取り込み / 専用ポート）は PM の仕事で、
+  開発ループは `worktree` が渡されなければ起動しない＝メイン作業ツリーでの直接実装を構造で防ぐ。
+- **worktree ごとに dev サーバーのポートを固定する**（`--strictPort`、e2e は `GAME_PORT`）。
+  自動ずらし任せだと別ツリーの古いサーバーを掴み、変更が無いのに検証が緑になる（偽グリーン）。
 - PR 作成は **`gh` CLI**（`gh pr create`）で行う。`mcp__github__` はこのリポジトリに接続していないため使わない。
 - 音・体感・面白さなど機械検証不能な項目は検証者が `ownerCheck` ラベルで PR に残す（dev-flow 3-4）。

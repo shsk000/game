@@ -49,6 +49,11 @@ description: タイピング工場プロジェクトのテスト規約（unit=no
 ## §4 e2e（Playwright）
 
 - dev server は `webServer` 設定で自動起動。状態確認は `window.__gs()`。
+- **spec の URL は必ず相対で書く**（`page.goto('/')` / `page.goto('/?seed=1')`）。
+  `http://localhost:5173` を spec に**ハードコードしない**。config の `baseURL` を無視するため、
+  worktree で検証しているつもりで**別ツリーのサーバーを見て緑になる**（偽グリーン）。
+- **worktree で回すときは専用ポートを渡す**：`GAME_PORT=<ポート> npm run test:e2e`
+  （config が `--strictPort` で起動するので、取り違えは黙って通らずエラーになる）。
 - 増やしたくなったら「unit / use-case に落とせないか」を先に検討。
 - 開発時の使い捨て検証 spec は `tests/archive/` へ（testDir 対象外）。
 
@@ -58,7 +63,7 @@ description: タイピング工場プロジェクトのテスト規約（unit=no
 
 1. `npm run build`（tsc -b + vite build）
 2. `npm test`（unit + use-case が緑）
-3. `npm run test:e2e`（ジャーニーが緑）
+3. `npm run test:e2e`（ジャーニーが緑。worktree では `GAME_PORT=<ポート>` を付ける）
 4. ブラウザ実機で該当画面を目視（MVP 要素チェック。playwright-verify スキル参照）
 
 ## テストしないもの（明示的な非対象）

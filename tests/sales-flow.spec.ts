@@ -60,7 +60,8 @@ test('販売中作品の売上が funds に積み上がる', async ({ page }) =>
       sessionStorage.setItem('__cleared', '1');
     } catch {}
   });
-  await page.goto('http://localhost:5173');
+  // 相対 URL（baseURL＝GAME_PORT に解決）。絶対 URL を書くと別ツリーのサーバーを見て偽グリーンになる。
+  await page.goto('/');
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(800);
   await page.evaluate(() => {
