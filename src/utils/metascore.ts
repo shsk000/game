@@ -79,7 +79,10 @@ export const computeRevenue = (
   // ※ トレンド／マーケ広告の売上倍率は release.ts 側で別途掛ける（同じく上限の外）。
   // ※ ローンチ広告は**発売後**に視聴するリワードなので、ここ（発売時の売上算出）には居ない。
   //    core/release.ts の applyLaunchAd が確定済みの初動に後から掛ける（下記コメントも参照）。
-  const fanBonus = Math.min(0.15, Math.sqrt(Math.max(0, fans)) / 400); // ファン 10000 で +0.15 上限
+  // ファンボーナスは上限なし（オーナー判断 2026-07-25。旧実装は +0.15 で頭打ち＝ファン 3600 人で
+  // 打ち止めになり、それ以上ファンを増やしても売上に一切効かなかった）。
+  // √ なので伸びは緩やか：1万人 +25% / 4万人 +50% / 16万人 +100%。
+  const fanBonus = Math.sqrt(Math.max(0, fans)) / 400;
   const softMul = (1 + Math.max(0, prBonus)) * (1 + fanBonus) * (1 + Math.max(0, pioneerBonus));
 
   const v = baseRevenue * tierMul * softMul;

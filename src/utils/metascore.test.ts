@@ -120,12 +120,29 @@ describe('computeRevenue', () => {
   });
 
   it('各ボーナスは独立の倍率として掛かる（案B：共有 +20% 上限を廃止）', () => {
-    // ファン1万(+0.15) / 広報+0.22（+11%×2相当）/ 初回+0.05
+    // ファン1万(√10000/400 = +0.25) / 広報+0.22（+11%×2相当）/ 初回+0.05
     // ※ ローンチ広告は発売後リワードなのでこの式には含まれない（core/release.ts applyLaunchAd）
-    const boosted = computeRevenue(60, 'action', 'ninja', 'mini', null, 1_000_000, 0.22, 0.05);
+    const boosted = computeRevenue(60, 'action', 'ninja', 'mini', null, 10_000, 0.22, 0.05);
     const raw = SCALE_BALANCE.mini.baseRevenue * SALES_MULTIPLIER_BY_SCORE.normal;
-    const expectedMul = (1 + 0.22) * (1 + 0.15) * (1 + 0.05);
-    expect(boosted).toBe(Math.round(raw * expectedMul)); // 約 ×1.47（上限で潰れない）
+    const expectedMul = (1 + 0.22) * (1 + 0.25) * (1 + 0.05);
+    expect(boosted).toBe(Math.round(raw * expectedMul)); // 約 ×1.60（上限で潰れない）
+  });
+
+  it('ファンボーナスは上限なしで √ファン数/400 のまま伸びる（オーナー判断で +0.15 上限を撤去）', () => {
+    const raw = SCALE_BALANCE.mini.baseRevenue * SALES_MULTIPLIER_BY_SCORE.normal;
+    const rev = (fans: number) => computeRevenue(60, 'action', 'ninja', 'mini', null, fans);
+    // 旧上限 +0.15 が効き始めていた 3600 人ちょうどは据え置き（境界で挙動が変わらない）
+    expect(rev(3_600)).toBe(Math.round(raw * 1.15));
+    // 上限撤去でここから先が伸びる（旧実装はすべて ×1.15 で頭打ちだった）
+    expect(rev(10_000)).toBe(Math.round(raw * 1.25));
+    expect(rev(40_000)).toBe(Math.round(raw * 1.5));
+    expect(rev(160_000)).toBe(Math.round(raw * 2));
+  });
+
+  it('ファン 0・負値でもボーナスは 0（√の定義域を割らない）', () => {
+    const raw = SCALE_BALANCE.mini.baseRevenue * SALES_MULTIPLIER_BY_SCORE.normal;
+    expect(computeRevenue(60, 'action', 'ninja', 'mini', null, 0)).toBe(Math.round(raw));
+    expect(computeRevenue(60, 'action', 'ninja', 'mini', null, -100)).toBe(Math.round(raw));
   });
 
   it('マイナスの広報ボーナスは売上を下げない（0 で下げ止まる）', () => {
