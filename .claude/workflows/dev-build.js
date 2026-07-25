@@ -1,51 +1,31 @@
 export const meta = {
-  name: 'dev-loop',
-  description: '責任者→企画→実装→検証→審査の5ロールで開発をループし、PR作成まで自動化する（新テーマはGO待ちへ退避）',
+  name: 'dev-build',
+  description: '社長承認済みの提案(docs/plans/<id>/proposal.md)を 企画→実装→検証→審査3体→PR で実装する開発ループ',
   phases: [
-    { title: '分析(責任者)' },
+    { title: '準備' },
     { title: '開発ループ' },
     { title: '統合' },
   ],
 }
 
-// ---- パラメータ（/dev-loop count=3 focus=... branch=... parallel=false のように渡す）----
-const COUNT = (args && Number(args.count)) || 3
-const FOCUS = (args && args.focus) || ''
+// ---- パラメータ（/dev-build ids=<id>,<id> branch=... のように渡す）----
+// args.ids: 社長承認済み提案 id の配列（例 ["20260725-daily-gacha"]）。カンマ/空白区切りの文字列も可。
+const RAW_IDS = args && args.ids
+const IDS = Array.isArray(RAW_IDS)
+  ? RAW_IDS.filter(Boolean)
+  : typeof RAW_IDS === 'string'
+    ? RAW_IDS.split(/[\s,]+/).filter(Boolean)
+    : []
 const ARG_BRANCH = (args && args.branch) || ''
-const PARALLEL = !!(args && args.parallel)
 const MAX_IMPL_RETRY = 3
 
 // ---- スキーマ（ロール間の型付き受け渡し）----
-const PRODUCER_SCHEMA = {
-  type: 'object',
-  properties: {
-    analysis: { type: 'string' },
-    items: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          id: { type: 'string' },
-          title: { type: 'string' },
-          rationale: { type: 'string' },
-          purposeLink: { type: 'string' },
-          priority: { type: 'string', enum: ['P0', 'P1', 'P2', 'P3'] },
-          targetFiles: { type: 'array', items: { type: 'string' } },
-          doneConditions: { type: 'array', items: { type: 'string' } },
-          needsOwnerGo: { type: 'boolean' },
-        },
-        required: ['id', 'title', 'rationale', 'priority', 'doneConditions', 'needsOwnerGo'],
-      },
-    },
-  },
-  required: ['analysis', 'items'],
-}
-
 const PLAN_SCHEMA = {
   type: 'object',
   properties: {
     blocked: { type: 'boolean' },
     needsOwnerGo: { type: 'boolean' },
+    title: { type: 'string' },
     goalOneLine: { type: 'string' },
     causalChain: { type: 'array', items: { type: 'string' } },
     caps: { type: 'array', items: { type: 'string' } },
@@ -132,7 +112,6 @@ const INTEG_SCHEMA = {
   required: ['committed'],
 }
 
-// setup（作業ブランチ用意）と per-item の git 操作（commit/discard）の戻り
 const SETUP_SCHEMA = {
   type: 'object',
   properties: {
@@ -154,30 +133,19 @@ const GIT_SCHEMA = {
 }
 
 // ---- プロンプト生成 ----
-function producerPrompt(focus, count) {
-  return [
-    'あなたは producer ロール（責任者/プロデューサー）。まず Skill(game-design) を憲章として読み、',
-    'ロール・目的・北極星をそこから採用する（再発明しない）。',
-    'docs/roadmap.md・最大版の docs/vNN/spec.md と tasks.md・docs/v08/gaps.md・実コード(src/core, src/data)を分析し、',
-    '目的に対する差分を優先度付けして返す。',
-    focus ? `分析の焦点: 「${focus}」を最優先の観点にする。` : '',
-    `自動着手させてよい項目（needsOwnerGo:false）を優先度順に最大 ${count} 件、`,
-    '新テーマ/新ジャンル・コアループ改変・大投資・方針が割れる論点は needsOwnerGo:true にして論点を rationale へ。',
-    '各 item に doneConditions（ユーザー操作の言葉での完成条件）を必ず付ける。根拠は file:line で。',
-    'コードは変更しない。',
-  ].filter(Boolean).join('\n')
-}
-
+// planner: producer の item ではなく、社長承認済みの軽量PRD(proposal.md)を入力に技術計画を出す。
 function plannerPrompt(item) {
   return [
     'あなたは planner ロール（企画/PdM）。dev-flow ゲート[1] 計画を担当。コードは変更しない。',
     'Skill(dev-flow) の[1]と Skill(logic-architecture) と docs/CLAUDE.md を読む。',
-    '次の work item を実装可能な計画に落とす:',
-    JSON.stringify(item, null, 2),
-    'causalChain は既存コードを Grep/Read して末端まで追い、caps（CAP・重み・クランプ・既存ガード）を列挙し',
-    '衝突しないことを確かめる。doneChecklist はユーザー操作の言葉で。',
+    `社長が承認済みの提案（軽量PRD）を Read で開く: ${item.proposalPath}`,
+    'この提案を実装可能な技術計画に落とす:',
+    '- proposal の「成功条件・指標」を doneChecklist（ユーザー操作の言葉）に写す。',
+    '- proposal の「提案(What)＋UI導線・置き場所」を尊重して approach を書く（置き場所を勝手に変えない）。',
+    '- goalOneLine には提案の狙いを1行で。title には proposal のタイトルを入れる。',
+    'causalChain は既存コードを Grep/Read して末端（売上/メタ進行/解放/実績等）まで追い、',
+    'caps（CAP・重み・クランプ・既存ガード）を列挙し衝突しないことを確かめる（アンチパターン#1対策）。',
     '因果が最終結果に届かない/CAPと衝突するなら blocked:true と reason を返す。',
-    '新テーマ相当なら needsOwnerGo:true。',
   ].join('\n')
 }
 
@@ -186,9 +154,8 @@ function engineerPrompt(item, plan, prevVerify, attempt) {
     'あなたは engineer ロール（実装）。dev-flow ゲート[2]。',
     'Skill(logic-architecture)（core純粋関数・rng/clock注入・Math.random/Date.now直呼び禁止）と',
     'Skill(testing-rules)（ロジックにはunitテスト必須・境界値）を守る。最小変更。計画にない機能を足さない。',
-    '対象 item:',
-    JSON.stringify(item, null, 2),
-    '計画:',
+    `承認済み提案（背景・UI置き場所の正）: ${item.proposalPath}（必要なら Read）。`,
+    '技術計画:',
     JSON.stringify(plan, null, 2),
     'testPlan の unit テストを書き、npm run build と npm run test:unit を自分で緑にしてから返す。コミットはしない。',
   ]
@@ -205,48 +172,47 @@ function qaPrompt(item, plan, impl) {
   return [
     'あなたは qa ロール（検証）。dev-flow ゲート[3]を独立に全項目実行。コードは編集しない。落とすのが仕事。',
     'Skill(testing-rules) と Skill(playwright-verify) を読む。',
+    `承認済み提案の成功条件は ${item.proposalPath}（Read で確認）。`,
     '4点セット（npm run build / test:unit / test:ui / test:e2e）を全部回す（e2e省略禁止）。',
     'Playwright MCP(mcp__playwright__browser_*)で本物の入力を打ち、store直呼びショートカットは状態セットアップのみ。',
-    '数値効果は before/after を実測。完成条件を1つずつ消し込む。',
-    '対象 item と計画の doneChecklist:',
-    JSON.stringify({ doneConditions: item.doneConditions, doneChecklist: plan.doneChecklist }, null, 2),
+    '数値効果は before/after を実測。完成条件を1つずつ消し込む。計画の doneChecklist:',
+    JSON.stringify(plan.doneChecklist, null, 2),
     '実装サマリ:',
     JSON.stringify(impl, null, 2),
     '4点のどれか赤／本物入力なし／完成条件未消し込み → verdict:fail。failures には現物のログを入れる。',
   ].join('\n')
 }
 
-// 審査3体は同一プロンプトだと出力が相関し「独立多数決」が実質1票になる。
-// 各体に別レンズを割当て、敵対性を分散させる（気づいた他の欠陥も併せて挙げてよい）。
+// 審査3体は別レンズを割当てて独立性を担保する（同一プロンプトだと出力が相関し多数決が1票化する）。
 const REVIEW_LENSES = [
   '【因果レンズ】goalOneLine の効果が実コードで最終結果（売上/メタ進行等）に本当に届くかを最重点で疑う。' +
     'src/core を自分で Grep/Read し末端まで追い直し、CAP・重み・クランプに埋もれていないか（アンチパターン#1）を検める。',
   '【検証レンズ】QA が4点セットを全部回したか、Playwright で本物の入力を打ったか（store 直呼びで流れを見ただけ＝#2でないか）、' +
     '完成条件を操作の言葉で消し込んだか（#5）を最重点で疑う。git diff とテスト中身を読み、必要なら npm run test:unit を再実行して裏を取る。',
   '【規律レンズ】対症療法の重ね塗り（#6）、最小変更を超えた余計な改変、logic-architecture 違反（core にランダム/時刻直呼び・UI混在）、' +
-    'オーナーGO が要る新テーマ/コアループ改変の黙認混入（#4）を最重点で疑う。',
+    '承認済み提案の UI 置き場所/狙いからの逸脱を最重点で疑う。',
 ]
 
 function reviewerPrompt(item, plan, impl, verify, voter) {
   return [
     `あなたは reviewer ロール（敵対的審査・${voter + 1}人目）。dev-flow ゲート[4]の番人。approveでなく欠陥発見で評価される。同僚に同調しない。`,
     'Skill(dev-flow) のアンチパターン集と Skill(game-design) を読む。主張を鵜呑みにせず、実コードで因果を自分で末端まで追い直す。',
+    `承認済み提案（狙い・UI置き場所の正）: ${item.proposalPath}（Read で確認）。実装が提案の置き場所/狙いから逸れていないかも見る。`,
     'あなたの担当レンズ（ここを最重点で疑う。他の欠陥に気づいたら併せて挙げてよい）:',
     REVIEW_LENSES[voter] || REVIEW_LENSES[0],
     '迷ったら reject に倒す（番人として偽陰性より見逃しを避ける）。',
     '対象:',
-    JSON.stringify({ goalOneLine: plan.goalOneLine, doneConditions: item.doneConditions }, null, 2),
+    JSON.stringify({ goalOneLine: plan.goalOneLine, doneChecklist: plan.doneChecklist }, null, 2),
     '実装と検証結果:',
     JSON.stringify({ impl, verify }, null, 2),
     'reject 時は reasons に具体的な file:line と再現を書く。',
   ].join('\n')
 }
 
-// 起動時に作業ブランチを用意する（ハードコードのブランチに毎回上書きするのを防ぐ）。
-// Workflow 台本自体は git を触れない（agent 経由でのみ実行）。
-function setupPrompt(focus, argBranch) {
+// 作業ブランチを用意する（ハードコードのブランチに毎回上書きしない）。Workflow 台本自体は git を触れない。
+function setupPrompt(argBranch) {
   const lines = [
-    'あなたは統合準備担当。dev-loop の作業ブランチを用意する。git だけを触り、ソースコードは変更しない。',
+    'あなたは統合準備担当。dev-build の作業ブランチを用意する。git だけを触り、ソースコードは変更しない。',
     '手順:',
     '1. "git status" と "git branch --show-current" で現状確認。未コミットの tracked 変更があれば note に記す（勝手にコミット/破棄しない）。',
   ]
@@ -257,8 +223,7 @@ function setupPrompt(focus, argBranch) {
   } else {
     lines.push(
       '2. 現在ブランチが main または master なら、新しい作業ブランチを切る:',
-      '   ブランチ名は "dev-loop/" + ("git rev-parse --short HEAD" の値)。',
-      focus ? ('   focus「' + focus + '」を安全な英数字スラッグ化して末尾に "-<slug>" を足す。') : '   focus 指定は無い。',
+      '   ブランチ名は "dev-build/" + ("git rev-parse --short HEAD" の値)。',
       '   同名ブランチが既に存在したら末尾に -2, -3 … を付けて一意化。"git switch -c <name>" で作成・移動する。',
       '   main/master 以外の feature ブランチ上なら、それをそのまま作業ブランチとして使う（新規作成しない）。',
     )
@@ -270,18 +235,21 @@ function setupPrompt(focus, argBranch) {
   return lines.join('\n')
 }
 
-// 審査通過タスクを「そのタスクの変更ファイルだけ」個別コミットする。
-// git add -A は未追跡スクショを巻き込むため禁止。
+// 審査通過タスクを「そのタスクの変更ファイル＋技術計画 plan.md」だけ個別コミットする。git add -A は禁止。
 function commitItemPrompt(r) {
   const files = (r.impl && r.impl.changedFiles) || []
   return [
-    'あなたは統合担当。いま審査を通過した1タスクの変更「だけ」をコミットする。git だけを触る。',
-    'このタスクで変更・追加されたファイル（この範囲だけ add する。"git add -A" は禁止＝未追跡スクショを巻き込むため）:',
-    JSON.stringify(files, null, 2),
+    'あなたは統合担当。いま審査を通過した1タスクの変更「だけ」をコミットする。git と Write だけを触る。',
+    `対象提案 id: ${r.item.id}`,
     '手順:',
-    '1. 上記ファイルのみ "git add <paths>"。存在しない/差分のないパスは飛ばす。',
-    '2. 日本語で簡潔なコミットメッセージ。1行目は「' + (r.item.title || r.item.id) + '」。末尾に Co-Authored-By フッターを付ける規約に従う。',
-    '3. "git commit" を実行。add できる変更が無ければ ok:false と note（理由）を返す。成功なら ok:true と sha。',
+    `1. 技術計画を docs/plans/${r.item.id}/plan.md に Write で書く（proposal.md と対で残す）。内容は下記 plan を人間が読める Markdown に整形:`,
+    JSON.stringify(r.plan, null, 2),
+    '2. このタスクで変更・追加されたコード（この範囲だけ add。"git add -A" は禁止＝未追跡スクショを巻き込むため）:',
+    JSON.stringify(files, null, 2),
+    `   と docs/plans/${r.item.id}/plan.md を "git add <paths>"。存在しない/差分のないパスは飛ばす。`,
+    `   さらに docs/plans/${r.item.id}/proposal.md 冒頭メタの「- **ステータス**: …」行を「- **ステータス**: 完了」に更新して "git add" する（開発ループ通過の記録）。`,
+    '3. 日本語で簡潔なコミットメッセージ。1行目は「' + (r.plan && r.plan.title ? r.plan.title : r.item.id) + '」。末尾に Co-Authored-By フッターを付ける規約に従う。',
+    '4. "git commit" を実行。add できる変更が無ければ ok:false と note（理由）を返す。成功なら ok:true と sha。',
     '注意: 未追跡の *.png など、このタスク外のファイルは絶対に add しない。',
   ].join('\n')
 }
@@ -302,7 +270,7 @@ function discardItemPrompt(r) {
   ].join('\n')
 }
 
-function integratorPrompt(done, deferred, branch) {
+function integratorPrompt(done, branch) {
   return [
     'あなたは統合担当。審査通過タスクは既に個別コミット済み。あなたの仕事はブランチを push し PR を作ること。',
     'PR 作成は gh CLI を使う（mcp__github__ はこの環境に未接続なので使わない）。git と gh だけを触る。',
@@ -313,16 +281,14 @@ function integratorPrompt(done, deferred, branch) {
     '3. "git push -u origin ' + branch + '"（ネットワーク失敗時のみ指数バックオフで最大4回リトライ）。',
     '4. "gh pr create --base main --head ' + branch + ' --title <日本語タイトル> --body <本文>" で PR を作成。',
     '   同ブランチの PR が既にあれば作成はスキップし "gh pr view --json url -q .url" で URL を取得する。',
-    '   本文は日本語で、各タスクについて「責任者の目的／企画の完成条件／実装の変更ファイル／検証で実測した証拠／審査の可決票」を要約する。',
-    '   末尾に GO待ち退避項目を「オーナー確認待ち」として列挙し、Claude Code の attribution フッターを付ける。',
+    '   本文は日本語で、各タスクについて「提案の狙い(goalOneLine)／完成条件／実装の変更ファイル／検証で実測した証拠／審査の可決票」を要約する。',
+    '   末尾に「社長は dev server で実機チェックしてからマージ」の一文と、Claude Code の attribution フッターを付ける。',
     '通過タスク:',
-    JSON.stringify(done.map((d) => ({ id: d.item.id, title: d.item.title, goal: d.plan.goalOneLine, changed: d.impl && d.impl.changedFiles, evidence: d.verify && d.verify.checklistResults, approve: d.approveCount, sha: d.commit && d.commit.sha })), null, 2),
-    'GO待ち退避項目:',
-    JSON.stringify(deferred.map((x) => ({ title: x.title, rationale: x.rationale })), null, 2),
+    JSON.stringify(done.map((d) => ({ id: d.item.id, title: d.plan && d.plan.title, goal: d.plan && d.plan.goalOneLine, changed: d.impl && d.impl.changedFiles, evidence: d.verify && d.verify.checklistResults, approve: d.approveCount, sha: d.commit && d.commit.sha })), null, 2),
   ].join('\n')
 }
 
-// ---- micro ループ（1タスク＝5ロール＋審査3体）----
+// ---- micro ループ（1提案＝企画→実装→検証→審査3体）----
 async function microLoop(item) {
   const plan = await agent(plannerPrompt(item), { label: `企画:${item.id}`, phase: '開発ループ', schema: PLAN_SCHEMA, agentType: 'planner' })
   if (!plan || plan.blocked || plan.needsOwnerGo) {
@@ -361,36 +327,29 @@ async function microLoop(item) {
 }
 
 // ================= 実行 =================
-phase('分析(責任者)')
-const producer = await agent(producerPrompt(FOCUS, COUNT), { label: '責任者:分析', schema: PRODUCER_SCHEMA, agentType: 'producer' })
-const allItems = (producer && producer.items) || []
-const deferred = allItems.filter((it) => it.needsOwnerGo)
-const items = allItems.filter((it) => !it.needsOwnerGo).slice(0, COUNT)
-if (deferred.length) log(`⏸ オーナーGO待ちに退避（自動着手しない）: ${deferred.map((d) => d.title).join(' / ')}`)
-if (!items.length) {
-  log('自動着手できる項目がありません（すべてGO待ち、または差分なし）。')
-  return { producer, done: [], deferred, note: '着手項目なし' }
+phase('準備')
+if (!IDS.length) {
+  log('承認済み提案 id が渡されていません（args.ids）。/dev-plan の承認後に id を指定して起動してください。')
+  return { done: [], failed: [], note: 'id 未指定' }
 }
-log(`着手: ${items.map((i) => `${i.id}:${i.title}`).join(' / ')}`)
+log(`実装対象（承認済み）: ${IDS.join(' / ')}`)
+const items = IDS.map((id) => ({ id, proposalPath: `docs/plans/${id}/proposal.md` }))
 
-// 作業ブランチを用意（ハードコードのブランチに毎回上書きしない）。
-const setup = await agent(setupPrompt(FOCUS, ARG_BRANCH), { label: '準備:作業ブランチ', schema: SETUP_SCHEMA, agentType: 'general-purpose' })
+// 作業ブランチを用意
+const setup = await agent(setupPrompt(ARG_BRANCH), { label: '準備:作業ブランチ', phase: '準備', schema: SETUP_SCHEMA, agentType: 'general-purpose' })
 const branch = setup && setup.branch
 if (!branch) {
   log('作業ブランチの用意に失敗。安全のため中止します。')
-  return { producer, done: [], deferred, note: 'ブランチ準備失敗' }
+  return { done: [], failed: [], note: 'ブランチ準備失敗' }
 }
 log(`作業ブランチ: ${branch}${setup.created ? '（新規作成）' : ''}`)
 
 phase('開発ループ')
-// parallel は共有作業ツリーで engineer 同士が衝突し、per-item のコミット隔離も成立しないため未対応。
-// worktree 隔離（node_modules 分離含む）を実装するまでは逐次で回す。
-if (PARALLEL) log('⚠ parallel=true は現状未実装（共有ツリーで競合し隔離が壊れる）。逐次実行にフォールバックします。')
+// 逐次実行（共有作業ツリーで engineer 同士が衝突し、per-item コミット隔離も破綻するため並列にしない）。
 const results = []
 for (let i = 0; i < items.length; i++) {
   const r = await microLoop(items[i])
   if (r.passed) {
-    // 通過タスクは即コミット＝以降このタスクの diff は tracked から消え、後続の QA/審査の git diff がクリーンになる。
     r.commit = await agent(commitItemPrompt(r), { label: `コミット:${r.item.id}`, phase: '開発ループ', schema: GIT_SCHEMA, agentType: 'general-purpose' })
     if (r.commit && r.commit.ok === false) {
       log(`⚠ ${r.item.id} は審査通過したがコミット失敗: ${r.commit.note || ''} → 破棄してPRから除外`)
@@ -399,7 +358,6 @@ for (let i = 0; i < items.length; i++) {
       r.stoppedAt = 'commit'
     }
   } else if (r.impl) {
-    // 不通過タスクの作業ツリー変更は、後続タスク・PRに混ざらないよう破棄する（安全ガードの実効化）。
     await agent(discardItemPrompt(r), { label: `破棄:${r.item.id}`, phase: '開発ループ', schema: GIT_SCHEMA, agentType: 'general-purpose' })
   }
   results.push(r)
@@ -410,16 +368,16 @@ const failed = results.filter((r) => r && !r.passed)
 phase('統合')
 let integ = null
 if (done.length) {
-  integ = await agent(integratorPrompt(done, deferred, branch), { label: '統合:push+PR', phase: '統合', schema: INTEG_SCHEMA, agentType: 'general-purpose' })
+  integ = await agent(integratorPrompt(done, branch), { label: '統合:push+PR', phase: '統合', schema: INTEG_SCHEMA, agentType: 'general-purpose' })
 } else {
   log('審査通過タスクがゼロ。PR は作成しません。')
 }
 
 return {
-  analysis: producer && producer.analysis,
   branch,
-  done: done.map((d) => ({ id: d.item.id, title: d.item.title, approve: d.approveCount, sha: d.commit && d.commit.sha })),
-  failed: failed.map((f) => ({ id: f.item.id, title: f.item.title, stoppedAt: f.stoppedAt })),
-  deferred: deferred.map((d) => ({ title: d.title, rationale: d.rationale })),
+  done: done.map((d) => ({ id: d.item.id, title: d.plan && d.plan.title, approve: d.approveCount, sha: d.commit && d.commit.sha })),
+  failed: failed.map((f) => ({ id: f.item.id, stoppedAt: f.stoppedAt })),
   integ,
+  // 統合後、メインセッションが dev server を起動したまま残し社長の実機チェックに供する（dev-build.md コマンド参照）。
+  keepServerUp: done.length > 0,
 }

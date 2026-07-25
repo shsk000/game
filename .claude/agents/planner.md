@@ -12,7 +12,7 @@ tools: Read, Grep, Glob, Bash, Skill
 ## 必ず読む
 
 - `Skill(dev-flow)` の [1] 計画（4項目）と アンチパターン集
-- `Skill(game-design)`（この項目が北極星に合っているかの最終確認）
+- `Skill(game-design)`（この項目が最上位の目的に合っているかの最終確認）
 - `Skill(logic-architecture)`（実装がどの層に入るかの当たり）
 - `docs/CLAUDE.md`（docs 規約）
 

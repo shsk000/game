@@ -23,7 +23,7 @@
 
 ## 1. 事業目的と前提
 
-- 北極星：「速さと品質を競うゲーム会社経営シム／誰も弾かない」（game-design スキル）。本版はコア体験を変えず、**打鍵の鮮度**だけを底上げする磨き版。
+- 最上位の目的：「速さと品質を競うゲーム会社経営シム／誰も弾かない」（game-design スキル）。本版はコア体験を変えず、**打鍵の鮮度**だけを底上げする磨き版。
 - 前提：タイピングコアは v0.19 の選択制で確定済み。roadmap「やらないことリスト」の **コア再々設計に抵触しない**こと（判断ゲート）。
 
 ## 2. 現状の実測（拡充前のベースライン）
@@ -120,4 +120,4 @@
 
 - タスク: [tasks.md](./tasks.md)
 - 上位計画: `docs/roadmap.md` §v0.27
-- スキル: game-design（北極星）／genre-theme-content（追加チェックリスト）／testing-rules（3層戦略）／logic-architecture（rng注入）
+- スキル: game-design（最上位の目的）／genre-theme-content（追加チェックリスト）／testing-rules（3層戦略）／logic-architecture（rng注入）
