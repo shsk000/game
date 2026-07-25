@@ -259,59 +259,13 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       success: { funFactor: 5 },
     },
   ],
-  release: [
-    {
-      id: 'rel-sns',
-      name: 'SNSで話題化',
-      category: 'chance',
-      flavor: '発売直後に拡散された',
-      mission: 'わだいをひろげる',
-      missionLabel: '話題を広げる',
-      rate: 0.18,
-      // 旧 salesForecast +20 から付け替え（軸削除に伴う。SNS で拡散＝そのまま話題性）
-      success: { buzz: 20 },
-    },
-    {
-      id: 'rel-streamer',
-      name: '配信者が紹介',
-      category: 'chance',
-      flavor: '人気配信者がプレイした',
-      mission: 'せんでんをきょうかする',
-      missionLabel: '宣伝を強化する',
-      rate: 0.15,
-      success: { buzz: 25 },
-    },
-    {
-      id: 'rel-flame',
-      name: '炎上危機',
-      category: 'trouble',
-      flavor: '不満投稿が増えてきた',
-      mission: 'えんじょうたいさくをする',
-      missionLabel: '炎上対策を行う',
-      rate: 0.12,
-      success: { reputationRisk: -10 },
-    },
-    {
-      id: 'rel-store',
-      name: 'ストア審査トラブル',
-      category: 'trouble',
-      flavor: 'ストア公開で問題が発生',
-      mission: 'しんせいをしゅうせいする',
-      missionLabel: '申請内容を修正する',
-      rate: 0.1,
-      success: {},
-    },
-    {
-      id: 'rel-server',
-      name: 'サーバー負荷増加',
-      category: 'trouble',
-      flavor: 'アクセス集中で重くなった',
-      mission: 'ふかたいさくをする',
-      missionLabel: 'サーバーを増強する',
-      rate: 0.12,
-      success: { buzz: 10 },
-    },
-  ],
+  // release フェーズのイベントは全削除（オーナー判断 2026-07-25）。
+  // advancePhase は debugging の次に 'release' を設定せず finishDevelopment() に飛ぶため
+  // （gameStore.ts）、ここに置いた5件（SNSで話題化 / 配信者が紹介 / 炎上危機 /
+  // ストア審査トラブル / サーバー負荷増加）は一度も発生しない死にデータだった。
+  // イベント方式そのものを作り直す方針が決まっているので、暫定で生かすのではなく削除する。
+  // 消したイベント定義が必要になったら git 履歴（この行を含むコミットの親）から復元できる。
+  release: [],
   complete: [],
 };
 
