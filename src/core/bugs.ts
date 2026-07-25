@@ -1,5 +1,5 @@
-import { BUG_CONFIG, ROLE_EFFECT } from '../data/balance';
-import { sumProgrammerSpeed } from '../data/employees';
+import { BUG_CONFIG } from '../data/balance';
+import { sumProgrammerPower } from '../data/employees';
 import type { Employee } from '../state/types';
 import type { Rng } from './ports';
 
@@ -9,9 +9,8 @@ import type { Rng } from './ports';
  * エンジニア（プログラマー）の質が高いほど発生が抑制される。
  */
 
-/** プログラマー power 合計（正規化スケール）。sumProgrammerSpeed は係数込みなので割り戻す */
-const programmerPowerSum = (employees: Employee[]): number =>
-  sumProgrammerSpeed(employees) / ROLE_EFFECT.programmerLocPerSec;
+/** プログラマー power 合計（正規化スケール） */
+const programmerPowerSum = (employees: Employee[]): number => sumProgrammerPower(employees);
 
 /**
  * バグ抑制率（0..maxSuppression）。プログラマーの power 合計で決まる。

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { mulberry32 } from '../core/ports';
-import { computeMonthlyWage, GACHA_CONFIG, type GachaRank, ROLE_EFFECT } from './balance';
+import { computeMonthlyWage, GACHA_CONFIG, type GachaRank } from './balance';
 import {
   newCandidate,
   rollPowerForRank,
   sumEmployeeCategoryBonus,
   sumMonthlySalaries,
-  sumProgrammerSpeed,
+  sumProgrammerPower,
 } from './employees';
 
 const fixedDeps = (seed: number) => ({ rng: mulberry32(seed), now: () => 1_000_000 });
@@ -94,11 +94,11 @@ describe('集計ヘルパー', () => {
     );
   });
 
-  it('sumProgrammerSpeed はプログラマーのみ power × 係数で合算する', () => {
+  it('sumProgrammerPower はプログラマーのみ power をそのまま合算する（係数なし）', () => {
     const p1 = emp({ id: 'p1', role: 'programmer' as const, power: 0.5 });
     const p2 = emp({ id: 'p2', role: 'programmer' as const, power: 0.7 });
     const d = emp({ id: 'd', role: 'designer' as const, power: 0.9 });
-    expect(sumProgrammerSpeed([p1, p2, d])).toBeCloseTo(1.2 * ROLE_EFFECT.programmerLocPerSec);
+    expect(sumProgrammerPower([p1, p2, d])).toBeCloseTo(1.2);
   });
 
   it('sumEmployeeCategoryBonus は割当済み社員×一致カテゴリのみ加算', () => {

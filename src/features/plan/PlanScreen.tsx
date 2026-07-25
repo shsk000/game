@@ -463,9 +463,7 @@ export const PlanScreen = () => {
               </ul>
               {(() => {
                 // このチームで作ると何が起きるか（効き先の可視化。値は balance.ts から生成）
-                const speed = employees
-                  .filter((e) => e.role === 'programmer')
-                  .reduce((a, b) => a + b.power * ROLE_EFFECT.programmerLocPerSec, 0);
+                // 「開発速度 LoC/秒」は自動開発機能が存在しないため表示しない（進捗は打鍵のみ）
                 const quality = employees
                   .filter((e) => e.role === 'designer')
                   .reduce((a, b) => a + b.power * ROLE_EFFECT.designerQualityBonus, 0);
@@ -485,7 +483,6 @@ export const PlanScreen = () => {
                       rowGap: 2,
                     }}
                   >
-                    <span>⚡ 開発速度 +{speed.toFixed(2)} LoC/秒</span>
                     <span>🎨 品質 +{quality.toFixed(1)}</span>
                     <span>📣 売上 +{Math.round(sales * 100)}%</span>
                     <span>🐛 バグ抑制 {suppress}%</span>

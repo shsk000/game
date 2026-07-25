@@ -23,7 +23,7 @@ import { ACHIEVEMENTS } from '../data/achievements';
 import { DEV_PHRASES_PER_WEEK, type GachaKind } from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
-import { newCandidate, sumProgrammerSpeed } from '../data/employees';
+import { newCandidate } from '../data/employees';
 import { DEFAULT_LOADOUT, EQUIPMENT_BY_ID, type EquipSlot } from '../data/equipment';
 import type { GenreId } from '../data/genres';
 import { GENRE_BY_ID, GENRES } from '../data/genres';
@@ -129,7 +129,6 @@ type Actions = {
    * v0.17：従業員は常に全員参加（オーナー指示）。title 省略時はランダム生成。
    */
   startProject: (genreId: GenreId, themeId: ThemeId, scale: Scale, title?: string) => void;
-  tickAuto: (deltaSec: number) => void;
   tickSales: (deltaSec: number) => void;
   /**
    * v0.10：ゲーム内時間を1週進める。
@@ -366,24 +365,6 @@ export const useGameStore = create<GameState>()(
         funds: spend.funds,
         debt: spend.debt,
       });
-    },
-
-    tickAuto: (deltaSec) => {
-      const cur = get().current;
-      if (!cur) return;
-      const progSpeed = sumProgrammerSpeed(get().employees);
-      const boost = cur.devBoostRemainingSec > 0 ? 2 : 1;
-      const add = progSpeed * deltaSec * boost;
-      if (cur.finishedAt === null) {
-        const newDone = Math.min(cur.requiredLoC, cur.doneLoC + add);
-        set({
-          current: {
-            ...cur,
-            doneLoC: newDone,
-            devBoostRemainingSec: Math.max(0, cur.devBoostRemainingSec - deltaSec),
-          },
-        });
-      }
     },
 
     tickWeek: () => {

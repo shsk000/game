@@ -159,11 +159,12 @@ export const newCandidate = (
   };
 };
 
-/** プログラマーの自動開発速度合計（LoC/秒）。v0.16：正規化 power × 係数 */
-export const sumProgrammerSpeed = (employees: Employee[]): number =>
-  employees
-    .filter((e) => e.role === 'programmer')
-    .reduce((a, b) => a + b.power * ROLE_EFFECT.programmerLocPerSec, 0);
+/**
+ * プログラマーの power 合計（正規化 0..1 スケールのまま）。
+ * 用途はバグ抑制（core/bugs.ts）。旧 sumProgrammerSpeed（LoC/秒）は自動開発機能の削除に伴い廃止。
+ */
+export const sumProgrammerPower = (employees: Employee[]): number =>
+  employees.filter((e) => e.role === 'programmer').reduce((a, b) => a + b.power, 0);
 
 /** デザイナーの品質基礎ボーナス合計。v0.16：正規化 power × 係数 */
 export const sumDesignerBonus = (employees: Employee[]): number =>

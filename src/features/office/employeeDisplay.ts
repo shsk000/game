@@ -7,8 +7,8 @@ import { ROLE_EFFECT } from '../../data/balance';
 
 // v0.16：power は 0..1 正規化。表示は ROLE_EFFECT で実効値に換算する
 export const formatPower = (role: string, power: number) => {
-  if (role === 'programmer')
-    return `開発 +${(power * ROLE_EFFECT.programmerLocPerSec).toFixed(2)} LoC/秒・🐛バグ抑制`;
+  // 自動開発（LoC/秒）は機能自体が存在しないため表示しない。プログラマーの実効果はバグ抑制のみ。
+  if (role === 'programmer') return '🐛 バグ抑制';
   if (role === 'designer')
     return `品質基礎 +${(power * ROLE_EFFECT.designerQualityBonus).toFixed(1)}`;
   return `売上 +${Math.round(power * ROLE_EFFECT.prSalesBonus * 100)}%`;
