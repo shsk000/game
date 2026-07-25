@@ -218,11 +218,13 @@ export const computeRelease = (
     prBonus,
     pioneerBonus,
   );
-  // v0.14：市場系新軸（売上予測・話題性 − 炎上リスク）で売上を補正（0.5〜2.0 倍にクランプ）。
+  // 市場系軸（話題性 − 炎上リスク）で売上を補正（0.5〜2.0 倍にクランプ）。
+  // 旧 salesForecast（売上予測%）は削除済み。buzz と同じ式・同じ分母に足すだけで役割が重複し、
+  // 「予測」という名前なのに実売上を増やす＝プレイヤーに意味が伝わらなかった（オーナー判断 2026-07-25）。
   const effectiveReputationRisk = axes.reputationRisk + bugPenalty.reputationRisk;
   const axisSalesMul = Math.max(
     0.5,
-    Math.min(2, 1 + (axes.salesForecast + axes.buzz) / 100 - effectiveReputationRisk / 100),
+    Math.min(2, 1 + axes.buzz / 100 - effectiveReputationRisk / 100),
   );
   // マーケティング広告：売上 +10%（スコアには効かせず売上のみ。上限の外で確実に効く）
   const marketingMul = opts?.marketingAd ? 1.1 : 1;

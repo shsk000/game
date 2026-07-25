@@ -207,8 +207,10 @@ export type DevAxis =
   | 'usability' // 操作性 → 品質
   | 'balance' // バランス → 品質
   | 'hype' // 期待度 → ファン/初動
+  // 旧 'salesForecast'（売上予測%）は削除（オーナー判断 2026-07-25）。
+  // 「予測」という名前なのに実売上を増やす補正で、効果も buzz と同じ式・同じ分母に足すだけだった＝
+  // ゲーム内で何も表していない変数名がそのまま UI に出ていた。付与していたイベントは buzz に付け替え。
   | 'buzz' // 話題性 → ファン/売上
-  | 'salesForecast' // 売上予測% → 売上
   | 'bugRate' // バグ率±（+ で品質減）
   | 'reputationRisk' // 炎上リスク（+ で売上/ファン減）
   | 'devWeeksDelta' // 開発期間±週
@@ -223,7 +225,6 @@ export const ZERO_AXES: DevAxes = {
   balance: 0,
   hype: 0,
   buzz: 0,
-  salesForecast: 0,
   bugRate: 0,
   reputationRisk: 0,
   devWeeksDelta: 0,

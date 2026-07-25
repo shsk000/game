@@ -79,7 +79,8 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'とれんどをぶんせきする',
       missionLabel: 'トレンドを分析する',
       rate: 0.15,
-      success: { salesForecast: 15 },
+      // 旧 salesForecast +15 から付け替え（軸削除に伴う。流行を掴んだ＝話題になる、で意味は通る）
+      success: { buzz: 15 },
     },
     {
       id: 'plan-budget',
@@ -267,7 +268,8 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'わだいをひろげる',
       missionLabel: '話題を広げる',
       rate: 0.18,
-      success: { salesForecast: 20 },
+      // 旧 salesForecast +20 から付け替え（軸削除に伴う。SNS で拡散＝そのまま話題性）
+      success: { buzz: 20 },
     },
     {
       id: 'rel-streamer',
@@ -320,7 +322,6 @@ export const AXIS_META: Record<DevAxis, { label: string; unit: string }> = {
   balance: { label: 'バランス', unit: '' },
   hype: { label: '期待度', unit: '' },
   buzz: { label: '話題性', unit: '' },
-  salesForecast: { label: '売上予測', unit: '%' },
   bugRate: { label: 'バグ率', unit: '%' },
   reputationRisk: { label: '炎上リスク', unit: '' },
   devWeeksDelta: { label: '開発期間', unit: '週' },

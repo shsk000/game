@@ -95,7 +95,7 @@ describe('computeRelease', () => {
   it('市場系軸の売上倍率は 0.5〜2.0 にクランプされる', () => {
     const base = computeRelease(ctx(), undefined, deps()).work;
     const boosted = computeRelease(
-      ctx({ current: project({ axes: axes({ salesForecast: 999 }) }) }),
+      ctx({ current: project({ axes: axes({ buzz: 999 }) }) }),
       undefined,
       deps(),
     ).work;
