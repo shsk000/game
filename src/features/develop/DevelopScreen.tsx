@@ -80,6 +80,11 @@ const TICKET_CARD_HEIGHT = 76;
  *  伸縮して「出題ごとにオフィスの縦幅が変わる」ため固定する（v0.32・オーナー指摘 2026-07-24）。 */
 const RESULT_CARD_HEIGHT = 62;
 
+/** 実装中オフィスの固定高さ。開発/テスト/デバッグで**必ず同じ高さ**にする。flex にすると、
+ *  ビューポートが 720px より高い時に min-height:100vh で画面が伸びて開発だけ膨張し（222px）、
+ *  固定のデバッグ(168px)と食い違う。全フェーズ固定にして常に一致させる（オーナー指摘 2026-07-25）。 */
+const OFFICE_PANEL_H = 168;
+
 /**
  * v0.20 G：ボス文章の間だけ「RPGの戦闘っぽさ」を出すための挿絵（オーナー発注・PixelLab生成）。
  * ボス文章が選ばれるたびにランダムに1体選ぶ（表示専用。ゲームロジックには影響しない）。
@@ -1523,8 +1528,8 @@ const DevelopCenter = ({
 
         {/* 実装中のオフィス：社員が机に座って働くシーン（着席＋アイドル揺れ＋頭上エモート）。
             カテゴリ別の演出パネル（WorkInProgressPanel）は右カラムへ移設した（v0.32）。
-            高さは残りスペースを埋める（flex:1）＝中央が 1280×720 枠を超えないようにする。 */}
-        <div style={{ flex: 1, minHeight: 80 }}>
+            高さは**固定**（flex にすると背の高いビューポートで膨張しデバッグと食い違う）。 */}
+        <div style={{ height: OFFICE_PANEL_H, flexShrink: 0 }}>
           <DevDeskScene employees={team} emote={devEmote} />
         </div>
 
@@ -2845,7 +2850,7 @@ const PhaseShell = ({
     {team && (
       // 実装中のオフィス（着席＋アイドル揺れ）。内容の直下に置く（下に離しすぎない）。
       // 開発フェーズのオフィス実高さ(≈168px)と一致させる（下パディング10込みで height=178→内容168）。
-      <div style={{ height: 178, padding: '0 10px 10px', flexShrink: 0 }}>
+      <div style={{ height: OFFICE_PANEL_H + 10, padding: '0 10px 10px', flexShrink: 0 }}>
         <DevDeskScene employees={team} autoAmbient />
       </div>
     )}
