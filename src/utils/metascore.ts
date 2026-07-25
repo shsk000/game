@@ -50,16 +50,15 @@ export const hitTierMultiplier = (metascore: number): number => salesMultiplierF
  *
  *   revenue = baseRevenue × salesMultiplierForScore(metascore) × softBonus
  *
- *   softBonus は trend / fan / launch / pr / pioneer の合算で最大 +50%（×1.5）にキャップ。
+ *   softBonus は fan / pr / pioneer の独立倍率の積（案B。共有キャップは廃止）。
  *
  * 旧バージョンは compat / trend / fan / launch / pr / pioneer を全て乗算でかけていたため、
- * normal 帯（×16.67）でも合算で ×5〜10 になり、設計の「mini normal ¥500 万」が
- * 簡単に ¥2000-5000 万に化けて「余裕でプラス」になっていた。
+ * normal 帯でも合算で ×5〜10 になり、設計の想定売上が簡単に何倍にも化けていた。
  *
  * 対策：
  *   1. compat は既に genreAffinity → quality → metascore 経由で組み込み済み → ここでは掛けない
- *   2. trend / fan / launch / pr / pioneer は合算してから +50% でキャップ
- *      → tier 表（balance-design §5-2）の数値が「実売上の上限の 2/3」になる程度に抑える
+ *   2. trend はスコア側（trendScoreBonus）＋ release.ts の trendSalesMultiplier に一本化
+ *   3. launch（ローンチ広告）は発売後リワードなのでこの式から分離（applyLaunchAd）
  */
 export const computeRevenue = (
   metascore: number,
@@ -68,7 +67,6 @@ export const computeRevenue = (
   scale: Scale,
   _trend: Trend | null,
   fans: number,
-  launchAdActive: boolean,
   prBonus = 0,
   pioneerBonus = 0,
 ): number => {
@@ -77,15 +75,12 @@ export const computeRevenue = (
 
   // 案B：共有の +20% 上限を廃止し、各ボーナスを独立の倍率として掛ける（表示どおり効く）。
   //  - 広報(prBonus) は上限なし（+11%×2人 = 約+22% が本当に効く）
-  //  - ファン / ローンチ広告 / 初回組合せ もそれぞれ独立に上乗せ
+  //  - ファン / 初回組合せ もそれぞれ独立に上乗せ
   // ※ トレンド／マーケ広告の売上倍率は release.ts 側で別途掛ける（同じく上限の外）。
+  // ※ ローンチ広告は**発売後**に視聴するリワードなので、ここ（発売時の売上算出）には居ない。
+  //    core/release.ts の applyLaunchAd が確定済みの初動に後から掛ける（下記コメントも参照）。
   const fanBonus = Math.min(0.15, Math.sqrt(Math.max(0, fans)) / 400); // ファン 10000 で +0.15 上限
-  const launchBonus = launchAdActive ? 0.1 : 0;
-  const softMul =
-    (1 + Math.max(0, prBonus)) *
-    (1 + fanBonus) *
-    (1 + launchBonus) *
-    (1 + Math.max(0, pioneerBonus));
+  const softMul = (1 + Math.max(0, prBonus)) * (1 + fanBonus) * (1 + Math.max(0, pioneerBonus));
 
   const v = baseRevenue * tierMul * softMul;
   return Math.max(0, Math.round(v));

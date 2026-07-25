@@ -43,9 +43,49 @@ import { computeNewlyUnlockedCategories, evaluateAchievements } from './progress
  */
 
 export type ReleaseOpts = {
-  launchAd?: boolean;
   /** 発売時のマーケティング広告：売上を +10%（スコアには影響しない・softBonus 上限の外）。 */
   marketingAd?: boolean;
+};
+
+/**
+ * ローンチ広告（発売**後**のリワード広告）で初動売上に掛かる倍率。
+ *
+ * ラベルは「初動売上 +50%」＝この値。総売上に対しては INITIAL_SHARE(20%) 分にしか掛からないので
+ * 実効は総売上 +10% になる。**表示は「初動」と明記すること**（総売上 +50% と書くと詐称になる）。
+ * 販売プール（総売上の 80%）には掛けない＝オーナー判断「総売上+50%は大きすぎる」。
+ */
+export const LAUNCH_AD_INITIAL_MULTIPLIER = 1.5;
+
+export type LaunchAdResult = {
+  /** ボーナス適用後の作品（initialRevenue / totalRevenue / launchAdUsed を更新） */
+  work: Work;
+  /** 即入金されるボーナス額（funds / lifetimeRevenue にこの額を加算する） */
+  bonus: number;
+};
+
+/**
+ * 確定済みの作品にローンチ広告ボーナスを適用する純粋関数。
+ *
+ * 発売後に視聴するリワードなので computeRevenue の経路には乗せられない（乗せた旧実装は
+ * `releaseWork` が launchAd を渡さずデッドコード化していた）。ここで**確定値に後から**掛ける。
+ *
+ * 初動を増やすだけでなく totalRevenue（入金累計）も同額増やす：これを忘れると
+ * ライブラリの「累計」・図鑑の最高売上・records に載らず、ボーナスが記録から消える。
+ *
+ * 二重適用は launchAdUsed で弾く（null を返す）。
+ */
+export const applyLaunchAd = (work: Work): LaunchAdResult | null => {
+  if (work.launchAdUsed) return null;
+  const bonus = Math.round(work.initialRevenue * (LAUNCH_AD_INITIAL_MULTIPLIER - 1));
+  return {
+    work: {
+      ...work,
+      initialRevenue: work.initialRevenue + bonus,
+      totalRevenue: work.totalRevenue + bonus,
+      launchAdUsed: true,
+    },
+    bonus,
+  };
 };
 
 /** リリース計算が読む状態のスナップショット */
@@ -166,7 +206,6 @@ export const computeRelease = (
 
   const trend = ctx.trend;
   const meta = computeMetascore(quality, cur.genreId, cur.themeId, trend, deps.rng);
-  const launchAdActive = !!opts?.launchAd;
   const pioneer = !ctx.library.some((w) => w.genreId === cur.genreId && w.themeId === cur.themeId);
   const pioneerBonus = pioneer ? 0.05 : 0;
   const baseTotalRevenue = computeRevenue(
@@ -176,7 +215,6 @@ export const computeRelease = (
     cur.scale,
     trend,
     ctx.fans,
-    launchAdActive,
     prBonus,
     pioneerBonus,
   );
@@ -246,7 +284,8 @@ export const computeRelease = (
     selling: salesPool > 0,
     fansGained: gainedFans,
     ghostBeaten,
-    launchAdUsed: launchAdActive,
+    // ローンチ広告は発売後に視聴するので、この時点では常に false。applyLaunchAd で true になる。
+    launchAdUsed: false,
     pioneer,
     releasedAt: nowMs,
     createdAt: nowMs,

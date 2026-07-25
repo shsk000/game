@@ -354,7 +354,7 @@ export const PlanScreen = () => {
             </div>
             {(() => {
               const def = SCALE_BY_ID[scale];
-              const range = estimateRevenueRange(def.baseUnit);
+              const range = estimateRevenueRange(scale);
               // v0.15.3：予定週は企画・仕上げの猶予込みで案内する
               const totalWeeks = def.neededWeeks + planWeeksAllowance(def.neededWeeks);
               const monthCount = Math.round(totalWeeks / 4);
@@ -403,7 +403,7 @@ export const PlanScreen = () => {
                   <EstimateBox
                     label="予想売上レンジ"
                     value={`${formatYen(range.low)} 〜 ${formatYen(range.high)}`}
-                    sub={`平均 ${formatYen(range.mid)}`}
+                    sub={`中央値 ${formatYen(range.mid)}`}
                     accent={COLORS.pioneer}
                   />
                   <EstimateBox

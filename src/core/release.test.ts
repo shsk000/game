@@ -5,7 +5,12 @@ import type { CurrentProject, DevAxes, Work } from '../state/types';
 import { ZERO_AXES } from '../state/types';
 import { INITIAL_SHARE } from '../utils/sales';
 import { mulberry32 } from './ports';
-import { computeRelease, type ReleaseCtx } from './release';
+import {
+  applyLaunchAd,
+  computeRelease,
+  LAUNCH_AD_INITIAL_MULTIPLIER,
+  type ReleaseCtx,
+} from './release';
 
 const NOW = 1_800_000_000_000;
 const deps = (seed = 42) => ({ rng: mulberry32(seed), now: () => NOW });
@@ -360,5 +365,72 @@ describe('computeRelease', () => {
     const { patch } = computeRelease(c, undefined, deps());
     expect(patch.unlockedGenres).toEqual(c.unlockedGenres); // 初期解放のまま増えない
     expect(patch.unlockedThemes).toEqual(c.unlockedThemes);
+  });
+});
+
+describe('applyLaunchAd（ローンチ広告＝発売後リワード）', () => {
+  const released = (over: Partial<Work> = {}): Work => ({
+    id: 'w1',
+    title: 't',
+    genreId: 'puzzle',
+    themeId: 'sushi',
+    scale: 'mini',
+    quality: 60,
+    metascore: 60,
+    isMasterpiece: false,
+    developSec: 1,
+    initialRevenue: 1_000_000,
+    salesPool: 4_000_000,
+    initialSalesPool: 4_000_000,
+    decayPerSec: 0.02,
+    totalRevenue: 1_000_000,
+    selling: true,
+    fansGained: 0,
+    ghostBeaten: false,
+    launchAdUsed: false,
+    pioneer: false,
+    releasedAt: 0,
+    createdAt: 0,
+    breakdown: {},
+    ...over,
+  });
+
+  it('初動売上を正確に ×1.5 する（ラベル「初動売上 +50%」どおり）', () => {
+    const r = applyLaunchAd(released());
+    expect(r).not.toBeNull();
+    expect(r?.bonus).toBe(500_000);
+    expect(r?.work.initialRevenue).toBe(1_000_000 * LAUNCH_AD_INITIAL_MULTIPLIER);
+  });
+
+  it('ボーナスは totalRevenue（入金累計）にも載る＝ライブラリ/図鑑から消えない', () => {
+    const r = applyLaunchAd(released());
+    expect(r?.work.totalRevenue).toBe(1_000_000 + 500_000);
+  });
+
+  it('販売プールには掛からない（オーナー判断：総売上+50%は大きすぎる）', () => {
+    const r = applyLaunchAd(released());
+    expect(r?.work.salesPool).toBe(4_000_000);
+    expect(r?.work.initialSalesPool).toBe(4_000_000);
+  });
+
+  it('総売上に対する実効は +10%（初動シェア 20% × 50%）', () => {
+    const before = released();
+    const totalBefore = before.initialRevenue + before.salesPool;
+    const r = applyLaunchAd(before);
+    const totalAfter = (r?.work.initialRevenue ?? 0) + (r?.work.salesPool ?? 0);
+    expect(totalAfter / totalBefore).toBeCloseTo(1 + INITIAL_SHARE * 0.5, 10);
+  });
+
+  it('launchAdUsed を立てる／二重適用は null で弾く', () => {
+    const r = applyLaunchAd(released());
+    expect(r?.work.launchAdUsed).toBe(true);
+    expect(applyLaunchAd(r!.work)).toBeNull();
+  });
+
+  it('元の作品オブジェクトは書き換えない（純粋関数）', () => {
+    const original = released();
+    applyLaunchAd(original);
+    expect(original.initialRevenue).toBe(1_000_000);
+    expect(original.launchAdUsed).toBe(false);
   });
 });

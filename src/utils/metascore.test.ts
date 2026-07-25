@@ -66,9 +66,13 @@ describe('trendScoreBonus（トレンドはスコアに反映）', () => {
 
 describe('computeRevenue はトレンドに依存しない（二重掛けを撤去）', () => {
   it('trend の有無・合致に関わらず売上は同じ（トレンドはスコア側で効かせる）', () => {
-    const trend: Trend = { genreId: 'action', themeId: 'ninja', expiresAt: Number.MAX_SAFE_INTEGER };
-    const withTrend = computeRevenue(60, 'action', 'ninja', 'mini', trend, 0, false);
-    const noTrend = computeRevenue(60, 'action', 'ninja', 'mini', null, 0, false);
+    const trend: Trend = {
+      genreId: 'action',
+      themeId: 'ninja',
+      expiresAt: Number.MAX_SAFE_INTEGER,
+    };
+    const withTrend = computeRevenue(60, 'action', 'ninja', 'mini', trend, 0);
+    const noTrend = computeRevenue(60, 'action', 'ninja', 'mini', null, 0);
     expect(withTrend).toBe(noTrend);
   });
 });
@@ -111,26 +115,27 @@ describe('computeQualityV10', () => {
 describe('computeRevenue', () => {
   it('売上 = baseRevenue × スコア帯倍率 × ソフトボーナス', () => {
     // トレンドなし・ファン0・広告なし → softMul 1.0
-    const v = computeRevenue(60, 'action', 'ninja', 'mini', null, 0, false);
+    const v = computeRevenue(60, 'action', 'ninja', 'mini', null, 0);
     expect(v).toBe(Math.round(SCALE_BALANCE.mini.baseRevenue * SALES_MULTIPLIER_BY_SCORE.normal));
   });
 
   it('各ボーナスは独立の倍率として掛かる（案B：共有 +20% 上限を廃止）', () => {
-    // ファン1万(+0.15) / ローンチ広告(+0.1) / 広報+0.22（+11%×2相当）/ 初回+0.05
-    const boosted = computeRevenue(60, 'action', 'ninja', 'mini', null, 1_000_000, true, 0.22, 0.05);
+    // ファン1万(+0.15) / 広報+0.22（+11%×2相当）/ 初回+0.05
+    // ※ ローンチ広告は発売後リワードなのでこの式には含まれない（core/release.ts applyLaunchAd）
+    const boosted = computeRevenue(60, 'action', 'ninja', 'mini', null, 1_000_000, 0.22, 0.05);
     const raw = SCALE_BALANCE.mini.baseRevenue * SALES_MULTIPLIER_BY_SCORE.normal;
-    const expectedMul = (1 + 0.22) * (1 + 0.15) * (1 + 0.1) * (1 + 0.05);
-    expect(boosted).toBe(Math.round(raw * expectedMul)); // 約 ×1.62（上限で潰れない）
+    const expectedMul = (1 + 0.22) * (1 + 0.15) * (1 + 0.05);
+    expect(boosted).toBe(Math.round(raw * expectedMul)); // 約 ×1.47（上限で潰れない）
   });
 
   it('マイナスの広報ボーナスは売上を下げない（0 で下げ止まる）', () => {
-    const base = computeRevenue(60, 'action', 'ninja', 'mini', null, 0, false);
-    const negative = computeRevenue(60, 'action', 'ninja', 'mini', null, 0, false, -5, 0);
+    const base = computeRevenue(60, 'action', 'ninja', 'mini', null, 0);
+    const negative = computeRevenue(60, 'action', 'ninja', 'mini', null, 0, -5, 0);
     expect(negative).toBe(base);
   });
 
   it('売上は 0 未満にならない', () => {
-    expect(computeRevenue(0, 'action', 'ninja', 'mini', null, 0, false)).toBeGreaterThanOrEqual(0);
+    expect(computeRevenue(0, 'action', 'ninja', 'mini', null, 0)).toBeGreaterThanOrEqual(0);
   });
 });
 

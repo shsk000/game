@@ -183,7 +183,7 @@ const simulateSolvency = (seed: number, maxReleases = 20): SolvencyResult => {
     );
     const quality = Math.max(0, Math.min(100, Math.round(Q + AXIS_BONUS)));
     const meta = computeMetascore(quality, 'puzzle', 'sushi', null, rng);
-    const total = computeRevenue(meta.metascore, 'puzzle', 'sushi', scale, null, 0, false);
+    const total = computeRevenue(meta.metascore, 'puzzle', 'sushi', scale, null, 0);
     grossLifetime += total;
 
     const initialRevenue = Math.round(total * INITIAL_SHARE);

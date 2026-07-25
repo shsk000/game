@@ -56,7 +56,7 @@ const simulate = (seed: number) => {
     const quality = Math.max(0, Math.min(100, Math.round(Q + AXIS_BONUS)));
     const meta = computeMetascore(quality, 'puzzle', 'sushi', null, rng);
     // 販売プールは全額回収される前提で累計に加算
-    lifetime += computeRevenue(meta.metascore, 'puzzle', 'sushi', scale, null, 0, false);
+    lifetime += computeRevenue(meta.metascore, 'puzzle', 'sushi', scale, null, 0);
     team = applyReleaseGrowth(team, ids, meta.metascore).employees;
 
     // 累計売上ゲートを満たしたら次の規模を解放（資金は十分ある前提）

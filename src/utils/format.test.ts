@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SALES_MULTIPLIER_BY_SCORE, SCALE_BALANCE } from '../data/balance';
 import { estimateRevenueRange, formatRoi, formatWeeks, formatYen, formatYenShort } from './format';
 
 describe('formatYen', () => {
@@ -63,11 +64,27 @@ describe('formatRoi', () => {
 });
 
 describe('estimateRevenueRange', () => {
-  it('baseUnit を中央値に low ×0.5 / high ×5 のレンジ', () => {
-    expect(estimateRevenueRange(1_000_000)).toEqual({
-      low: 500_000,
-      mid: 1_000_000,
-      high: 5_000_000,
+  it('実売上式（baseRevenue × 段倍率）と同じ数列を返す', () => {
+    const base = SCALE_BALANCE.mini.baseRevenue;
+    expect(estimateRevenueRange('mini')).toEqual({
+      low: Math.round(base * SALES_MULTIPLIER_BY_SCORE.catastrophic),
+      mid: Math.round(base * SALES_MULTIPLIER_BY_SCORE.failure),
+      high: Math.round(base * SALES_MULTIPLIER_BY_SCORE.bigHit),
     });
+  });
+
+  it('予測レンジは実際に起こりうる売上の範囲を外さない（詐称の再発防止）', () => {
+    // 旧実装は scales.ts の baseUnit という別数列を使っていたため、インディー以上で
+    // 「予測の中央値」が「実際の最悪帯（致命的失敗）」すら下回っていた。
+    for (const scale of ['mini', 'mobile', 'indie', 'hit', 'aaa'] as const) {
+      const base = SCALE_BALANCE[scale].baseRevenue;
+      const worst = base * SALES_MULTIPLIER_BY_SCORE.catastrophic;
+      const best = base * SALES_MULTIPLIER_BY_SCORE.godGame;
+      const r = estimateRevenueRange(scale);
+      expect(r.low).toBeGreaterThanOrEqual(Math.round(worst));
+      expect(r.mid).toBeGreaterThan(r.low);
+      expect(r.high).toBeGreaterThan(r.mid);
+      expect(r.high).toBeLessThanOrEqual(Math.round(best));
+    }
   });
 });

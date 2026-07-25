@@ -9,6 +9,9 @@
  * 段階的に置き換える。global.css は触らない方針（spec §6 / オーダー指示）。
  */
 
+import { SALES_MULTIPLIER_BY_SCORE, SCALE_BALANCE } from '../data/balance';
+import type { Scale } from '../data/scales';
+
 const TRILLION = 1_000_000_000_000;
 const HUNDRED_MILLION = 100_000_000;
 const TEN_THOUSAND = 10_000;
@@ -92,16 +95,27 @@ export const formatRoi = (profit: number, invest: number): string => {
 };
 
 /**
- * 予想売上レンジ：規模の `baseUnit` を中央値とした low / mid / high の 3 点。
- * メタスコア帯（平凡 / ヒット / 大ヒット）の感覚に近い倍率を使う。
- *   low  = baseUnit × 0.5（平凡）
- *   mid  = baseUnit × 1.0（平均）
- *   high = baseUnit × 5.0（大ヒット相当）
+ * 予想売上レンジ：**実際の売上式と同じ数列**から算出する（企画画面の規模選択で表示）。
+ *
+ *   実売上 = SCALE_BALANCE[scale].baseRevenue × salesMultiplierForScore(メタスコア) × 各種補正
+ *
+ * 旧実装は `scales.ts` の `baseUnit` という**実式と接点のない別系列**を使っていたため、
+ * インディー以上では「予測の中央値」が「実際の最悪帯（致命的失敗 ×0.33）」すら下回り、
+ * 企画画面の予想利益が常に大赤字を表示していた（例：インディーの予測中央値 ¥800 万に対し、
+ * 実際の普通帯は ¥3 億）。オーナー指摘 2026-07-25 で是正。
+ *
+ * 段の取り方（`SCORE_TIERS` の想定分布に合わせる。累積 致命的20% + 失敗35% → 中央値は失敗帯）：
+ *   low  = 致命的失敗（メタ 0〜29）  ×0.33
+ *   mid  = 失敗（メタ 30〜49）       ×3.33  ← 統計的中央値。盛らない
+ *   high = 大ヒット（メタ 80〜89）   ×100
+ *
+ * ソフト補正（広報・ファン・トレンド・マーケ広告・軸補正）は掛けない＝**素の下限**を見せる。
  */
-export const estimateRevenueRange = (
-  baseUnit: number,
-): { low: number; mid: number; high: number } => ({
-  low: Math.round(baseUnit * 0.5),
-  mid: Math.round(baseUnit * 1.0),
-  high: Math.round(baseUnit * 5.0),
-});
+export const estimateRevenueRange = (scale: Scale): { low: number; mid: number; high: number } => {
+  const base = SCALE_BALANCE[scale].baseRevenue;
+  return {
+    low: Math.round(base * SALES_MULTIPLIER_BY_SCORE.catastrophic),
+    mid: Math.round(base * SALES_MULTIPLIER_BY_SCORE.failure),
+    high: Math.round(base * SALES_MULTIPLIER_BY_SCORE.bigHit),
+  };
+};

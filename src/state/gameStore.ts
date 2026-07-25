@@ -14,7 +14,11 @@ import type { LevelUp } from '../core/growth';
 import { investPrice } from '../core/invest';
 import { type Deps, defaultDeps } from '../core/ports';
 import { evaluateAchievements } from '../core/progression';
-import { computeRelease, type ReleaseOpts } from '../core/release';
+import {
+  applyLaunchAd as applyLaunchAdToWork,
+  computeRelease,
+  type ReleaseOpts,
+} from '../core/release';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { DEV_PHRASES_PER_WEEK, type GachaKind } from '../data/balance';
 import type { CategoryId } from '../data/categories';
@@ -161,6 +165,11 @@ type Actions = {
   /** v0.14：イベント/ミッション結果の新軸デルタを current.axes に適用 */
   applyAxisDelta: (delta: Partial<Record<DevAxis, number>>) => void;
   releaseWork: (opts?: ReleaseOpts) => Work;
+  /**
+   * ローンチ広告（発売後のリワード広告）を直近リリース作に適用し、初動売上を ×1.5 する。
+   * 返り値は即入金されたボーナス額（適用不可＝未リリース/二重適用なら 0）。
+   */
+  applyLaunchAd: () => number;
   buyAdDevBoost: () => void;
   buyAdSurvey: (g: GenreId, t: ThemeId) => void;
   /** v0.17.1：ミス打鍵はバグ確定（開発フェーズ中のみ。発生したら true） */
@@ -584,6 +593,28 @@ export const useGameStore = create<GameState>()(
       const { work, patch } = computeRelease({ ...s, current: cur }, opts, deps);
       set(patch);
       return work;
+    },
+
+    applyLaunchAd: () => {
+      const s = get();
+      const target = s.lastReleased;
+      if (!target) return 0;
+      const applied = applyLaunchAdToWork(target);
+      if (!applied) return 0; // 二重適用ガード
+      const { work, bonus } = applied;
+      set({
+        lastReleased: work,
+        // ライブラリ側の同一作品も差し替える（ここを忘れると累計表示にボーナスが載らない）
+        library: s.library.map((w) => (w.id === work.id ? work : w)),
+        funds: s.funds + bonus,
+        lifetimeRevenue: s.lifetimeRevenue + bonus,
+        records: {
+          ...s.records,
+          // computeRelease と同じ意味（初動＋販売プール＝総売上見込）で最高記録を更新
+          bestRevenue: Math.max(s.records.bestRevenue, work.initialRevenue + work.salesPool),
+        },
+      });
+      return bonus;
     },
 
     buyAdDevBoost: () => {

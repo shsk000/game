@@ -77,6 +77,7 @@ export const ReleaseScreen = () => {
   const lastLevelUps = useGameStore((s) => s.lastLevelUps);
   const employees = useGameStore((s) => s.employees);
   const releaseWork = useGameStore((s) => s.releaseWork);
+  const applyLaunchAd = useGameStore((s) => s.applyLaunchAd);
   const goTo = useGameStore((s) => s.goTo);
   const clearNewlyAchieved = useGameStore((s) => s.clearNewlyAchieved);
 
@@ -85,11 +86,14 @@ export const ReleaseScreen = () => {
   const [resultStep, setResultStep] = useState<'score' | 'sales'>('score');
   const [displayQ, setDisplayQ] = useState(0);
   const [displayMeta, setDisplayMeta] = useState(0);
-  const [launchAdApplied, setLaunchAdApplied] = useState(false);
   // 発売前のマーケティング広告（売上 +10%。スコアには影響しない）
   const [marketingApplied, setMarketingApplied] = useState(false);
   const [adRunning, setAdRunning] = useState<null | 'marketing' | 'debug' | 'launch'>(null);
+  /** 直前に加算されたボーナス額（`(+¥○○)` の演出用。正の額は work 側に既に反映済み） */
   const [bonusRevenue, setBonusRevenue] = useState(0);
+  // 適用済み判定は store の作品データが唯一の真実（ローカル state だと画面を出入りすると
+  // 「未適用」に戻り、二重視聴できてしまう）。
+  const launchAdApplied = work?.launchAdUsed ?? false;
   const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
   const timersRef = useRef<number[]>([]);
 
@@ -97,7 +101,6 @@ export const ReleaseScreen = () => {
   useEffect(() => {
     if (!work && current) {
       setStage('pre-ads');
-      setLaunchAdApplied(false);
       setMarketingApplied(false);
       setBonusRevenue(0);
       setDisplayQ(0);
@@ -210,15 +213,11 @@ export const ReleaseScreen = () => {
     ads.showRewarded({
       label: 'launch-ad',
       onComplete: () => {
-        const extra = Math.round(work.initialRevenue * 0.5);
-        setBonusRevenue(extra);
-        setLaunchAdApplied(true);
+        // 加算は store のアクションに一本化（初動・累計・記録・ライブラリをまとめて更新）。
+        // 旧実装は funds/lifetimeRevenue だけを setState 直叩きしていたため、ボーナスが
+        // work.totalRevenue に載らずライブラリ「累計」や図鑑の最高売上から消えていた。
+        setBonusRevenue(applyLaunchAd());
         setAdRunning(null);
-        const s = useGameStore.getState();
-        useGameStore.setState({
-          funds: s.funds + extra,
-          lifetimeRevenue: s.lifetimeRevenue + extra,
-        });
       },
       onFail: () => setAdRunning(null),
     });
@@ -486,7 +485,8 @@ export const ReleaseScreen = () => {
                 <div>
                   <ul className="release-stats">
                     <li className="revenue">
-                      💰 初動売上 {formatYen(work.initialRevenue + bonusRevenue)}
+                      {/* ローンチ広告のボーナスは work.initialRevenue に既に加算済み（二重計上しない） */}
+                      💰 初動売上 {formatYen(work.initialRevenue)}
                       {bonusRevenue > 0 && (
                         <span className="revenue-bonus"> (+{formatYen(bonusRevenue)})</span>
                       )}
@@ -501,7 +501,7 @@ export const ReleaseScreen = () => {
                       v0.17.1：月固定費に給与を含める（賃料だけだと実際の月次徴収と食い違う。オーナー指摘） */}
                   {(() => {
                     const scaleDef = SCALE_BY_ID[work.scale];
-                    const projectedTotal = work.initialRevenue + bonusRevenue + work.salesPool;
+                    const projectedTotal = work.initialRevenue + work.salesPool;
                     const salaries = sumMonthlySalaries(employees);
                     const monthlyFixed = salaries + scaleDef.monthlyRent;
                     const devMonths = Math.max(
@@ -575,15 +575,19 @@ export const ReleaseScreen = () => {
                 </div>
                 <div>
                   <div className="ad-block">
+                    {/* ラベルは必ず「初動売上」と明記する。初動は総売上の 20%（INITIAL_SHARE）なので
+                        「売上 +50%」と書くと実効 +10% との詐称になる（オーナー指摘 2026-07-25）。 */}
                     {launchAdApplied ? (
-                      <p className="ad-applied">✅ ローンチ広告キャンペーン適用済（売上 ×1.5）</p>
+                      <p className="ad-applied">
+                        ✅ ローンチ広告キャンペーン適用済（初動売上 ×1.5）
+                      </p>
                     ) : (
                       <button
                         className="primary-btn ad-btn"
                         disabled={adRunning !== null}
                         onClick={runLaunchAd}
                       >
-                        {adRunning === 'launch' ? '広告再生中…' : '📺 ローンチ広告 売上 +50%'}
+                        {adRunning === 'launch' ? '広告再生中…' : '📺 ローンチ広告 初動売上 +50%'}
                       </button>
                     )}
                   </div>
