@@ -75,6 +75,12 @@ export type Persisted = {
   gachaPity: number;
   /** v0.21 投資：先行購入した累計回数（価格の逓増カーブ計算に使う。旧セーブは 0 に既定） */
   investPurchaseCount: number;
+  /**
+   * v0.25 装備：購入済み装備の個数マップ（itemId→個数・実体方式で1個=1社員ぶん）。
+   * version は 7 のまま（加算的変更・旧セーブは defaults マージで {}）。
+   * 各社員の割当は Employee.equipped に持つ（employees 配列と一緒に保存される）。
+   */
+  ownedItems: Record<string, number>;
   /** v0.24：効果音ミュート（旧セーブは false 既定） */
   muted: boolean;
   /** v0.24：効果音音量 0..1（旧セーブは 1 既定） */
@@ -123,6 +129,7 @@ export const defaults = (): Persisted => ({
   candidate: null,
   gachaPity: 0,
   investPurchaseCount: 0,
+  ownedItems: {},
   muted: false,
   volume: 1,
 });
@@ -422,6 +429,9 @@ const shapeLoaded = (parsed: Persisted): Persisted => {
   // v0.22：旧 v7 セーブにはガチャフィールドが無い（デフォルト補完）
   merged.candidate = parsed.candidate ?? null;
   merged.gachaPity = parsed.gachaPity ?? 0;
+  // v0.25：装備所有マップ。無い/壊れ（旧 dev の配列形）なら {}（社員の equipped は normalizeEmployeeV6 が保持）
+  merged.ownedItems =
+    parsed.ownedItems && !Array.isArray(parsed.ownedItems) ? parsed.ownedItems : {};
 
   // v0.17.1 修正：保存済みの解放（ステージ解放含む）を尊重する。
   // 旧実装は v0.10 時代の「人気ジャンル再ロック」を毎回適用しており、

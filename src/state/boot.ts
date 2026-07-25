@@ -35,6 +35,7 @@ const persistedSnapshot = (s: GameState): Omit<storage.Persisted, 'version' | 'l
   candidate: s.candidate,
   gachaPity: s.gachaPity,
   investPurchaseCount: s.investPurchaseCount,
+  ownedItems: s.ownedItems,
   muted: s.muted,
   volume: s.volume,
 });
@@ -78,6 +79,7 @@ export const buildBootPatch = (
     currentDate: persisted.currentDate ?? INITIAL_GAME_DATE,
     gachaPity: persisted.gachaPity ?? 0,
     investPurchaseCount: persisted.investPurchaseCount ?? 0,
+    ownedItems: persisted.ownedItems ?? {},
     muted: persisted.muted ?? false,
     volume: persisted.volume ?? 1,
   };

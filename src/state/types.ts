@@ -1,5 +1,6 @@
 import type { GachaRank } from '../data/balance';
 import type { CategoryId } from '../data/categories';
+import type { EquipLoadout } from '../data/equipment';
 import type { GenreId } from '../data/genres';
 import type { Scale } from '../data/scales';
 import type { ThemeId } from '../data/themes';
@@ -102,6 +103,11 @@ export type Employee = {
   exp: number;
   wage: number;
   specialties: EmployeeSpecialty[];
+  /**
+   * v0.25：装備（スロット→アイテムID）。未装備スロットは undefined、旧セーブの社員は undefined。
+   * 効果はリリース品質に別枠で加点（EQUIP_QUALITY_BONUS_CAP）。see core/equip.ts。
+   */
+  equipped?: EquipLoadout;
 };
 
 export type Candidate = Employee;

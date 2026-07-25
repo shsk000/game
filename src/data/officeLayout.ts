@@ -74,9 +74,29 @@ export const sittingSprite = (folder: string, dir: SeatDir) =>
 
 export const chairSprite = (dir: SeatDir) => `${SPRITE_BASE}/chair_${dir}.png`;
 export const laptopSprite = (dir: SeatDir) => `${SPRITE_BASE}/laptop_${dir}.png`;
+// v0.25 装備の机上スプライト（<name>_<dir>.png）。単体オブジェクト・透過背景。
+export const desktopSprite = (dir: SeatDir) => `${SPRITE_BASE}/desktop_${dir}.png`;
+export const gamingRigSprite = (dir: SeatDir) => `${SPRITE_BASE}/gaming_rig_${dir}.png`;
+export const bookSprite = (dir: SeatDir) => `${SPRITE_BASE}/book_${dir}.png`;
+export const pentabSprite = (dir: SeatDir) => `${SPRITE_BASE}/pentab_${dir}.png`;
+export const plantSprite = (dir: SeatDir) => `${SPRITE_BASE}/plant_${dir}.png`;
 export const officeBgSrc = `${SPRITE_BASE}/office_bg.png`;
 
-export type PropTransform = { x: number; y: number; scale: number; z: number };
+export type PropTransform = {
+  x: number;
+  y: number;
+  scale: number;
+  z: number;
+  /**
+   * v0.25：奥行きへの傾き（rotateX 度）。平らな物（液タブ・本）を机の面に寝かせる。
+   * perspective 併用で上辺が中央に寄る＝パース（遠近）に合う。既定 0。
+   */
+  tiltX?: number;
+  /** v0.25：奥行き方向の潰し（縦 scale）。iso の面に合わせる。既定 1。 */
+  scaleY?: number;
+  /** v0.25：回転（度・時計回り）。向きの微調整に。既定 0。 */
+  rotate?: number;
+};
 
 /**
  * 物体（PC・椅子…）の配置。すべて着席キャラの足元（seat.y + sitFootOffset(dir)）からの相対値で、
@@ -90,9 +110,12 @@ export type PropTransform = { x: number; y: number; scale: number; z: number };
  *
  * 🔧 south は現状どの座席でも使われていない（全席 north）ため未調整の既定値のまま。
  */
-export const PROP_TRANSFORMS: Record<'laptop' | 'chair', Record<SeatDir, PropTransform>> = {
+export type PropKey = 'laptop' | 'chair' | 'desktop' | 'gaming_rig' | 'book' | 'pentab' | 'plant';
+
+// v0.25：机上プロップ(PC/小物)の north 値は原点＝机の面(PROP_ORIGIN_Y)からの相対。0,0=机の面。
+export const PROP_TRANSFORMS: Record<PropKey, Record<SeatDir, PropTransform>> = {
   laptop: {
-    north: { x: -3, y: -155, scale: 1.4, z: -1 },
+    north: { x: 0, y: -15, scale: 1.2, z: -1, tiltX: 10 },
     south: { x: 0, y: -230, scale: OFFICE_LAYOUT.charScale, z: 2 },
   },
   chair: {
@@ -101,6 +124,102 @@ export const PROP_TRANSFORMS: Record<'laptop' | 'chair', Record<SeatDir, PropTra
     // 🔧 south は旧素材（48×64・グレー）のまま。使う席が出たら north と同じ発注から差し替える。
     south: { x: 0, y: 10, scale: OFFICE_LAYOUT.charScale, z: -1 },
   },
+  // v0.25 装備プロップ。/admin/props で実機調整した値を転記（2026-07-23・調整途中）。
+  desktop: {
+    north: { x: -1, y: 21, scale: 1.6, z: -48 },
+    south: { x: 0, y: -230, scale: 1, z: 2 },
+  },
+  gaming_rig: {
+    north: { x: -3, y: 5, scale: 1.55, z: -1 },
+    south: { x: 0, y: -230, scale: 1, z: 2 },
+  },
+  book: {
+    north: { x: -66, y: -6, scale: 0.45, z: 1, rotate: 0 },
+    south: { x: 42, y: -120, scale: 0.55, z: 1 },
+  },
+  pentab: {
+    north: { x: -5, y: 9, scale: 0.65, z: 1, tiltX: 30 },
+    south: { x: -42, y: -118, scale: 0.6, z: 1 },
+  },
+  plant: {
+    north: { x: 54, y: 2, scale: 0.55, z: 1, tiltX: 26 },
+    south: { x: 50, y: -150, scale: 0.6, z: 1 },
+  },
+};
+
+/**
+ * v0.25：奥行き遠近スケール。座席Y（大きい=手前）で 1.0、奥の列ほど小さく。
+ * 机上プロップ（PC・小物）の scale とオフセット(x,y)に掛けることで、1つの調整値で
+ * 手前/奥どちらのデスクにも比率で合う（絶対px運用のズレを解消）。椅子・人は等倍のまま。
+ */
+// アイソメ（並行投影）の背景に合わせ等倍。キャラが奥行きで縮まないのでプロップも縮めない。
+// 1.0=全机で同一サイズ。うっすら奥行きを付けたい時だけ <1.0 に（/admin/props で調整→転記）。
+export const PERSPECTIVE_BACK_SCALE = 1.0; // 最奥列の倍率（手前列=1.0）
+const SEAT_Y_MIN = Math.min(...OFFICE_LAYOUT.seats.map((s) => s.y));
+const SEAT_Y_MAX = Math.max(...OFFICE_LAYOUT.seats.map((s) => s.y));
+export const seatDepthScale = (
+  seatY: number,
+  backScale: number = PERSPECTIVE_BACK_SCALE,
+): number => {
+  if (SEAT_Y_MAX === SEAT_Y_MIN) return 1;
+  const t = (seatY - SEAT_Y_MIN) / (SEAT_Y_MAX - SEAT_Y_MIN); // 0=最奥, 1=最手前
+  return backScale + (1 - backScale) * t;
+};
+/** 遠近スケールを掛ける机上プロップ（椅子・人は着席ユニットとして対象外）。 */
+export const DEPTH_SCALED_PROPS = new Set<PropKey>([
+  'laptop',
+  'desktop',
+  'gaming_rig',
+  'book',
+  'pentab',
+  'plant',
+]);
+
+/**
+ * v0.25：机上プロップ(PC/小物)の原点を「座り足元」から**机の面**へ上げるYオフセット(native px)。
+ * PROP_TRANSFORMS の各値はこの原点からの相対値（＝0,0が机の面）。描画時に足し戻すので見た目は不変。
+ * 横(X)は座席中央がそのまま机の中央なので原点シフト不要（=0）。
+ */
+export const PROP_ORIGIN_Y = -150;
+
+/**
+ * v0.25：横パースの消失点X（native）。手前ほど外へ広げる際の左右の基準＝部屋の水平中心。
+ * 既定は背景の水平中心（NATIVE_W/2）。実際の消失点に合わせて /admin/props で調整→ここに転記。
+ */
+export const PROP_VP_X = NATIVE_W / 2; // 🔧（/admin/props で調整→ここに転記）
+
+/** 座席Yの遠近パラメータ t（0=最奥, 1=最手前）。seatDepthScale と同じ正規化。 */
+export const seatDepthT = (seatY: number): number => {
+  if (SEAT_Y_MAX === SEAT_Y_MIN) return 1;
+  return (seatY - SEAT_Y_MIN) / (SEAT_Y_MAX - SEAT_Y_MIN);
+};
+
+/**
+ * v0.25：横方向パース（手前ほど外へ広げる量）。机アートの列が部屋の広がりに対して
+ * ほぼ縦一直線のため、机上プロップを手前列ほど消失点X(PROP_VP_X)から外へ寄せてパースに乗せる。
+ * 0=無効（そのまま）。0.3 なら最手前列で消失点からの距離を 1.3 倍にする。
+ */
+export const PROP_H_SPREAD = 0; // 🔧（/admin/props で調整→ここに転記）
+
+/** 横パースの拡大率（手前=1+hSpread、最奥=1.0）。 */
+export const seatHSpread = (seatY: number, hSpread: number = PROP_H_SPREAD): number =>
+  1 + hSpread * seatDepthT(seatY);
+
+/**
+ * 机上プロップの最終スクリーンX（奥行き遠近スケール ds ＋横パース込み）。
+ * 消失点X(vpX)を左右の基準に、手前列ほど外へ広げる。
+ * 本番（OfficeView）と配置ツール（/admin/props）の唯一の出所。
+ */
+export const propScreenX = (
+  seatX: number,
+  tx: number,
+  ds: number,
+  seatY: number,
+  hSpread: number = PROP_H_SPREAD,
+  vpX: number = PROP_VP_X,
+): number => {
+  const baseX = seatX + tx * ds;
+  return vpX + (baseX - vpX) * seatHSpread(seatY, hSpread);
 };
 
 /** 立ち・歩行スプライトの8方向。 */
