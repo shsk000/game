@@ -46,9 +46,14 @@ description: Playwright MCP（mcp__playwright__browser_*）でこのプロジェ
 - Vite は **5173 が使用中なら自動で 5174…** とずらす。
 - **worktree で作業中は、main リポジトリの dev サーバーと worktree の dev サーバーが両方起動しがち** → 5173=main(古い) / 5174=worktree(変更あり) のように分かれ、「変わってない」の原因になる。
 - 対処：起動ログ（`Local: http://localhost:PORT/`）で**実ポートを必ず確認**してから navigate する。どのディレクトリがどのポートかを取り違えない。
+- **worktree では専用ポートを固定して起動する**（自動ずらしに任せない）:
+  `npm run dev -- --port <専用ポート> --strictPort`（5173 はメイン作業ツリー予約 / 企画 worktree=5174-5179 / build worktree=5180-5199）。
+- **e2e も同じポートを渡す**: `GAME_PORT=<専用ポート> npm run test:e2e`。
+  渡さないと `playwright.config.ts` の `reuseExistingServer` が **5173 の別ツリーのサーバーを掴んで緑になる**（偽グリーン）。
+  `--strictPort` を付けているので、ポートを取り違えたときは黙って通らず必ずエラーになる。
 
 ### 2-2. worktree は依存が未インストールのことがある
-- `EnterWorktree` 直後の worktree は **node_modules 無し**。dev サーバー起動前に `npm install` が要る。
+- 作りたての worktree は **node_modules 無し**。dev サーバー起動前に `npm ci`（lock 準拠）が要る。
 
 ### 2-3. 到達する画面（App の構成）
 - **OfficeScreen は常時描画される「世界ステージ」**＝ルート URL を開けば出る（`screen==='develop'` の時だけフルスクリーンに切替）。
