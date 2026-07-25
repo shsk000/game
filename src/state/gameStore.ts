@@ -153,6 +153,13 @@ type Actions = {
    */
   devSkipDevelopment: () => void;
   /**
+   * DEV 専用：今いる工程（フェーズ）だけをスキップして次工程へ進める。
+   * development 工程のときは平均成績（perf/devStats）を積んでから testing へ。
+   * それ以外（planning/testing/debugging）は advancePhase と同じ1工程進行。
+   * 全工程をまとめて発売まで飛ばす devSkipDevelopment と違い、工程ごとに刻んで検証できる。
+   */
+  devSkipPhase: () => void;
+  /**
    * v0.14：開発フェーズを次へ進める。
    * planning→development→testing→debugging の遷移はテイクオーバー内で完結。
    * debugging から先（release 相当）に進むときは既存リリースフロー finishDevelopment に委譲する。
@@ -547,6 +554,19 @@ export const useGameStore = create<GameState>()(
       set({ current: { ...cur, perf: sim.perf, devStats: sim.devStats } });
       // 発売遷移（doneLoC 充填・phase=release・ゴースト更新）は既存フローに委譲。
       get().finishDevelopment();
+    },
+
+    devSkipPhase: () => {
+      const cur = get().current;
+      if (!cur || cur.finishedAt !== null) return;
+      const phase: DevPhase = cur.phase ?? 'development';
+      // development 工程だけは「打鍵を飛ばした平均成績」を積んでから次工程へ（品質0で testing に入らない）。
+      if (phase === 'development') {
+        const sim = simulateAverageDevRun();
+        set({ current: { ...cur, perf: sim.perf, devStats: sim.devStats } });
+      }
+      // 1工程だけ進める（testing→debugging→release も advancePhase の既存分岐に委譲）。
+      get().advancePhase();
     },
 
     advancePhase: () => {

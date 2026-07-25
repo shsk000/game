@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ads } from '../../ads/AdProvider';
+import { DevDeskScene } from '../../components/DevDeskScene';
 import { PlanMeetingBoard } from '../../components/PlanMeetingBoard';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
+import { type DevEmoteEvent, pickDevEmote } from '../../core/devEmote';
+import { MAX_EMPLOYEES } from '../../data/officeLayout';
 import { bugSuppression, bugsClearedByAd, pickBugFixPhrase } from '../../core/bugs';
 import {
   comboTitleAt,
@@ -73,6 +76,15 @@ const TOTAL_PHASE_DOTS = 6;
 /** チケットカードの固定高さ（内容の長短で入力欄が上下しないように） */
 const TICKET_CARD_HEIGHT = 76;
 
+/** 結果カードの固定高さ。未入力(短)↔完了時(チップ4列)で高さが変わると、下のデスクシーン(flex)が
+ *  伸縮して「出題ごとにオフィスの縦幅が変わる」ため固定する（v0.32・オーナー指摘 2026-07-24）。 */
+const RESULT_CARD_HEIGHT = 62;
+
+/** 実装中オフィスの固定高さ。開発/テスト/デバッグで**必ず同じ高さ**にする。flex にすると、
+ *  ビューポートが 720px より高い時に min-height:100vh で画面が伸びて開発だけ膨張し（222px）、
+ *  固定のデバッグ(168px)と食い違う。全フェーズ固定にして常に一致させる（オーナー指摘 2026-07-25）。 */
+const OFFICE_PANEL_H = 168;
+
 /**
  * v0.20 G：ボス文章の間だけ「RPGの戦闘っぽさ」を出すための挿絵（オーナー発注・PixelLab生成）。
  * ボス文章が選ばれるたびにランダムに1体選ぶ（表示専用。ゲームロジックには影響しない）。
@@ -133,6 +145,7 @@ export const DevelopScreen = () => {
   // DEV 検証用：タイピングを飛ばし、平均成績を積んで“それなりの品質”で
   // 発売フェーズへ即到達する（docs/qa/bug-hunt.md 参照）
   const devSkipDevelopment = useGameStore((s) => s.devSkipDevelopment);
+  const devSkipPhase = useGameStore((s) => s.devSkipPhase);
   const noteBugOnMiss = useGameStore((s) => s.noteBugOnMiss);
   const noteBugOnKeystroke = useGameStore((s) => s.noteBugOnKeystroke);
   const fixBug = useGameStore((s) => s.fixBug);
@@ -163,11 +176,7 @@ export const DevelopScreen = () => {
   const ticketIndexRef = useRef(0);
   const [ticketPhraseCount, setTicketPhraseCount] = useState(0);
   const ticketPhraseCountRef = useRef(0);
-  const [completedTickets, setCompletedTickets] = useState<
-    { title: string; category: TicketCategory }[]
-  >([]);
   const currentTicket = useMemo(() => getTicketAt(genreId, ticketIndex), [genreId, ticketIndex]);
-  const nextTicket = useMemo(() => getTicketAt(genreId, ticketIndex + 1), [genreId, ticketIndex]);
 
   const [ticketPhrase, setTicketPhrase] = useState(() =>
     pickPhrase(currentTicket.category, undefined, current?.scale),
@@ -189,6 +198,14 @@ export const DevelopScreen = () => {
     const t = window.setTimeout(() => setPlanEmote(null), 1500);
     return () => window.clearTimeout(t);
   }, [planEmote?.key]);
+  // 開発：着席中の社員頭上へ出すアイコン吹き出し（純表示演出。数値には影響しない）。企画会議と同型。
+  const [devEmote, setDevEmote] = useState<DevEmoteEvent | null>(null);
+  const devEmoteKeyRef = useRef(0);
+  useEffect(() => {
+    if (!devEmote) return;
+    const t = window.setTimeout(() => setDevEmote(null), 1500);
+    return () => window.clearTimeout(t);
+  }, [devEmote?.key]);
   const planCtx = useMemo(
     () => ({ genreName: GENRE_BY_ID[genreId]?.name ?? '', projectTitle: current?.title ?? '' }),
     [genreId, current?.title],
@@ -317,6 +334,22 @@ export const DevelopScreen = () => {
     }, 900 + Math.random() * 1200);
     return () => window.clearTimeout(timer);
   }, [isPlanning, !current]);
+
+  // デスクシーンで席が埋まっている数（ソロ開発でも「あなた」を1席に座らせるため最低1）。
+  const deskSeatCount = Math.max(1, Math.min(employees.length || 1, MAX_EMPLOYEES));
+
+  // 開発：打鍵完了と無関係に、ランダムな間隔で「集中中」吹き出し（…/❓）を着席社員1人ずつ出す。
+  // チケット文完了の「できた」と同じ吹き出しスロットを共有する（同時に出るのは1つ）。企画会議と同型。
+  useEffect(() => {
+    if (!isDevelopment || !current) return;
+    let timer = window.setTimeout(function tick() {
+      devEmoteKeyRef.current += 1;
+      const pick = pickDevEmote(Math.random, deskSeatCount, 'focus');
+      setDevEmote({ ...pick, key: devEmoteKeyRef.current });
+      timer = window.setTimeout(tick, 1800 + Math.random() * 2400);
+    }, 1000 + Math.random() * 1400);
+    return () => window.clearTimeout(timer);
+  }, [isDevelopment, !current, deskSeatCount]);
 
   const currentInputPhrase = activeEvent
     ? activeEvent.mission
@@ -458,10 +491,12 @@ export const DevelopScreen = () => {
           setSoundBeatKey((k) => k + 1);
         }
 
+        // 実装中のオフィス：チケット文を1つ打ち切った → 着席社員1人の頭上に「できた」吹き出し（✨/❗等）
+        devEmoteKeyRef.current += 1;
+        const devEmotePick = pickDevEmote(Math.random, deskSeatCount, 'done');
+        setDevEmote({ ...devEmotePick, key: devEmoteKeyRef.current });
+
         if (finishing) {
-          setCompletedTickets((l) =>
-            [...l, { title: currentTicket.flavor.title, category }].slice(-6),
-          );
           ticketIndexRef.current += 1;
           setTicketIndex(ticketIndexRef.current);
           ticketPhraseCountRef.current = 0;
@@ -616,6 +651,12 @@ export const DevelopScreen = () => {
   const theme = THEME_BY_ID[current.themeId];
   const phaseMeta = DEV_PHASE_META[phase];
 
+  // v0.32：カテゴリ別「実装中の様子」パネルを右カラムへ移設したため、ボス戦判定を top-level でも算出する。
+  const devIsBossBattle = isBossPhrase && !activeEvent;
+  const devBossHpPct = devIsBossBattle
+    ? Math.max(0, 100 - (view.resolvedUnitCount / Math.max(1, view.totalUnitCount)) * 100)
+    : 0;
+
   return (
     <div
       className={`screen develop-screen${feverActive ? ' dev-fever' : ''}`}
@@ -628,26 +669,53 @@ export const DevelopScreen = () => {
           docs/qa/bug-hunt.md）。左サイドの overflow に巻き込まれて枠外へ出ないよう、
           1280×720 枠内に position:absolute で固定する。 */}
       {import.meta.env.DEV && (
-        <button
-          type="button"
-          onClick={() => devSkipDevelopment()}
-          title="タイピングを飛ばし、平均的な開発成績で発売フェーズへ（DEVビルドのみ）"
+        <div
           style={{
             position: 'absolute',
             top: 38,
             right: 12,
             zIndex: 60,
-            padding: '5px 9px',
-            border: '1px dashed #6a7686',
-            background: '#141b26',
-            color: '#c8d2e0',
-            fontSize: 10,
-            borderRadius: 2,
-            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: 4,
           }}
         >
-          🛠 [DEV] 開発スキップ（平均成績で発売）
-        </button>
+          {/* v0.32：工程ごとのスキップ。今いるフェーズだけ次工程へ進める（development は平均成績を積む）。 */}
+          <button
+            type="button"
+            onClick={() => devSkipPhase()}
+            title="今いる工程だけをスキップして次工程へ（DEVビルドのみ）"
+            style={{
+              padding: '5px 9px',
+              border: '1px dashed #7aa06a',
+              background: '#141f14',
+              color: '#c8e0c8',
+              fontSize: 10,
+              borderRadius: 2,
+              cursor: 'pointer',
+            }}
+          >
+            🛠 [DEV] {phaseMeta.label}工程をスキップ ⏭
+          </button>
+          {/* 従来：全工程をまとめて飛ばし発売フェーズへ */}
+          <button
+            type="button"
+            onClick={() => devSkipDevelopment()}
+            title="タイピングを飛ばし、平均的な開発成績で発売フェーズへ（DEVビルドのみ）"
+            style={{
+              padding: '5px 9px',
+              border: '1px dashed #6a7686',
+              background: '#141b26',
+              color: '#c8d2e0',
+              fontSize: 10,
+              borderRadius: 2,
+              cursor: 'pointer',
+            }}
+          >
+            🛠 [DEV] 全工程スキップ（発売へ）
+          </button>
+        </div>
       )}
 
       {flash > 0 && <div key={`flash-${flash}`} className="dev-flash-vignette" />}
@@ -789,15 +857,10 @@ export const DevelopScreen = () => {
               charsPerMin={charsPerMin}
               bugCount={bugCount}
               accuracyPct={accuracyPct}
-              programLog={programLog}
-              liveCodeLine={liveCodeLine}
-              designNotes={designNotes}
-              graphicsFrame={graphicsFrame}
-              ticketPhraseCount={ticketPhraseCount}
-              soundBeatKey={soundBeatKey}
-              genre={genre}
               lastResult={lastResult}
               feverActive={feverActive}
+              team={employees}
+              devEmote={devEmote}
             />
           ) : isPlanning ? (
             <PlanningCenter
@@ -865,29 +928,30 @@ export const DevelopScreen = () => {
                 </span>
               </div>
 
-              <div style={{ ...devBox(), gap: 4, flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>
-                  現在の開発内容
-                </span>
-                {completedTickets.length === 0 ? (
-                  <span style={{ fontSize: 11, color: '#5a6e3a' }}>まだ着手した作業がない…</span>
-                ) : (
-                  completedTickets.map((t, i) => (
-                    <span key={i} style={{ fontSize: 11, color: CATEGORY_META[t.category].color }}>
-                      ✓ {t.title}
-                    </span>
-                  ))
-                )}
-                {isDevelopment && (
-                  <span style={{ fontSize: 11, color: DEV.white, fontWeight: 700 }}>
-                    ▶ {currentTicket.flavor.title}
+              {/* v0.32：カテゴリ別「実装中の様子」演出を中央から右カラムへ移設（中央は着席デスクシーンに）。
+                  「現在の開発内容」パネルはオーナー指摘で撤去（2026-07-25）。 */}
+              {isDevelopment && (
+                <div style={{ ...devBox(), gap: 4, flex: 1, minHeight: 0 }}>
+                  <span style={{ fontSize: 11, color: DEV.green, fontWeight: 700 }}>
+                    {'</> '}実装中の様子
                   </span>
-                )}
-                <span style={{ fontSize: 10, color: DEV.sub, marginTop: 6 }}>次の目標</span>
-                <span style={{ fontSize: 12, color: DEV.cream, fontWeight: 700 }}>
-                  {nextTicket.flavor.title}
-                </span>
-              </div>
+                  <WorkInProgressPanel
+                    category={currentTicket.category}
+                    programLog={programLog}
+                    liveCodeLine={liveCodeLine}
+                    designNotes={designNotes}
+                    graphicsFrame={graphicsFrame}
+                    ticketPhraseCount={ticketPhraseCount}
+                    soundBeatKey={soundBeatKey}
+                    genre={genre}
+                    ticketTitle={currentTicket.flavor.title}
+                    isBossBattle={devIsBossBattle}
+                    bossSprite={bossSprite}
+                    bossHpPct={devBossHpPct}
+                    bossHitKey={view.completed.length}
+                  />
+                </div>
+              )}
             </>
           )}
 
@@ -1078,15 +1142,10 @@ const DevelopCenter = ({
   charsPerMin,
   bugCount,
   accuracyPct,
-  programLog,
-  liveCodeLine,
-  designNotes,
-  graphicsFrame,
-  ticketPhraseCount,
-  soundBeatKey,
-  genre,
   lastResult,
   feverActive,
+  team,
+  devEmote,
 }: {
   phaseLabel: string;
   litPhaseDots: number;
@@ -1112,23 +1171,15 @@ const DevelopCenter = ({
   charsPerMin: number;
   bugCount: number;
   accuracyPct: number;
-  programLog: string[];
-  liveCodeLine: string;
-  designNotes: string[];
-  graphicsFrame: number;
-  ticketPhraseCount: number;
-  soundBeatKey: number;
-  genre: { id: GenreId; emoji: string; bgColor: string } | undefined;
   lastResult: LastResult | null;
   feverActive: boolean;
+  team: { id: string; role: EmployeeRole }[];
+  devEmote: DevEmoteEvent | null;
 }) => {
   const catMeta = CATEGORY_META[ticket.category];
   const inputColor = activeEvent ? '#ff8a3c' : catMeta.color;
   // v0.20 G：ボス戦中かどうか（イベント優先。イベント中はボス演出を出さない）
   const isBossBattle = isBossPhrase && !activeEvent;
-  const bossHpPct = isBossBattle
-    ? Math.max(0, 100 - (view.resolvedUnitCount / Math.max(1, view.totalUnitCount)) * 100)
-    : 0;
   return (
     <div
       style={{
@@ -1142,22 +1193,44 @@ const DevelopCenter = ({
         flexDirection: 'column',
       }}
     >
-      {/* ヘッダー：フェーズ名 ＋ PHASE ドット（＋発動中はフィーバーバッジ） */}
+      {/* ヘッダー：フェーズ名 ＋ PHASE ドット（＋発動中はフィーバーバッジ）。
+          バッジ数で高さが変わると下のオフィスがズレるため、固定高さ＋1行（折返し禁止）に固定する。 */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 12,
-          padding: '8px 12px',
+          height: 42,
+          padding: '0 12px',
+          overflow: 'hidden',
           borderBottom: `2px solid ${DEV.panelBorder}`,
         }}
       >
-        <span style={{ color: DEV.green, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}>
+        <span
+          style={{
+            color: DEV.green,
+            fontWeight: 700,
+            fontSize: 16,
+            letterSpacing: '0.06em',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+        >
           {'</> '}
           {phaseLabel}フェーズ
         </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'nowrap',
+            whiteSpace: 'nowrap',
+            minWidth: 0,
+            overflow: 'hidden',
+          }}
+        >
           {feverActive && (
             <span
               className="dev-fever-text"
@@ -1218,7 +1291,7 @@ const DevelopCenter = ({
         </div>
       </div>
 
-      <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+      <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 0 }}>
         {/* ①作業チケット／イベント／ボス戦（今なにを作っているか）。内容の長短で下の入力欄が動かないよう高さ固定 */}
         <div
           className={activeEvent ? 'dev-event-active' : undefined}
@@ -1453,22 +1526,12 @@ const DevelopCenter = ({
           </div>
         </div>
 
-        {/* 実装中の様子（カテゴリで見た目が変わる） */}
-        <WorkInProgressPanel
-          category={ticket.category}
-          programLog={programLog}
-          liveCodeLine={liveCodeLine}
-          designNotes={designNotes}
-          graphicsFrame={graphicsFrame}
-          ticketPhraseCount={ticketPhraseCount}
-          soundBeatKey={soundBeatKey}
-          genre={genre}
-          ticketTitle={ticket.flavor.title}
-          isBossBattle={isBossBattle}
-          bossSprite={bossSprite}
-          bossHpPct={bossHpPct}
-          bossHitKey={view.completed.length}
-        />
+        {/* 実装中のオフィス：社員が机に座って働くシーン（着席＋アイドル揺れ＋頭上エモート）。
+            カテゴリ別の演出パネル（WorkInProgressPanel）は右カラムへ移設した（v0.32）。
+            高さは**固定**（flex にすると背の高いビューポートで膨張しデバッグと食い違う）。 */}
+        <div style={{ height: OFFICE_PANEL_H, flexShrink: 0 }}>
+          <DevDeskScene employees={team} emote={devEmote} />
+        </div>
 
         {/* ③今回の結果（入力した結果どう変わったか） */}
         <ResultCard result={lastResult} />
@@ -1895,7 +1958,8 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
         style={{
           ...devBox(),
           gap: 4,
-          minHeight: 58,
+          height: RESULT_CARD_HEIGHT,
+          overflow: 'hidden',
           alignItems: 'center',
           justifyContent: 'center',
         }}
@@ -1910,7 +1974,7 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
       <div
         key={result.ts}
         className="dev-result-pop"
-        style={{ ...devBox(), gap: 4, borderColor: color }}
+        style={{ ...devBox(), gap: 4, borderColor: color, height: RESULT_CARD_HEIGHT, overflow: 'hidden' }}
       >
         <span style={{ fontSize: 13, fontWeight: 700, color }}>
           {EVENT_CATEGORY_META[result.event.category].icon} {result.event.name} 解決！
@@ -1923,7 +1987,11 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
   }
   if (result.kind === 'plan') {
     return (
-      <div key={result.ts} className="dev-result-pop" style={{ ...devBox(), gap: 6 }}>
+      <div
+        key={result.ts}
+        className="dev-result-pop"
+        style={{ ...devBox(), gap: 6, height: RESULT_CARD_HEIGHT, overflow: 'hidden' }}
+      >
         <span style={{ fontSize: 14, fontWeight: 700, color: RANK_COLOR[result.rank] }}>
           {result.rank}!
         </span>
@@ -1937,7 +2005,11 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
     );
   }
   return (
-    <div key={result.ts} className="dev-result-pop" style={{ ...devBox(), gap: 6 }}>
+    <div
+      key={result.ts}
+      className="dev-result-pop"
+      style={{ ...devBox(), gap: 6, height: RESULT_CARD_HEIGHT, overflow: 'hidden' }}
+    >
       <span style={{ fontSize: 14, fontWeight: 700, color: RANK_COLOR[result.rank] }}>
         {result.rank}!
       </span>
@@ -2449,8 +2521,6 @@ const DebugFlow = ({
   // バグ 1 匹 = PHRASES_PER_BUG 文。打ち切るごとに progress、満了で駆除
   const [phraseInBug, setPhraseInBug] = useState(0);
   const [phrase, setPhrase] = useState(() => pickBugFixPhrase());
-  /** 修正ログ（直近3件） */
-  const [fixLog, setFixLog] = useState<string[]>([]);
   /** 駆除演出：💥 を n 個、key で再トリガー。時間切れで消えて列が詰まる */
   const [squash, setSquash] = useState<{ n: number; key: number } | null>(null);
   const squashTimer = useRef<number | null>(null);
@@ -2487,7 +2557,6 @@ const DebugFlow = ({
         if (adDebugAssist()) {
           const cleared = bugsClearedByAd(before);
           sfx.success();
-          setFixLog((l) => [`✓ 広告応援 — ${cleared}匹まとめて駆除`, ...l].slice(0, 3));
           triggerSquash(Math.min(cleared, BUG_ROW_MAX));
           setPhraseInBug(0);
         }
@@ -2499,7 +2568,7 @@ const DebugFlow = ({
 
   if (bugCount <= 0) {
     return (
-      <PhaseShell label="デバッグ">
+      <PhaseShell label="デバッグ" team={employees}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
           <span style={{ fontSize: 26, fontWeight: 700, color: DEV.greenBright }}>
             ✓ バグゼロ！
@@ -2517,7 +2586,7 @@ const DebugFlow = ({
   const shownBugs = Math.min(bugCount, BUG_ROW_MAX);
 
   return (
-    <PhaseShell label="デバッグ">
+    <PhaseShell label="デバッグ" team={employees}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* 進捗バー「駆除 N/M」＋ バグ抑制（プログラマー育成の効果をここでも見せる） */}
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
@@ -2590,13 +2659,11 @@ const DebugFlow = ({
           key={`${killed}-${phraseInBug}`}
           phrase={phrase}
           onComplete={() => {
-            const done = phrase;
             const next = phraseInBug + 1;
             if (next >= BUG_CONFIG.phrasesPerBug) {
               onFix();
               sfx.success();
               setPhraseInBug(0);
-              setFixLog((l) => [`✓ ${done} — 1匹駆除`, ...l].slice(0, 3));
               triggerSquash(1);
             } else {
               setPhraseInBug(next);
@@ -2604,23 +2671,6 @@ const DebugFlow = ({
             setPhrase(pickBugFixPhrase());
           }}
         />
-
-        {/* 修正ログ（直近3件・高さ固定でレイアウトを揺らさない） */}
-        <div style={{ ...devBox(), gap: 2, minHeight: 52 }}>
-          <span style={{ fontSize: 10, color: DEV.green, fontWeight: 700 }}>修正ログ</span>
-          {fixLog.length === 0 ? (
-            <span style={{ fontSize: 11, color: '#5a6e3a' }}>（まだ駆除していない）</span>
-          ) : (
-            fixLog.map((line, idx) => (
-              <span
-                key={idx}
-                style={{ fontSize: 11, color: idx === 0 ? DEV.greenBright : DEV.cream }}
-              >
-                {line}
-              </span>
-            ))
-          )}
-        </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {!adDebugUsed && (
@@ -2678,6 +2728,7 @@ const MissionFlow = ({
   onAllDone: () => void;
   applyDelta: (delta: AxisDelta) => void;
 }) => {
+  const employees = useGameStore((s) => s.employees);
   const [queue] = useState(() => buildMissionQueue(phase));
   const [i, setI] = useState(0);
   const [log, setLog] = useState<string[]>([]);
@@ -2699,7 +2750,7 @@ const MissionFlow = ({
 
   if (!cur) {
     return (
-      <PhaseShell label={label}>
+      <PhaseShell label={label} team={employees}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
           <span style={{ fontSize: 26, fontWeight: 700, color: DEV.greenBright }}>
             ✓ {label}フェーズ 完了
@@ -2734,7 +2785,7 @@ const MissionFlow = ({
   }
 
   return (
-    <PhaseShell label={label}>
+    <PhaseShell label={label} team={employees}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ fontSize: 11, color: DEV.sub }}>
           イベント {i + 1} / {queue.length}
@@ -2769,7 +2820,16 @@ const MissionFlow = ({
 };
 
 /** フェーズ中央の外枠（development 以外用） */
-const PhaseShell = ({ label, children }: { label: string; children: React.ReactNode }) => (
+const PhaseShell = ({
+  label,
+  children,
+  team,
+}: {
+  label: string;
+  children: React.ReactNode;
+  /** v0.32：与えると下部に着席デスクシーン（社員が机で働く様子）を出す。テスト/デバッグ用。 */
+  team?: { id: string; role: EmployeeRole }[];
+}) => (
   <div
     style={{
       flex: 1,
@@ -2786,7 +2846,14 @@ const PhaseShell = ({ label, children }: { label: string; children: React.ReactN
         {label}フェーズ
       </span>
     </div>
-    <div style={{ padding: 16 }}>{children}</div>
+    <div style={{ padding: 16, minHeight: 0 }}>{children}</div>
+    {team && (
+      // 実装中のオフィス（着席＋アイドル揺れ）。内容の直下に置く（下に離しすぎない）。
+      // 開発フェーズのオフィス実高さ(≈168px)と一致させる（下パディング10込みで height=178→内容168）。
+      <div style={{ height: OFFICE_PANEL_H + 10, padding: '0 10px 10px', flexShrink: 0 }}>
+        <DevDeskScene employees={team} autoAmbient />
+      </div>
+    )}
   </div>
 );
 

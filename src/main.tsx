@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { AdminApp } from './admin/AdminApp.tsx';
+import { EmotePreviewTool } from './components/EmotePreviewTool.tsx';
 import { MeetingPreviewTool } from './components/MeetingPreviewTool.tsx';
 import { OfficeEditorTool } from './components/OfficeEditorTool.tsx';
 import { PropEditorTool } from './components/PropEditorTool.tsx';
@@ -21,6 +22,8 @@ const path = window.location.pathname;
 const dev =
   path === '/admin/props' ? (
     <PropEditorTool />
+  ) : path === '/admin/emotes' ? (
+    <EmotePreviewTool />
   ) : path === '/admin/meeting' || params.has('meeting') ? (
     <MeetingPreviewTool />
   ) : path === '/admin/layout' || params.has('layout') || params.has('walk') ? (
