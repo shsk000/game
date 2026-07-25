@@ -597,21 +597,35 @@ export const useGameStore = create<GameState>()(
 
     applyLaunchAd: () => {
       const s = get();
-      const target = s.lastReleased;
-      if (!target) return 0;
-      const applied = applyLaunchAdToWork(target);
-      if (!applied) return 0; // 二重適用ガード
-      const { work, bonus } = applied;
+      const released = s.lastReleased;
+      if (!released) return 0;
+      // lastReleased と library の同一作品は**別の役割**を持つので、それぞれに適用する。
+      //  - lastReleased … 発売時点のスナップショット（リリース画面の「初動／販売プール／売上見込」）。
+      //                   tickSales は触らないので、ここに library の減衰済み salesPool を
+      //                   持ち込むと「広告を見たら売上見込が減った」ように見えてしまう。
+      //  - library      … 販売中の現物（totalRevenue が積み上がり salesPool が減衰していく）。
+      //                   ここを lastReleased で上書きすると販売ぶんが巻き戻る。
+      // initialRevenue は tickSales で変化しないため、両者のボーナス額は必ず一致する。
+      const snapshot = applyLaunchAdToWork(released);
+      if (!snapshot) return 0; // 二重適用ガード
+      const live = s.library.find((w) => w.id === released.id);
+      const liveApplied = live ? applyLaunchAdToWork(live) : null;
+      const bonus = snapshot.bonus;
       set({
-        lastReleased: work,
-        // ライブラリ側の同一作品も差し替える（ここを忘れると累計表示にボーナスが載らない）
-        library: s.library.map((w) => (w.id === work.id ? work : w)),
+        lastReleased: snapshot.work,
+        library: liveApplied
+          ? s.library.map((w) => (w.id === released.id ? liveApplied.work : w))
+          : s.library,
         funds: s.funds + bonus,
         lifetimeRevenue: s.lifetimeRevenue + bonus,
         records: {
           ...s.records,
-          // computeRelease と同じ意味（初動＋販売プール＝総売上見込）で最高記録を更新
-          bestRevenue: Math.max(s.records.bestRevenue, work.initialRevenue + work.salesPool),
+          // computeRelease と同じ意味（発売時点の総売上見込）で最高記録を更新。
+          // salesPool は減衰するので initialSalesPool を使う。
+          bestRevenue: Math.max(
+            s.records.bestRevenue,
+            snapshot.work.initialRevenue + snapshot.work.initialSalesPool,
+          ),
         },
       });
       return bonus;

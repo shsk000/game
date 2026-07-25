@@ -4,7 +4,7 @@ import { BUG_CONFIG, GACHA_CONFIG } from '../data/balance';
 import { SCALE_BY_ID } from '../data/scales';
 import { setGameDeps, useGameStore } from './gameStore';
 import { resetStore } from './testing';
-import type { CurrentProject } from './types';
+import type { CurrentProject, Work } from './types';
 import { ZERO_AXES } from './types';
 
 const devProject = (over: Partial<CurrentProject> = {}): CurrentProject => ({
@@ -309,5 +309,110 @@ describe('採用ガチャ（v0.22）', () => {
     useGameStore.getState().pullGacha('premium');
     expect(useGameStore.getState().candidate?.rank).toBe('S');
     expect(useGameStore.getState().gachaPity).toBe(0);
+  });
+});
+
+describe('applyLaunchAd（ローンチ広告を store 経由で適用）', () => {
+  beforeEach(() => resetStore());
+
+  /** 発売済み作品を 1 本仕込む（初動 ¥100万 / プール ¥400万） */
+  const seedReleased = (over: Partial<Work> = {}): Work => {
+    const w: Work = {
+      id: 'w1',
+      title: 'テスト作',
+      genreId: 'puzzle',
+      themeId: 'sushi',
+      scale: 'mini',
+      quality: 60,
+      metascore: 60,
+      isMasterpiece: false,
+      developSec: 60,
+      initialRevenue: 1_000_000,
+      salesPool: 4_000_000,
+      initialSalesPool: 4_000_000,
+      decayPerSec: 0.02,
+      totalRevenue: 1_000_000,
+      selling: true,
+      fansGained: 0,
+      ghostBeaten: false,
+      launchAdUsed: false,
+      pioneer: false,
+      releasedAt: 0,
+      createdAt: 0,
+      breakdown: {},
+      ...over,
+    };
+    resetStore({ funds: 10_000_000, lifetimeRevenue: 1_000_000, library: [w], lastReleased: w });
+    return w;
+  };
+
+  it('初動 ×1.5 のボーナスを funds / lifetimeRevenue / totalRevenue に同額載せる', () => {
+    seedReleased();
+    const bonus = useGameStore.getState().applyLaunchAd();
+    expect(bonus).toBe(500_000);
+    const s = useGameStore.getState();
+    expect(s.funds).toBe(10_000_000 + 500_000);
+    expect(s.lifetimeRevenue).toBe(1_000_000 + 500_000);
+    expect(s.lastReleased?.initialRevenue).toBe(1_500_000);
+    expect(s.lastReleased?.totalRevenue).toBe(1_500_000);
+  });
+
+  it('library の同一作品も差し替わる（累計表示にボーナスが載る）', () => {
+    seedReleased();
+    useGameStore.getState().applyLaunchAd();
+    const inLib = useGameStore.getState().library.find((w) => w.id === 'w1');
+    expect(inLib?.initialRevenue).toBe(1_500_000);
+    expect(inLib?.totalRevenue).toBe(1_500_000);
+    expect(inLib?.launchAdUsed).toBe(true);
+  });
+
+  it('販売で積み上がった売上を巻き戻さない（lastReleased は tickSales で更新されない）', () => {
+    seedReleased();
+    // 販売を進める＝library 側だけ totalRevenue が増え salesPool が減る
+    useGameStore.getState().tickSales(30);
+    const mid = useGameStore.getState().library.find((w) => w.id === 'w1');
+    const soldSoFar = (mid?.totalRevenue ?? 0) - 1_000_000;
+    expect(soldSoFar).toBeGreaterThan(0); // 前提：実際に売れている
+    expect(useGameStore.getState().lastReleased?.totalRevenue).toBe(1_000_000); // 古いまま
+
+    useGameStore.getState().applyLaunchAd();
+    const after = useGameStore.getState().library.find((w) => w.id === 'w1');
+    // 販売ぶん + 広告ボーナスの両方が残る（library の現物を起点にしているため）
+    expect(after?.totalRevenue).toBe(1_000_000 + soldSoFar + 500_000);
+    expect(after?.salesPool).toBe(mid?.salesPool);
+  });
+
+  it('リリース画面の売上見込（初動＋販売プール）はボーナス分だけ増える（減らない）', () => {
+    seedReleased();
+    const before = useGameStore.getState().lastReleased!;
+    const projectedBefore = before.initialRevenue + before.salesPool;
+    // 販売を進めても lastReleased 側のスナップショットは動かないのが前提
+    useGameStore.getState().tickSales(30);
+    useGameStore.getState().applyLaunchAd();
+    const after = useGameStore.getState().lastReleased!;
+    const projectedAfter = after.initialRevenue + after.salesPool;
+    // 減衰済みプールを持ち込むと projectedAfter < projectedBefore になる（広告で総額が減る嘘）
+    expect(projectedAfter).toBe(projectedBefore + 500_000);
+  });
+
+  it('二重適用しても 2 回目は 0 で資金も動かない', () => {
+    seedReleased();
+    useGameStore.getState().applyLaunchAd();
+    const fundsAfterFirst = useGameStore.getState().funds;
+    expect(useGameStore.getState().applyLaunchAd()).toBe(0);
+    expect(useGameStore.getState().funds).toBe(fundsAfterFirst);
+  });
+
+  it('records.bestRevenue は減衰前の総売上（初動＋初期プール）で更新される', () => {
+    seedReleased();
+    useGameStore.getState().tickSales(30); // プールを減衰させる
+    useGameStore.getState().applyLaunchAd();
+    expect(useGameStore.getState().records.bestRevenue).toBe(1_500_000 + 4_000_000);
+  });
+
+  it('未リリース（lastReleased なし）では 0 を返して何も変えない', () => {
+    resetStore({ funds: 5_000_000 });
+    expect(useGameStore.getState().applyLaunchAd()).toBe(0);
+    expect(useGameStore.getState().funds).toBe(5_000_000);
   });
 });
