@@ -23,7 +23,7 @@ const programmer = (power: number, id = 'p1'): Employee => ({
   level: 1,
   exp: 0,
   wage: 0,
-  specialties: [],
+  specialties: [], skills: {},
 });
 
 const designer = (power: number): Employee => ({ ...programmer(power, 'd1'), role: 'designer' });

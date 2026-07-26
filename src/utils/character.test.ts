@@ -12,7 +12,7 @@ const emp = (id: string, role: EmployeeRole, power: number): Employee => ({
   level: 1,
   exp: 0,
   wage: 0,
-  specialties: [],
+  specialties: [], skills: {},
 });
 
 describe('computeCharacterScore（v0.16：能力が支配項）', () => {

@@ -119,7 +119,14 @@ export const ROLE_EFFECT = {
 // v0.22：採用ガチャ（spec v22 §4。旧 CANDIDATE_POWER_RANGE 0.2〜0.6 をランク帯に置換）
 // ============================================================
 
-export type GachaRank = 'B' | 'A' | 'S';
+/**
+ * 採用ガチャの排出ランク。**C を追加して4種**（docs/spec/score-model.md §1）。
+ * ランクは「どこまで伸びるか（天井）」を表す表示ラベルで、育っても変わらない。
+ */
+export type GachaRank = 'C' | 'B' | 'A' | 'S';
+
+/** ランクの弱い順（排出率テーブルの走査・UI 並び順に使う） */
+export const GACHA_RANKS: readonly GachaRank[] = ['C', 'B', 'A', 'S'] as const;
 
 /** 採用ガチャの種類（v0.22.1 で 2 種に分割）。normal＝安価・S 無し／premium＝高額・S 源 */
 export type GachaKind = 'normal' | 'premium';
@@ -142,8 +149,8 @@ export type GachaKind = 'normal' | 'premium';
  */
 export const GACHA_CONFIG = {
   normal: {
-    // S 無し。S の 5% 分を A に寄せて B70/A30（🔧）
-    rates: { B: 0.7, A: 0.3, S: 0 },
+    // 実装ステップ1で C を追加（GACHA_RANK_RATES が新しい正）。ここは旧経路の互換用
+    rates: { C: 0.35, B: 0.45, A: 0.2, S: 0 },
     priceByScale: {
       mini: 50_000, // ¥5 万
       mobile: 500_000, // ¥50 万
@@ -155,8 +162,8 @@ export const GACHA_CONFIG = {
     pityThreshold: 0,
   },
   premium: {
-    // A/S に寄せた高級枠。B も残してガチャの緊張を維持（🔧）
-    rates: { B: 0.4, A: 0.45, S: 0.15 },
+    // 実装ステップ1で C を追加（GACHA_RANK_RATES が新しい正）。ここは旧経路の互換用
+    rates: { C: 0.1, B: 0.35, A: 0.4, S: 0.15 },
     priceByScale: {
       mini: 6_000_000, // ¥600 万（初期資金 ¥500 万を上回る＝序盤は 1 発も引けない）
       mobile: 30_000_000, // ¥3000 万
@@ -168,11 +175,13 @@ export const GACHA_CONFIG = {
     pityThreshold: 10,
   },
   powerRange: {
+    C: { min: 0.15, max: 0.25 },
     B: { min: 0.2, max: 0.4 },
     A: { min: 0.4, max: 0.55 },
     S: { min: 0.55, max: 0.7 },
   },
   specialty: {
+    C: { primaryMin: 2, primaryMax: 5, secondChance: 0, secondMin: 0, secondMax: 0 },
     B: { primaryMin: 3, primaryMax: 7, secondChance: 0, secondMin: 0, secondMax: 0 },
     A: { primaryMin: 3, primaryMax: 10, secondChance: 0.4, secondMin: 1, secondMax: 4 },
     S: { primaryMin: 6, primaryMax: 10, secondChance: 1, secondMin: 3, secondMax: 6 },
@@ -199,6 +208,53 @@ export const GACHA_CONFIG = {
       secondMax: number;
     }
   >;
+};
+
+// ============================================================
+// スキル・ランク（docs/spec/score-model.md §1。実装ステップ1）
+// ============================================================
+
+/**
+ * ランクごとの総合力（＝スキル値の合計）。
+ *
+ * **Lv1 はランクによらずほぼ同じ（15〜28）で、Lv10 で 40/60/80/100 に開く。**
+ * ランクは「どこまで伸びるか（天井）」、レベルは「今どこまで伸びたか」を表す。
+ * 採用した瞬間は差が分からないので、ガチャの価値は「育てたときの到達点」になる。
+ *
+ * 数値は 🔧（通しシミュレーションで検証済み：序盤に破産せず終盤で兆が出ない）。
+ */
+export const RANK_TOTAL_POWER: Record<GachaRank, { lv1Min: number; lv1Max: number; lv10: number }> =
+  {
+    C: { lv1Min: 15, lv1Max: 20, lv10: 40 },
+    B: { lv1Min: 16, lv1Max: 22, lv10: 60 },
+    A: { lv1Min: 18, lv1Max: 25, lv10: 80 },
+    S: { lv1Min: 20, lv1Max: 28, lv10: 100 },
+  };
+
+/**
+ * スキル関連の確定値（docs/spec/score-model.md §1）。
+ */
+export const SKILL_CONFIG = {
+  /** 2つ目のスキルを持つ確率（ランクとは無関係） 🔧 */
+  twoSkillChance: 0.5,
+  /**
+   * 2スキル時の分散ペナルティ。総合力にこれを掛けてから2分野へ配分する。
+   * **専門特化のほうが総合力が高くなる**（分けると目減りする） 🔧
+   */
+  spreadPenalty: 0.9,
+  /** 2スキル時の配分比（主スキル : 副スキル） 🔧 */
+  spreadRatio: { primary: 0.55, secondary: 0.45 },
+  /** 同じ分野に2人目以降を置いたときの効率（分業のロス）。スキル合計に掛ける 🔧 */
+  secondMemberEfficiency: 0.5,
+} as const;
+
+/**
+ * 採用ガチャの排出率（C を含む4種構成）🔧。
+ * normal は S を出さない（旧仕様どおり）。C を追加したぶんは B から割いた。
+ */
+export const GACHA_RANK_RATES: Record<GachaKind, Record<GachaRank, number>> = {
+  normal: { C: 0.35, B: 0.45, A: 0.2, S: 0 },
+  premium: { C: 0.1, B: 0.35, A: 0.4, S: 0.15 },
 };
 
 // ============================================================

@@ -2204,6 +2204,10 @@ body,
   color: #f0c020;
 }
 
+/* C は最下位ランク＝鉄色。ランク4種（C/B/A/S）に増えた実装ステップ1で追加 */
+.gacha-card--C {
+  border-color: #8a8f96;
+}
 .gacha-card--B {
   border-color: #b87333;
 }
@@ -2251,6 +2255,10 @@ body,
   border: 2px solid #10151c;
 }
 
+.gacha-rank-badge--C {
+  background: #8a8f96;
+  color: #202840;
+}
 .gacha-rank-badge--B {
   background: #b87333;
   color: #fff8e0;

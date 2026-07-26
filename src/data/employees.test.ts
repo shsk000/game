@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { mulberry32 } from '../core/ports';
-import { computeMonthlyWage, GACHA_CONFIG, type GachaRank } from './balance';
+import { ownedSkillIds, totalPowerOf } from '../core/skills';
+import {
+  computeMonthlyWage,
+  GACHA_CONFIG,
+  type GachaRank,
+  RANK_TOTAL_POWER,
+  SKILL_CONFIG,
+} from './balance';
 import {
   newCandidate,
   rollPowerForRank,
@@ -24,21 +31,34 @@ describe('newCandidate', () => {
 
   it('rank を指定しなくても排出テーブルで抽選され rank が付与される', () => {
     const c = newCandidate(fixedDeps(3));
-    expect(['B', 'A', 'S']).toContain(c.rank);
+    expect(['C', 'B', 'A', 'S']).toContain(c.rank);
     expect(c.basePower).toBe(c.power);
     expect(c.level).toBe(1);
     expect(c.exp).toBe(0);
   });
 
-  it('ランク別 basePower はそのランクの帯に収まる（境界含む）', () => {
-    for (const rank of ['B', 'A', 'S'] as GachaRank[]) {
-      const range = GACHA_CONFIG.powerRange[rank];
+  it('スキルは1つか2つで、合計（総合力）がランクの Lv1 帯に収まる', () => {
+    // docs/spec/score-model.md §1：Lv1 の総合力はランクによらずほぼ同じ（15〜28）
+    for (const rank of ['C', 'B', 'A', 'S'] as GachaRank[]) {
+      const r = RANK_TOTAL_POWER[rank];
       for (let seed = 0; seed < 40; seed++) {
         const c = newCandidate(fixedDeps(seed), rank);
-        expect(c.power, `${rank} seed=${seed}`).toBeGreaterThanOrEqual(range.min);
-        expect(c.power, `${rank} seed=${seed}`).toBeLessThanOrEqual(range.max);
+        const owned = ownedSkillIds(c.skills);
+        expect(owned.length, `${rank} seed=${seed}`).toBeGreaterThanOrEqual(1);
+        expect(owned.length, `${rank} seed=${seed}`).toBeLessThanOrEqual(2);
+        const total = totalPowerOf(c.skills);
+        // 2スキルは分散ペナルティで目減りするので下限はペナルティ込みで見る
+        expect(total, `${rank} seed=${seed}`).toBeGreaterThanOrEqual(
+          r.lv1Min * SKILL_CONFIG.spreadPenalty - 0.5,
+        );
+        expect(total, `${rank} seed=${seed}`).toBeLessThanOrEqual(r.lv1Max + 0.5);
       }
     }
+  });
+
+  it('互換アダプタ：power は総合力 ÷ 100（旧スコア経路が使う）', () => {
+    const c = newCandidate(fixedDeps(11), 'A');
+    expect(c.power).toBeCloseTo(totalPowerOf(c.skills) / 100, 2);
   });
 
   it('月給は balance.ts の computeMonthlyWage と一致する', () => {

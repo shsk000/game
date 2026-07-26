@@ -76,7 +76,7 @@ describe('ReleaseScreen（ユースケース：結果を発表して作品が世
           level: 1,
           exp: 19, // nextExpFor(1)=20。リリースで +10 以上入る
           wage: 540_000,
-          specialties: [],
+          specialties: [], skills: {},
         },
       ],
     });

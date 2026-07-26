@@ -13,6 +13,7 @@ import type {
   Candidate,
   Employee,
   GameDate,
+  SkillId,
   Work,
   WorkBreakdown,
 } from '../state/types';
@@ -199,18 +200,41 @@ const OLD_POWER_MAX: Record<Employee['role'], number> = {
 
 const normalizeEmployeeV6 = (e: LegacyEmployeeV5): Employee => {
   if (e.basePower !== undefined && e.level !== undefined && e.exp !== undefined) {
-    return e as Employee; // すでに v6 形式
+    return ensureSkills(e as Employee); // すでに v6 形式
   }
   const raw = e.power / (OLD_POWER_MAX[e.role] ?? 1);
   const power = Math.min(1, Math.max(0.05, Math.round(raw * 100) / 100));
-  return {
+  return ensureSkills({
     ...e,
     power,
     basePower: power,
     level: 1,
     exp: 0,
     wage: Math.round(computeMonthlyWage(power)),
-  };
+  } as Employee);
+};
+
+/**
+ * スキル移行（docs/spec/score-model.md §1・実装ステップ1）。
+ *
+ * 旧セーブの社員は `power`（0..1）と `role` しか持たない。総合力は `power × 100` で復元し、
+ * 役割から主スキルを1つ割り当てる（**1スキルの尖った社員**として復元）。
+ * 旧 `specialties` はカテゴリ体系が違ううえ未接続だったため引き継がない。
+ *
+ * バージョンは上げない加算的移行（欠損フィールドの補完）。既存セーブは壊れない。
+ */
+const ROLE_TO_PRIMARY_SKILL: Record<string, SkillId> = {
+  programmer: 'programming',
+  designer: 'graphics',
+  pr: 'pr',
+};
+
+const ensureSkills = (e: Employee): Employee => {
+  const owned = Object.values(e.skills ?? {}).filter((v) => (v ?? 0) > 0);
+  if (owned.length > 0) return e;
+  const primary = ROLE_TO_PRIMARY_SKILL[e.role] ?? 'programming';
+  const total = Math.round(Math.max(0, Math.min(1, e.power)) * 100 * 10) / 10;
+  return { ...e, skills: { [primary]: total } };
 };
 
 /** v0.9 → v0.10 用：work の金額を ×10,000 倍する */

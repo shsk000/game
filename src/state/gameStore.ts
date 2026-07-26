@@ -9,7 +9,8 @@ import {
 import { simulateAverageDevRun } from '../core/devSimulate';
 import { computeBorrow, computeMonthlyTick, computeRepay, computeSpend } from '../core/economy';
 import { canBuyEquipment, freeCopies, type OwnedItems } from '../core/equip';
-import { gachaPrice, nextPityCount, rollRank } from '../core/gacha';
+import { gachaPrice, nextPityCount } from '../core/gacha';
+import { rollRank4 } from '../core/skills';
 import type { LevelUp } from '../core/growth';
 import { investPrice } from '../core/invest';
 import { type Deps, defaultDeps } from '../core/ports';
@@ -680,7 +681,7 @@ export const useGameStore = create<GameState>()(
       const price = gachaPrice(kind, get().unlockedScales);
       if (get().funds < price) return false;
       const pity = get().gachaPity;
-      const rank = rollRank(kind, deps.rng, pity);
+      const rank = rollRank4(kind, deps.rng, pity);
       set({
         funds: get().funds - price,
         candidate: newCandidate(deps, rank),

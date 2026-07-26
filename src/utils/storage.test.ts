@@ -146,9 +146,9 @@ describe('v5 → v7 マイグレーション（v0.16 power 正規化 + v0.18 累
         ...storage.defaults(),
         version: 5,
         employees: [
-          { id: 'p', name: 'プログラマ', role: 'programmer', power: 1.2, wage: 0, specialties: [] },
-          { id: 'd', name: 'デザイナ', role: 'designer', power: 5, wage: 0, specialties: [] },
-          { id: 'r', name: '広報', role: 'pr', power: 20, wage: 0, specialties: [] },
+          { id: 'p', name: 'プログラマ', role: 'programmer', power: 1.2, wage: 0, specialties: [], skills: {}, },
+          { id: 'd', name: 'デザイナ', role: 'designer', power: 5, wage: 0, specialties: [], skills: {}, },
+          { id: 'r', name: '広報', role: 'pr', power: 20, wage: 0, specialties: [], skills: {}, },
         ],
       }),
     );
@@ -242,5 +242,65 @@ describe('v4 → v7 マイグレーション', () => {
   it('壊れた JSON は null（クラッシュしない）', () => {
     mem.setItem('typing-factory:v7', '{broken json');
     expect(storage.load()).toBeNull();
+  });
+});
+
+describe('スキル移行（実装ステップ1・docs/spec/score-model.md §1）', () => {
+  /** skills を持たない旧形式の社員（v7 セーブ相当） */
+  const legacyEmployee = (role: 'programmer' | 'designer' | 'pr', power: number) =>
+    ({
+      id: `e-${role}`,
+      name: 'テスト',
+      role,
+      power,
+      basePower: power,
+      level: 1,
+      exp: 0,
+      wage: Math.round(computeMonthlyWage(power)),
+      specialties: [{ categoryId: 'graphics' as const, bonus: 7 }],
+      skills: {},
+    });
+
+  it('skills を持たない旧セーブでも社員が壊れず、role から主スキルが1つ生える', () => {
+    const d = storage.defaults();
+    storage.save({
+      ...d,
+      employees: [
+        legacyEmployee('programmer', 0.4),
+        legacyEmployee('designer', 0.55),
+        legacyEmployee('pr', 0.3),
+      ],
+    });
+    const loaded = storage.load();
+    expect(loaded?.employees).toHaveLength(3);
+    const [prog, des, pr] = loaded!.employees;
+    // 総合力 = power × 100 で復元され、1スキルの尖った社員になる
+    expect(prog.skills).toEqual({ programming: 40 });
+    expect(des.skills).toEqual({ graphics: 55 });
+    expect(pr.skills).toEqual({ pr: 30 });
+  });
+
+  it('旧セーブの power は保持される（互換アダプタ経路が壊れない）', () => {
+    const d = storage.defaults();
+    storage.save({ ...d, employees: [legacyEmployee('programmer', 0.42)] });
+    expect(storage.load()?.employees[0].power).toBe(0.42);
+  });
+
+  it('既に skills を持つ社員は上書きされない', () => {
+    const d = storage.defaults();
+    const e = { ...legacyEmployee('programmer', 0.4), skills: { graphics: 61, sound: 22 } };
+    storage.save({ ...d, employees: [e] });
+    expect(storage.load()?.employees[0].skills).toEqual({ graphics: 61, sound: 22 });
+  });
+
+  it('power が壊れていても（範囲外）スキルが 0〜100 に収まる', () => {
+    const d = storage.defaults();
+    storage.save({
+      ...d,
+      employees: [legacyEmployee('programmer', 9), legacyEmployee('designer', -1)],
+    });
+    const loaded = storage.load();
+    expect(loaded?.employees[0].skills.programming).toBe(100);
+    expect(loaded?.employees[1].skills.graphics).toBe(0);
   });
 });

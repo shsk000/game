@@ -13,7 +13,7 @@ const emp = (over: Partial<Employee> = {}): Employee => ({
   level: 1,
   exp: 0,
   wage: 0,
-  specialties: [],
+  specialties: [], skills: {},
   ...over,
 });
 

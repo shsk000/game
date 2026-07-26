@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { PixelButton } from '../../components/ui';
-import { CATEGORY_BY_ID } from '../../data/categories';
-import { roleLabel } from '../../data/employees';
 import type { Candidate } from '../../state/types';
-import { formatPower, RANK_VISUAL } from './employeeDisplay';
+import { jobTitleOf } from '../../core/skills';
+import { formatSkills, RANK_VISUAL } from './employeeDisplay';
 
 /**
  * v0.22 採用ガチャのカード開封演出（spec v22 §6）。
@@ -76,17 +75,11 @@ export const GachaReveal = ({ candidate, funds, isFull, onHire, onDismiss }: Pro
             borderRadius: 2,
           }}
         >
-          {roleLabel(candidate.role)}
+          {jobTitleOf(candidate.skills)}
         </span>
       </div>
       <div style={{ fontSize: 13, marginTop: 8, color: '#eef3fa' }}>
-        {formatPower(candidate.role, candidate.power)}
-      </div>
-      <div style={{ fontSize: 12, marginTop: 4, color: '#aab8cc' }}>
-        得意:{' '}
-        {candidate.specialties
-          .map((sp) => `${CATEGORY_BY_ID[sp.categoryId]?.name ?? sp.categoryId} +${sp.bonus}`)
-          .join(' / ')}
+        {formatSkills(candidate.skills)}
       </div>
       {isFull && (
         <div style={{ fontSize: 12, color: '#c66', marginTop: 6 }}>

@@ -14,7 +14,7 @@ import { nextGoals } from '../../core/goals';
 import { nextExpFor } from '../../core/growth';
 import { ACHIEVEMENTS } from '../../data/achievements';
 import { computeBorrowingLimit, DEBT_CONFIG } from '../../data/balance';
-import { roleLabel, sumMonthlySalaries } from '../../data/employees';
+import { sumMonthlySalaries } from '../../data/employees';
 import { GENRE_BY_ID } from '../../data/genres';
 import { MAX_EMPLOYEES, NATIVE_H, NATIVE_W } from '../../data/officeLayout';
 import { nextLockedScale, SCALE_BY_ID, SCALES } from '../../data/scales';
@@ -22,7 +22,8 @@ import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
 import { formatYen } from '../../utils/format';
 import { EquipmentModal } from './EquipmentModal';
-import { formatPower, RANK_VISUAL, ROLE_VISUAL } from './employeeDisplay';
+import { jobTitleOf, primarySkillOf } from '../../core/skills';
+import { formatSkills, RANK_VISUAL, SKILL_VISUAL } from './employeeDisplay';
 import { GachaReveal } from './GachaReveal';
 
 /**
@@ -49,7 +50,7 @@ type ModalKind =
   | 'officeUpgrade'
   | null;
 
-// formatPower / ROLE_VISUAL / RANK_VISUAL は employeeDisplay.ts に共通化（v0.22）
+// formatSkills / SKILL_VISUAL / RANK_VISUAL は employeeDisplay.ts に共通化
 // SegGauge は src/components/ui/SegGauge.tsx に共通化（v0.11 開発フェーズと共用）
 
 export const OfficeScreen = () => {
@@ -337,7 +338,7 @@ export const OfficeScreen = () => {
               }}
             >
               {employees.slice(0, 6).map((e) => {
-                const v = ROLE_VISUAL[e.role] ?? ROLE_VISUAL.programmer;
+                const v = SKILL_VISUAL[primarySkillOf(e.skills) ?? 'programming'];
                 return (
                   <li
                     key={e.id}
@@ -359,7 +360,7 @@ export const OfficeScreen = () => {
                     >
                       {e.name}
                     </span>
-                    <span style={{ color: v.color, fontSize: 10 }}>{roleLabel(e.role)}</span>
+                    <span style={{ color: v.color, fontSize: 10 }}>{jobTitleOf(e.skills)}</span>
                     <span style={{ color: '#6b7684', fontSize: 10 }}>Lv{e.level}</span>
                   </li>
                 );
@@ -737,14 +738,14 @@ export const OfficeScreen = () => {
                       borderRadius: 2,
                     }}
                   >
-                    {roleLabel(e.role)}
+                    {jobTitleOf(e.skills)}
                   </span>
                   <span style={{ fontWeight: 700, fontSize: 13, flex: 1, color: '#f0f3f8' }}>
                     {e.name}
                   </span>
                   <span style={{ fontSize: 11, color: '#aab8cc' }}>
                     Lv{e.level}（次まで exp {Math.max(0, nextExpFor(e.level) - e.exp)}）／{' '}
-                    {formatPower(e.role, e.power)}
+                    {formatSkills(e.skills)}
                   </span>
                   <PixelButton size="small" variant="danger" onClick={() => fireEmployee(e.id)}>
                     解雇

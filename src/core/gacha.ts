@@ -15,6 +15,11 @@ import type { Rng } from './ports';
  * ランク抽選。premium はピティ（pityThreshold 回連続 S 非排出）到達時に S 確定。
  * 判定順は S → A → B（rates の合計は 1.0 前提。normal は S=0 なので S は出ない）。
  */
+/**
+ * @deprecated 実装ステップ1 で `core/skills.ts` の `rollRank4`（C を含む4種）に置き換えた。
+ * 旧テーブル `GACHA_CONFIG[kind].rates` を読むため C も出るが、新しい正は `GACHA_RANK_RATES`。
+ * 参照が消えたら削除する。
+ */
 export const rollRank = (kind: GachaKind, rng: Rng = Math.random, pityCount = 0): GachaRank => {
   const cfg = GACHA_CONFIG[kind];
   // pityThreshold=0（normal）はピティ無効。premium のみ天井が効く。
@@ -22,7 +27,8 @@ export const rollRank = (kind: GachaKind, rng: Rng = Math.random, pityCount = 0)
   const r = rng();
   if (r < cfg.rates.S) return 'S';
   if (r < cfg.rates.S + cfg.rates.A) return 'A';
-  return 'B';
+  if (r < cfg.rates.S + cfg.rates.A + cfg.rates.B) return 'B';
+  return 'C';
 };
 
 /**

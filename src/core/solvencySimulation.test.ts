@@ -58,7 +58,7 @@ const emp = (id: string, role: EmployeeRole, power = 0.4): Employee => ({
   level: 1,
   exp: 0,
   wage: 0,
-  specialties: [],
+  specialties: [], skills: {},
 });
 
 const medianTeam = (): Employee[] => [

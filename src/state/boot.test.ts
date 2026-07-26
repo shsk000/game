@@ -61,7 +61,7 @@ describe('buildBootPatch', () => {
         level: 1,
         exp: 0,
         wage: 660_000,
-        specialties: [],
+        specialties: [], skills: {},
       },
       gachaPity: 13,
     };

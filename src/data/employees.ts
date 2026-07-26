@@ -1,7 +1,7 @@
-import { rollRank } from '../core/gacha';
 import type { Deps, Rng } from '../core/ports';
 import { defaultDeps } from '../core/ports';
-import type { Candidate, Employee, EmployeeRole, EmployeeSpecialty } from '../state/types';
+import { primarySkillOf, rollRank4, rollSkills, totalPowerOf } from '../core/skills';
+import type { Candidate, Employee, EmployeeRole, EmployeeSpecialty, SkillId } from '../state/types';
 import { computeMonthlyWage, GACHA_CONFIG, type GachaRank, ROLE_EFFECT } from './balance';
 import type { CategoryId } from './categories';
 
@@ -61,8 +61,6 @@ export const roleLabel = (r: EmployeeRole) => ROLE_LABELS[r];
 const pick = <T>(arr: T[], rng: Rng): T => arr[Math.floor(rng() * arr.length)];
 
 const randomName = (rng: Rng) => `${pick(SURNAMES, rng)} ${pick(GIVEN, rng)}`;
-
-const ROLE_DICE: EmployeeRole[] = ['programmer', 'programmer', 'designer', 'designer', 'pr'];
 
 /**
  * v0.16：power は全役割共通の 0..1 正規化スケール（balance.ts ROLE_EFFECT で換算）。
@@ -139,11 +137,15 @@ let counter = 0;
  */
 export const newCandidate = (
   deps: Deps = defaultDeps,
-  rank: GachaRank = rollRank('normal', deps.rng),
+  rank: GachaRank = rollRank4('normal', deps.rng),
 ): Candidate => {
   const { rng, now } = deps;
-  const role = pick(ROLE_DICE, rng);
-  const power = rollPowerForRank(rank, rng);
+  // スキルが真（docs/spec/score-model.md §1）。role は主スキルから導出した互換表示。
+  const skills = rollSkills(rank, rng);
+  const role = roleFromSkills(skills);
+  // 互換アダプタ：旧経路（品質計算・バグ抑制・給与）が使う power を総合力から導出する。
+  // 実装ステップ3 で旧経路を削除したらこのフィールドも消える。
+  const power = powerFromSkills(skills);
   counter += 1;
   return {
     id: `c-${now()}-${counter}`,
@@ -156,7 +158,23 @@ export const newCandidate = (
     exp: 0,
     wage: wageFor(role, power),
     specialties: rollSpecialties(role, rank, rng),
+    skills,
   };
+};
+
+/**
+ * 互換アダプタ：総合力（0〜100）→ 旧 power（0〜1）。
+ * 実装ステップ3 で旧スコア経路を削除するまでの橋渡し。
+ */
+export const powerFromSkills = (skills: Employee['skills']): number =>
+  Math.round((totalPowerOf(skills) / 100) * 100) / 100;
+
+/** 主スキル → 旧 role（表示・旧経路の分岐用）。実装ステップ3 で role ごと削除する */
+export const roleFromSkills = (skills: Employee['skills']): EmployeeRole => {
+  const p: SkillId | null = primarySkillOf(skills);
+  if (p === 'pr') return 'pr';
+  if (p === 'graphics' || p === 'sound' || p === 'scenario') return 'designer';
+  return 'programmer';
 };
 
 /**

@@ -8,7 +8,7 @@ describe('rollRank（normal＝S無し）', () => {
   it('ノーマルは S を一切出さず、B/A の実測率が設定値に近い（±3%）', () => {
     const rng = mulberry32(12345);
     const N = 30_000;
-    const counts: Record<GachaRank, number> = { B: 0, A: 0, S: 0 };
+    const counts: Record<GachaRank, number> = { C: 0, B: 0, A: 0, S: 0 };
     for (let i = 0; i < N; i++) counts[rollRank('normal', rng, 0)]++;
     expect(counts.S).toBe(0); // S は絶対に出ない
     expect(counts.A / N).toBeGreaterThan(GACHA_CONFIG.normal.rates.A - 0.03);
@@ -17,8 +17,8 @@ describe('rollRank（normal＝S無し）', () => {
   });
 
   it('ノーマルは天井無効（pity を積んでも S 確定にならない）', () => {
-    const alwaysB = () => 0.99;
-    expect(rollRank('normal', alwaysB, 999)).toBe('B');
+    const lowRoll = () => 0.99; // 最下位ランク帯に落ちる乱数
+    expect(rollRank('normal', lowRoll, 999)).not.toBe('S');
   });
 });
 
@@ -26,7 +26,7 @@ describe('rollRank（premium＝S源＋天井）', () => {
   it('大量試行での実測排出率が設定値に近い（±3%）', () => {
     const rng = mulberry32(999);
     const N = 30_000;
-    const counts: Record<GachaRank, number> = { B: 0, A: 0, S: 0 };
+    const counts: Record<GachaRank, number> = { C: 0, B: 0, A: 0, S: 0 };
     for (let i = 0; i < N; i++) counts[rollRank('premium', rng, 0)]++;
     expect(counts.S / N).toBeGreaterThan(GACHA_CONFIG.premium.rates.S - 0.03);
     expect(counts.S / N).toBeLessThan(GACHA_CONFIG.premium.rates.S + 0.03);
@@ -35,15 +35,15 @@ describe('rollRank（premium＝S源＋天井）', () => {
   });
 
   it('ピティ閾値到達で S 確定（乱数に関わらず）', () => {
-    const alwaysB = () => 0.99;
+    const lowRoll = () => 0.99;
     const th = GACHA_CONFIG.premium.pityThreshold;
-    expect(rollRank('premium', alwaysB, th)).toBe('S');
-    expect(rollRank('premium', alwaysB, th + 5)).toBe('S');
+    expect(rollRank('premium', lowRoll, th)).toBe('S');
+    expect(rollRank('premium', lowRoll, th + 5)).toBe('S');
   });
 
   it('ピティ未達なら通常抽選（閾値-1 では S 確定にしない）', () => {
-    const alwaysB = () => 0.99;
-    expect(rollRank('premium', alwaysB, GACHA_CONFIG.premium.pityThreshold - 1)).toBe('B');
+    const lowRoll = () => 0.99;
+    expect(rollRank('premium', lowRoll, GACHA_CONFIG.premium.pityThreshold - 1)).not.toBe('S');
   });
 });
 
@@ -55,17 +55,17 @@ describe('nextPityCount', () => {
     expect(nextPityCount(0, 'B')).toBe(1);
   });
 
-  it('premium 天井連続 B→次が S 確定→カウンタが 0 に戻る一連の流れ', () => {
+  it('premium 天井連続 S 非排出→次が S 確定→カウンタが 0 に戻る一連の流れ', () => {
     let pity = 0;
-    const alwaysB = () => 0.99;
+    const lowRoll = () => 0.99;
     const th = GACHA_CONFIG.premium.pityThreshold;
     for (let i = 0; i < th; i++) {
-      const rank = rollRank('premium', alwaysB, pity);
-      expect(rank).toBe('B');
+      const rank = rollRank('premium', lowRoll, pity);
+      expect(rank).not.toBe('S'); // 低い乱数＝最下位ランク帯（C を追加したので B とは限らない）
       pity = nextPityCount(pity, rank);
     }
     expect(pity).toBe(th);
-    const forced = rollRank('premium', alwaysB, pity);
+    const forced = rollRank('premium', lowRoll, pity);
     expect(forced).toBe('S');
     pity = nextPityCount(pity, forced);
     expect(pity).toBe(0);
@@ -124,8 +124,8 @@ describe('pityThreshold ヘルパ', () => {
 describe('GACHA_CONFIG 整合性', () => {
   it('各種類の排出率合計が 1.0', () => {
     for (const kind of ['normal', 'premium'] as const) {
-      const { B, A, S } = GACHA_CONFIG[kind].rates;
-      expect(B + A + S).toBeCloseTo(1.0, 10);
+      const { C, B, A, S } = GACHA_CONFIG[kind].rates;
+      expect(C + B + A + S).toBeCloseTo(1.0, 10);
     }
   });
 

@@ -303,7 +303,7 @@ describe('採用ガチャ（v0.22）', () => {
     });
     for (let i = 0; i < th; i++) {
       useGameStore.getState().pullGacha('premium');
-      expect(useGameStore.getState().candidate?.rank).toBe('B');
+      expect(useGameStore.getState().candidate?.rank).not.toBe('S');
     }
     expect(useGameStore.getState().gachaPity).toBe(th);
     useGameStore.getState().pullGacha('premium');

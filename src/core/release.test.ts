@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AXIS_QUALITY_BONUS_CAP, EQUIP_QUALITY_BONUS_CAP } from '../data/balance';
 import { SCALE_BY_ID } from '../data/scales';
-import type { CurrentProject, DevAxes, Work } from '../state/types';
+import type { CurrentProject, DevAxes, Employee, Work } from '../state/types';
 import { ZERO_AXES } from '../state/types';
 import { INITIAL_SHARE } from '../utils/sales';
 import { mulberry32 } from './ports';
@@ -198,7 +198,7 @@ describe('computeRelease', () => {
       level: 1,
       exp: 0,
       wage: 540_000,
-      specialties: [],
+      specialties: [], skills: {},
     };
     const bystander = { ...worker, id: 'e2', name: 'テスト 次郎' };
     const c = ctx({
@@ -250,7 +250,7 @@ describe('computeRelease', () => {
     level: 1,
     exp: 0,
     wage: 540_000,
-    specialties: [],
+    specialties: [], skills: {},
   };
   // program の devStats を積んだ状態（装備の program 倍率が効く土台）
   const builtProgram = () =>
@@ -432,5 +432,54 @@ describe('applyLaunchAd（ローンチ広告＝発売後リワード）', () => 
     applyLaunchAd(original);
     expect(original.initialRevenue).toBe(1_000_000);
     expect(original.launchAdUsed).toBe(false);
+  });
+});
+
+describe('実装ステップ1：互換アダプタで現行スコアが変わらないこと', () => {
+  /**
+   * docs/plans/20260725-score-redesign/proposal.md 実装ステップ1 の安全弁。
+   *
+   * スキルを導入したが、スコア計算の切り替えは実装ステップ3 で行う。
+   * それまでは「総合力 ÷ 100 → power」の互換アダプタで**現行の数値が一切変わらない**
+   * ことを保証する。ここが崩れたら、切り替え前にバランスが動いてしまっている。
+   */
+  const withSkills = (power: number, skills: Employee['skills']): Employee =>
+    ({
+      id: 'e1',
+      name: 'テスト',
+      role: 'programmer' as const,
+      power,
+      basePower: power,
+      level: 1,
+      exp: 0,
+      wage: 540_000,
+      specialties: [],
+      skills,
+    }) as Employee;
+
+  it('skills の有無でメタスコア・売上が変わらない（power が同じなら同じ結果）', () => {
+    const base = withSkills(0.5, {});
+    const withSkill = withSkills(0.5, { programming: 30, graphics: 20 });
+    const ctxFor = (e: Employee) =>
+      ctx({ employees: [e], current: project({ assignedEmployeeIds: ['e1'] }) });
+
+    const a = computeRelease(ctxFor(base), undefined, deps());
+    const b = computeRelease(ctxFor(withSkill), undefined, deps());
+
+    expect(b.work.metascore).toBe(a.work.metascore);
+    expect(b.work.quality).toBe(a.work.quality);
+    expect(b.work.initialRevenue).toBe(a.work.initialRevenue);
+    expect(b.work.salesPool).toBe(a.work.salesPool);
+  });
+
+  it('スコアを決めているのは power のまま（skills を変えても power が同じなら不変）', () => {
+    const ctxFor = (skills: Employee['skills']) =>
+      ctx({
+        employees: [withSkills(0.5, skills)],
+        current: project({ assignedEmployeeIds: ['e1'] }),
+      });
+    const a = computeRelease(ctxFor({ programming: 50 }), undefined, deps()).work;
+    const b = computeRelease(ctxFor({ pr: 50 }), undefined, deps()).work;
+    expect(b.metascore).toBe(a.metascore);
   });
 });

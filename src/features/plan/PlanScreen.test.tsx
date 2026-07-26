@@ -15,7 +15,7 @@ const emp: Employee = {
   level: 1,
   exp: 0,
   wage: 500_000,
-  specialties: [],
+  specialties: [], skills: {},
 };
 
 describe('PlanScreen（ユースケース：企画を立てて開発を開始する）', () => {

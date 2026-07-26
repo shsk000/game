@@ -12,7 +12,7 @@ const emp = (over: Partial<Employee> = {}): Employee => ({
   level: 1,
   exp: 0,
   wage: 540_000,
-  specialties: [],
+  specialties: [], skills: {},
   ...over,
 });
 
@@ -95,5 +95,24 @@ describe('applyReleaseGrowth', () => {
     const r = applyReleaseGrowth([a], ['a'], 95);
     expect(r.employees[0].level).toBe(GROWTH.levelCap);
     expect(r.levelUps).toEqual([]);
+  });
+});
+
+describe('旧セーブから移行した社員（rank なし）の成長', () => {
+  it('レベルが上がるとスキルも旧来の成長率と同じ比率で伸びる', () => {
+    // 旧セーブ移行組は rank を持たない。以前はここでスキルが据え置かれ、
+    // 「レベルは上がったのに強くならない」状態になっていた（実機検証で発見）。
+    const before = emp({ power: 0.4, basePower: 0.4, level: 1, skills: { programming: 40 } });
+    const after = applyReleaseGrowth([before], ['e1'], 95).employees[0];
+    expect(after.level).toBeGreaterThan(before.level);
+    expect(after.power).toBe(powerAt(0.4, after.level));
+    // power と同じ倍率でスキルも伸びている
+    expect(after.skills!.programming!).toBeCloseTo(40 * (after.power / before.power), 1);
+  });
+
+  it('2スキル持ちでも配分の比率は変わらない', () => {
+    const before = emp({ power: 0.5, basePower: 0.5, level: 1, skills: { graphics: 30, sound: 20 } });
+    const after = applyReleaseGrowth([before], ['e1'], 95).employees[0];
+    expect(after.skills!.graphics! / after.skills!.sound!).toBeCloseTo(30 / 20, 2);
   });
 });

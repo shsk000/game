@@ -80,6 +80,23 @@ export type EmployeeSpecialty = {
   bonus: number;
 };
 
+/**
+ * 社員のスキル（docs/spec/score-model.md §1）。
+ * 上4つは開発スキルで、それぞれ対応する特徴ポイントを伸ばす。
+ * `pr`（広報）だけ特徴ポイントに効かず、売上に効く。
+ */
+export type SkillId = 'programming' | 'graphics' | 'sound' | 'scenario' | 'pr';
+
+/** 特徴ポイントを伸ばす4つの開発スキル（広報を除く） */
+export const DEV_SKILL_IDS = ['programming', 'graphics', 'sound', 'scenario'] as const;
+export type DevSkillId = (typeof DEV_SKILL_IDS)[number];
+
+/**
+ * 社員が持つスキル値（0〜100）。**持てるのは1つか2つ**。
+ * 持っていないスキルはキーを置かない（＝その分野は伸ばせない）。
+ */
+export type SkillSet = Partial<Record<SkillId, number>>;
+
 export type Employee = {
   id: string;
   name: string;
@@ -103,6 +120,12 @@ export type Employee = {
   exp: number;
   wage: number;
   specialties: EmployeeSpecialty[];
+  /**
+   * スキル（docs/spec/score-model.md §1）。**1つか2つ**。値は 0〜100。
+   * 合計＝総合力。ランクが天井を、レベルが現在値を決める。
+   * 旧セーブは storage の移行で power/role から生成される。
+   */
+  skills: SkillSet;
   /**
    * v0.25：装備（スロット→アイテムID）。未装備スロットは undefined、旧セーブの社員は undefined。
    * 効果はリリース品質に別枠で加点（EQUIP_QUALITY_BONUS_CAP）。see core/equip.ts。

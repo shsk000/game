@@ -29,7 +29,7 @@ const emp = (id: string, role: EmployeeRole): Employee => ({
   level: 1,
   exp: 0,
   wage: 0,
-  specialties: [],
+  specialties: [], skills: {},
 });
 
 /** 平均的プレイヤー：相性=初期帯平均(compat1.1→31点)・タイピング70・軸ボーナス半分 */
