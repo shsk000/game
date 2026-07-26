@@ -17,7 +17,8 @@ docs/
   spec/               ← ★現行の確定仕様（生きた資料）。実装と一致させる
     CLAUDE.md         ← spec を書くときのルール（このフォルダで作業すると自動で読まれる）
     glossary.md       ← 用語定義（何がどこに属するか・どの機能が実際に効いているか）
-    scoring.md        ← 品質・メタスコア・売上の計算式
+    score-model.md    ← スキル・特徴ポイント・メタスコアの確定仕様（未実装。実装で置き換える先）
+    scoring.md        ← 現在動いている計算式（score-model の実装が入るまでの現行版）
   plans/<id>/         ← 検討中の提案と決定履歴
     proposal.md
   roadmap.md          ← これから作るものの地図
