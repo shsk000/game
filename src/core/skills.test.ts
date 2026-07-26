@@ -195,3 +195,25 @@ describe('scaleSkills（旧セーブ移行組の成長）', () => {
     expect(scaleSkills({}, 2)).toEqual({});
   });
 });
+
+describe('rollSkills：引いた主スキルが常に最大値（職種分布の前提）', () => {
+  it('2スキル持ちでも主スキルが最大値になる', () => {
+    // roleFromSkills は primarySkillOf（最大値）を見るので、これが崩れると
+    // 職種分布（programmer 40% / designer 40% / pr 20%）が黙って歪む。
+    // spreadRatio を 50/50 にするとタイブレークが ALL_SKILL_IDS の順に落ちて落ちる
+    expect(SKILL_CONFIG.spreadRatio.primary).toBeGreaterThan(
+      SKILL_CONFIG.spreadRatio.secondary,
+    );
+    for (let seed = 0; seed < 200; seed++) {
+      const s = rollSkills(40, mulberry32(seed), 1);
+      const ids = ownedSkillIds(s);
+      if (ids.length < 2) continue;
+      const max = Math.max(...ids.map((id) => s[id] ?? 0));
+      const primary = primarySkillOf(s);
+      expect(s[primary!]).toBe(max);
+      // 同値が並ばない（並ぶとタイブレーク順に依存してしまう）
+      const others = ids.filter((id) => id !== primary).map((id) => s[id] ?? 0);
+      expect(Math.max(...others)).toBeLessThan(max);
+    }
+  });
+});

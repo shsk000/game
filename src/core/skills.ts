@@ -128,6 +128,14 @@ export const rollRank4 = (kind: GachaKind, rng: Rng = Math.random, pityCount = 0
  *
  * 実装ステップ3 で role を廃止したら、均等（各20%）に戻す。
  */
+/**
+ * ⚠ **前提**：この重み付けが職種分布を再現できるのは、`roleFromSkills` が見る
+ * `primarySkillOf`（値が最大のスキル）が「抽選で引いた主スキル」と一致するから。
+ * これは `SKILL_CONFIG.spreadRatio` が primary 0.55 > secondary 0.45 で成り立っている。
+ * 50/50 にすると同値のタイブレークが `ALL_SKILL_IDS` の順（programming が先頭）に落ち、
+ * **職種分布が黙って programming 寄りに歪む**（＝バグ抑制の期待値が動く）。
+ * skills.test.ts に「引いた主スキル＝最大値」を固定するテストがある。
+ */
 const PRIMARY_SKILL_WEIGHTS: readonly (readonly [SkillId, number])[] = [
   ['programming', 0.4],
   ['graphics', 0.4 / 3],

@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { rollRank } from '../core/gacha';
-import { mulberry32 } from '../core/ports';
+import { defaultDeps, mulberry32 } from '../core/ports';
+import { setGameDeps, useGameStore } from '../state/gameStore';
 import { GACHA_CONFIG } from './balance';
 import { newCandidate } from './employees';
 
@@ -84,3 +85,63 @@ describe('採用ガチャの出力分布（ゴールデン値）', () => {
     }
   });
 });
+
+/**
+ * **本番の入口（`pullGacha`）から通す**分布ガード。
+ *
+ * これが必要な理由：上のテスト群はランクを自分で決めて `newCandidate` に渡すので、
+ * ゲーム本体が呼ぶランク抽選関数を**一度も通らない**。実際にそこが差し替わったまま残り
+ * （`gameStore` が `rollRank4` を呼び、C を 35% 排出していた）、上のテストは全部緑だった。
+ * 「本番が通らない経路を検証している」のは、恒真テストと同じ穴。
+ */
+describe('本番経路（pullGacha）の出力分布', () => {
+  const measureViaStore = (kind: 'normal' | 'premium', n: number) => {
+    const rng = mulberry32(23);
+    setGameDeps({ rng, now: () => 0 });
+    const store = useGameStore.getState();
+    let powerSum = 0;
+    const ranks: Record<string, number> = { C: 0, B: 0, A: 0, S: 0 };
+    const roles: Record<string, number> = { programmer: 0, designer: 0, pr: 0 };
+    let pulled = 0;
+    for (let i = 0; i < n; i++) {
+      // 資金と天井をリセットして1回ずつ引く（価格・破産の影響を除く）
+      useGameStore.setState({ funds: 1e12, gachaPity: 0, candidate: null });
+      if (!useGameStore.getState().pullGacha(kind)) continue;
+      const c = useGameStore.getState().candidate;
+      if (!c) continue;
+      pulled += 1;
+      powerSum += c.power;
+      ranks[c.rank ?? 'B'] += 1;
+      roles[c.role] += 1;
+    }
+    void store;
+    return { pulled, meanPower: powerSum / pulled, ranks, roles };
+  };
+
+  afterEach(() => {
+    setGameDeps(defaultDeps);
+    useGameStore.setState({ candidate: null, gachaPity: 0 });
+  });
+
+  it('C ランクが1枚も出ない（実装ステップ3 まで排出しない）', () => {
+    const { pulled, ranks } = measureViaStore('premium', 2_000);
+    expect(pulled).toBe(2_000);
+    expect(ranks.C).toBe(0);
+  });
+
+  it.each(['normal', 'premium'] as const)(
+    '%s の平均 power がランク帯の理論値と一致する（±0.01）',
+    (kind) => {
+      const { meanPower } = measureViaStore(kind, 20_000);
+      expect(meanPower).toBeCloseTo(theoreticalMeanPower(kind), 2);
+    },
+  );
+
+  it('職種の分布が旧 ROLE_DICE と同じ（programmer 40% / designer 40% / pr 20%）', () => {
+    const { pulled, roles } = measureViaStore('normal', 20_000);
+    expect(roles.programmer / pulled).toBeCloseTo(0.4, 1);
+    expect(roles.designer / pulled).toBeCloseTo(0.4, 1);
+    expect(roles.pr / pulled).toBeCloseTo(0.2, 1);
+  });
+});
+

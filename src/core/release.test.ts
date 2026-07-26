@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AXIS_QUALITY_BONUS_CAP, EQUIP_QUALITY_BONUS_CAP } from '../data/balance';
 import { newCandidate } from '../data/employees';
+import { rollRank } from './gacha';
 import { SCALE_BY_ID } from '../data/scales';
 import type { CurrentProject, DevAxes, Employee, Work } from '../state/types';
 import { ZERO_AXES } from '../state/types';
@@ -491,5 +492,44 @@ describe('実装ステップ1：現行のスコア・売上が変わらないこ
     expect(cand.power).toBeLessThanOrEqual(0.4);
     const totalSkill = Object.values(cand.skills ?? {}).reduce((a, b) => a + (b ?? 0), 0);
     expect(totalSkill).toBeCloseTo(cand.power * 100, 1);
+  });
+});
+
+describe('序盤バランスのガード（採用 → 発売の通し）', () => {
+  /**
+   * ガチャで実際に引いた社員で発売まで通し、**プレイヤーが受け取る結果**を固定する。
+   *
+   * 上のゴールデン値テストは power を直接渡すので、「式は同じだが入力の分布が変わった」
+   * 事故（実装ステップ1 の回帰）では落ちない。ここは採用から通すので落ちる。
+   *
+   * 序盤（社員2人・ミニゲーム）はメタスコアがヒット区分の境界（29/30）付近に居るため、
+   * 採用が少し弱くなるだけで 失敗 ×3.333 → 致命的失敗 ×0.333 に落ちて売上が桁で変わる。
+   * ゲーム開始時の社員は0人なので、全プレイヤーが必ずここを通る。
+   */
+  it('序盤チームの平均売上と致命的失敗率が基準から動かない', () => {
+    const rng = mulberry32(101);
+    let sum = 0;
+    let metaSum = 0;
+    let fatal = 0;
+    const N = 2_000;
+    for (let i = 0; i < N; i++) {
+      const employees = [0, 1].map((k) => ({
+        ...newCandidate({ rng, now: () => 0 }, rollRank('normal', rng)),
+        id: `e${k}`,
+      })) as Employee[];
+      const c = ctx({
+        employees,
+        current: project({ scale: 'mini', assignedEmployeeIds: employees.map((e) => e.id) }),
+      });
+      const w = computeRelease(c, undefined, deps()).work;
+      sum += w.salesPool + w.initialRevenue;
+      metaSum += w.metascore;
+      if (w.metascore <= 29) fatal += 1;
+    }
+    // 実装ステップ1 前と同じ水準（平均メタ 29.5 / 平均売上 ¥60万台 / 致命的失敗 約49%）。
+    // 回帰時は 平均メタ 27.8 / ¥40万 / 69.6% まで落ちた
+    expect(metaSum / N).toBeGreaterThan(29);
+    expect(sum / N).toBeGreaterThan(560_000);
+    expect(fatal / N).toBeLessThan(0.55);
   });
 });

@@ -254,6 +254,12 @@ export const SKILL_CONFIG = {
  * 採用ガチャの排出率（C を含む4種構成）🔧。
  * normal は S を出さない（旧仕様どおり）。C を追加したぶんは B から割いた。
  */
+/**
+ * ⚠ **まだ本番では使っていない**（実装ステップ3 から）。
+ * 現行のガチャは `GACHA_CONFIG[kind].rates`（C を出さない旧テーブル）を読む。
+ * C の天井 40 が効くのはスキルが直接スコアに乗る実装ステップ3 なので、
+ * それより前に C を排出すると「C と表示されるが power は旧ロジック」という嘘になる。
+ */
 export const GACHA_RANK_RATES: Record<GachaKind, Record<GachaRank, number>> = {
   normal: { C: 0.35, B: 0.45, A: 0.2, S: 0 },
   premium: { C: 0.1, B: 0.35, A: 0.4, S: 0.15 },

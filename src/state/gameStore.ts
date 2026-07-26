@@ -9,8 +9,7 @@ import {
 import { simulateAverageDevRun } from '../core/devSimulate';
 import { computeBorrow, computeMonthlyTick, computeRepay, computeSpend } from '../core/economy';
 import { canBuyEquipment, freeCopies, type OwnedItems } from '../core/equip';
-import { gachaPrice, nextPityCount } from '../core/gacha';
-import { rollRank4 } from '../core/skills';
+import { gachaPrice, nextPityCount, rollRank } from '../core/gacha';
 import type { LevelUp } from '../core/growth';
 import { investPrice } from '../core/invest';
 import { type Deps, defaultDeps } from '../core/ports';
@@ -681,7 +680,10 @@ export const useGameStore = create<GameState>()(
       const price = gachaPrice(kind, get().unlockedScales);
       if (get().funds < price) return false;
       const pity = get().gachaPity;
-      const rank = rollRank4(kind, deps.rng, pity);
+      // 実装ステップ1〜2 は旧ランク抽選（B/A/S）。C を含む rollRank4 への切り替えは
+      // 実装ステップ3（ランクの天井が効くのと同時。それまで C を出すと
+      // 「C と表示されるが power は旧ロジック」という別の嘘になる）
+      const rank = rollRank(kind, deps.rng, pity);
       set({
         funds: get().funds - price,
         candidate: newCandidate(deps, rank),
