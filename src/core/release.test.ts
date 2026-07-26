@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AXIS_QUALITY_BONUS_CAP, EQUIP_QUALITY_BONUS_CAP } from '../data/balance';
+import { newCandidate } from '../data/employees';
 import { SCALE_BY_ID } from '../data/scales';
 import type { CurrentProject, DevAxes, Employee, Work } from '../state/types';
 import { ZERO_AXES } from '../state/types';
@@ -435,18 +436,21 @@ describe('applyLaunchAd（ローンチ広告＝発売後リワード）', () => 
   });
 });
 
-describe('実装ステップ1：互換アダプタで現行スコアが変わらないこと', () => {
+describe('実装ステップ1：現行のスコア・売上が変わらないこと（ゴールデン値）', () => {
   /**
    * docs/plans/20260725-score-redesign/proposal.md 実装ステップ1 の安全弁。
    *
-   * スキルを導入したが、スコア計算の切り替えは実装ステップ3 で行う。
-   * それまでは「総合力 ÷ 100 → power」の互換アダプタで**現行の数値が一切変わらない**
-   * ことを保証する。ここが崩れたら、切り替え前にバランスが動いてしまっている。
+   * 以前ここには「power が同じならスコアが同じ」というテストがあったが、
+   * それは**互換アダプタが何をしても通る恒真テスト**で、`power` の値そのものが
+   * 変わってしまう回帰（採用社員の平均 power が半減）を素通しした。
+   *
+   * いまは**代表チームでの実売上をゴールデン値で固定**する。式でも分布でもなく、
+   * プレイヤーが受け取る結果そのものを見る。ここが動いたらバランスが動いている。
    */
-  const withSkills = (power: number, skills: Employee['skills']): Employee =>
-    ({
-      id: 'e1',
-      name: 'テスト',
+  const teamOf = (powers: number[]): Employee[] =>
+    powers.map((power, i) => ({
+      id: `e${i}`,
+      name: `社員${i}`,
       role: 'programmer' as const,
       power,
       basePower: power,
@@ -454,32 +458,38 @@ describe('実装ステップ1：互換アダプタで現行スコアが変わら
       exp: 0,
       wage: 540_000,
       specialties: [],
-      skills,
-    }) as Employee;
+      skills: { programming: Math.round(power * 100 * 10) / 10 },
+    })) as Employee[];
 
-  it('skills の有無でメタスコア・売上が変わらない（power が同じなら同じ結果）', () => {
-    const base = withSkills(0.5, {});
-    const withSkill = withSkills(0.5, { programming: 30, graphics: 20 });
-    const ctxFor = (e: Employee) =>
-      ctx({ employees: [e], current: project({ assignedEmployeeIds: ['e1'] }) });
+  const runWith = (powers: number[], scale: 'mini' | 'indie') => {
+    const employees = teamOf(powers);
+    const c = ctx({
+      employees,
+      current: project({ scale, assignedEmployeeIds: employees.map((e) => e.id) }),
+    });
+    return computeRelease(c, undefined, deps()).work;
+  };
 
-    const a = computeRelease(ctxFor(base), undefined, deps());
-    const b = computeRelease(ctxFor(withSkill), undefined, deps());
-
-    expect(b.work.metascore).toBe(a.work.metascore);
-    expect(b.work.quality).toBe(a.work.quality);
-    expect(b.work.initialRevenue).toBe(a.work.initialRevenue);
-    expect(b.work.salesPool).toBe(a.work.salesPool);
+  it('序盤（power 0.35 × 2人・mini）の結果が変わらない', () => {
+    const w = runWith([0.35, 0.35], 'mini');
+    expect(w.metascore).toBe(28);
+    expect(w.salesPool + w.initialRevenue).toBe(104_895);
   });
 
-  it('スコアを決めているのは power のまま（skills を変えても power が同じなら不変）', () => {
-    const ctxFor = (skills: Employee['skills']) =>
-      ctx({
-        employees: [withSkills(0.5, skills)],
-        current: project({ assignedEmployeeIds: ['e1'] }),
-      });
-    const a = computeRelease(ctxFor({ programming: 50 }), undefined, deps()).work;
-    const b = computeRelease(ctxFor({ pr: 50 }), undefined, deps()).work;
-    expect(b.metascore).toBe(a.metascore);
+  it('中盤（power 0.76 × 3人・indie）の結果が変わらない', () => {
+    const w = runWith([0.76, 0.76, 0.76], 'indie');
+    expect(w.metascore).toBe(48);
+    expect(w.salesPool + w.initialRevenue).toBe(104_989_500);
+  });
+
+  it('採用ガチャで出た社員でも同じ結果になる（分布と式の両方を通す）', () => {
+    // ここが落ちるとき、原因は式ではなく「誰が出るか」が変わっている。
+    // 実装ステップ1 の回帰（平均 power が半減）はこの経路でしか見えなかった
+    const rng = mulberry32(5);
+    const cand = newCandidate({ rng, now: () => 0 }, 'B');
+    expect(cand.power).toBeGreaterThanOrEqual(0.2);
+    expect(cand.power).toBeLessThanOrEqual(0.4);
+    const totalSkill = Object.values(cand.skills ?? {}).reduce((a, b) => a + (b ?? 0), 0);
+    expect(totalSkill).toBeCloseTo(cand.power * 100, 1);
   });
 });

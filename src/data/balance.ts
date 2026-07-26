@@ -149,8 +149,9 @@ export type GachaKind = 'normal' | 'premium';
  */
 export const GACHA_CONFIG = {
   normal: {
-    // 実装ステップ1で C を追加（GACHA_RANK_RATES が新しい正）。ここは旧経路の互換用
-    rates: { C: 0.35, B: 0.45, A: 0.2, S: 0 },
+    // S 無し。S の 5% 分を A に寄せて B70/A30（🔧）
+    // C は排出しない（実装ステップ3 で GACHA_RANK_RATES に切り替えるまで）
+    rates: { C: 0, B: 0.7, A: 0.3, S: 0 },
     priceByScale: {
       mini: 50_000, // ¥5 万
       mobile: 500_000, // ¥50 万
@@ -163,7 +164,8 @@ export const GACHA_CONFIG = {
   },
   premium: {
     // 実装ステップ1で C を追加（GACHA_RANK_RATES が新しい正）。ここは旧経路の互換用
-    rates: { C: 0.1, B: 0.35, A: 0.4, S: 0.15 },
+    // C は排出しない（実装ステップ3 で GACHA_RANK_RATES に切り替えるまで）
+    rates: { C: 0, B: 0.4, A: 0.45, S: 0.15 },
     priceByScale: {
       mini: 6_000_000, // ¥600 万（初期資金 ¥500 万を上回る＝序盤は 1 発も引けない）
       mobile: 30_000_000, // ¥3000 万

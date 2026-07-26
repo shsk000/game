@@ -1,6 +1,6 @@
 import { computeMonthlyWage, GROWTH } from '../data/balance';
 import type { Employee } from '../state/types';
-import { growSkills, scaleSkills, totalPowerOf } from './skills';
+import { scaleSkills } from './skills';
 
 /**
  * v0.16 社員成長システム（spec v16 §1）。純粋関数のみ。
@@ -60,22 +60,12 @@ export const applyReleaseGrowth = (
       reached.push(level);
     }
     if (level === e.level) return { ...e, exp };
-    // スキルを先に伸ばす（docs/spec/score-model.md §1：増えるのは総合力で、
-    // それが持っているスキルに配分される。スキルの種類は増えない）。
-    let skills: Employee['skills'];
-    let power: number;
-    if (e.rank) {
-      // 通常：ランクの天井に向かって総合力が伸びる
-      skills = growSkills(e.skills ?? {}, e.rank, level);
-      // 互換アダプタ：旧経路が使う power は総合力から導出する（実装ステップ3 で削除）。
-      power = Math.round((totalPowerOf(skills) / 100) * 100) / 100;
-    } else {
-      // 旧セーブから移行した社員はランクを持たない。旧来の成長率で power を出し、
-      // スキルも同じ比率でスケールする（レベルだけ上がってスキルが伸びない状態を防ぐ）。
-      power = powerAt(e.basePower, level);
-      const factor = e.power > 0 ? power / e.power : 1;
-      skills = scaleSkills(e.skills ?? {}, factor);
-    }
+    // 実装ステップ1 では成長も旧ロジックのまま凍結する。power を先に出し、
+    // スキルはそれに同じ比率で追従させる（総合力＝power × 100 を維持）。
+    // ランクの天井（growSkills）に切り替えるのは実装ステップ3。
+    const power = powerAt(e.basePower, level);
+    const factor = e.power > 0 ? power / e.power : 1;
+    const skills = scaleSkills(e.skills ?? {}, factor);
     const wage = Math.round(computeMonthlyWage(power, level));
     for (const lv of reached) {
       levelUps.push({

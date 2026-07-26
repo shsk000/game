@@ -73,7 +73,7 @@ describe('rollSkills（採用時のスキル抽選）', () => {
   it('必ず1つか2つ持ち、合計はランクの Lv1 帯に収まる', () => {
     for (const rank of ['C', 'B', 'A', 'S'] as GachaRank[]) {
       for (let seed = 0; seed < 50; seed++) {
-        const s = rollSkills(rank, mulberry32(seed));
+        const s = rollSkills(totalPowerFor(rank, 1, 0.5), mulberry32(seed));
         const ids = ownedSkillIds(s);
         expect(ids.length).toBeGreaterThanOrEqual(1);
         expect(ids.length).toBeLessThanOrEqual(2);

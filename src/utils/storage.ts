@@ -1,5 +1,11 @@
 import { computeStageUnlocks } from '../core/progression';
-import { computeMonthlyWage, INITIAL_FUNDS, SCALE_BALANCE } from '../data/balance';
+import {
+  computeMonthlyWage,
+  GACHA_CONFIG,
+  type GachaRank,
+  INITIAL_FUNDS,
+  SCALE_BALANCE,
+} from '../data/balance';
 import type { CategoryId } from '../data/categories';
 import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import type { GenreId } from '../data/genres';
@@ -229,12 +235,27 @@ const ROLE_TO_PRIMARY_SKILL: Record<string, SkillId> = {
   pr: 'pr',
 };
 
+/**
+ * `basePower` からランクを復元する。
+ *
+ * `basePower` は `rollPowerForRank` がランク帯（B 0.2〜0.4 / A 0.4〜0.55 / S 0.55〜0.7）から
+ * 引いた値なので、帯へ戻すのは**推測ではなく逆変換**。実装ステップ1 ではランクは
+ * 表示（ガチャランクのバッジ）にしか効かないので、これで数値は一切動かない。
+ */
+const rankFromBasePower = (basePower: number): GachaRank => {
+  if (basePower >= GACHA_CONFIG.powerRange.S.min) return 'S';
+  if (basePower >= GACHA_CONFIG.powerRange.A.min) return 'A';
+  return 'B';
+};
+
 const ensureSkills = (e: Employee): Employee => {
+  const rank = e.rank ?? rankFromBasePower(e.basePower ?? e.power);
   const owned = Object.values(e.skills ?? {}).filter((v) => (v ?? 0) > 0);
-  if (owned.length > 0) return e;
+  if (owned.length > 0) return e.rank ? e : { ...e, rank };
   const primary = ROLE_TO_PRIMARY_SKILL[e.role] ?? 'programming';
-  const total = Math.round(Math.max(0, Math.min(1, e.power)) * 100 * 10) / 10;
-  return { ...e, skills: { [primary]: total } };
+  // 総合力＝旧 power × 100（実装ステップ1 では同じ値の別表現）
+  const total = Math.round(Math.max(0, e.power) * 100 * 10) / 10;
+  return { ...e, rank, skills: { [primary]: total } };
 };
 
 /** v0.9 → v0.10 用：work の金額を ×10,000 倍する */

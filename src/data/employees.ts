@@ -1,6 +1,7 @@
 import type { Deps, Rng } from '../core/ports';
 import { defaultDeps } from '../core/ports';
-import { primarySkillOf, rollRank4, rollSkills, totalPowerOf } from '../core/skills';
+import { rollRank } from '../core/gacha';
+import { primarySkillOf, rollSkills } from '../core/skills';
 import type { Candidate, Employee, EmployeeRole, EmployeeSpecialty, SkillId } from '../state/types';
 import { computeMonthlyWage, GACHA_CONFIG, type GachaRank, ROLE_EFFECT } from './balance';
 import type { CategoryId } from './categories';
@@ -137,15 +138,18 @@ let counter = 0;
  */
 export const newCandidate = (
   deps: Deps = defaultDeps,
-  rank: GachaRank = rollRank4('normal', deps.rng),
+  rank: GachaRank = rollRank('normal', deps.rng),
 ): Candidate => {
   const { rng, now } = deps;
-  // スキルが真（docs/spec/score-model.md §1）。role は主スキルから導出した互換表示。
-  const skills = rollSkills(rank, rng);
+  // 実装ステップ1 は「表示とデータ構造の器を作る」だけ。**値の生成は旧ロジックのまま凍結**する。
+  // power をスキルから導出しようとすると、旧 power 帯（B 0.2〜0.4）と新しい総合力帯
+  // （Lv1 15〜28）で単位が合わず、採用社員が一律に弱くなる（序盤の売上が桁で落ちる）。
+  // ランクの天井を効かせる切り替えは実装ステップ3 で一点に集約して行う。
+  const power = rollPowerForRank(rank, rng);
+  // 総合力＝旧 power × 100（同じ値の別表現）。分散ペナルティはステップ3 から効かせるので、
+  // ここでは総合力を保存する（2スキルでも合計は power × 100 のまま）。
+  const skills = rollSkills(Math.round(power * 100 * 10) / 10, rng, 1);
   const role = roleFromSkills(skills);
-  // 互換アダプタ：旧経路（品質計算・バグ抑制・給与）が使う power を総合力から導出する。
-  // 実装ステップ3 で旧経路を削除したらこのフィールドも消える。
-  const power = powerFromSkills(skills);
   counter += 1;
   return {
     id: `c-${now()}-${counter}`,
@@ -161,13 +165,6 @@ export const newCandidate = (
     skills,
   };
 };
-
-/**
- * 互換アダプタ：総合力（0〜100）→ 旧 power（0〜1）。
- * 実装ステップ3 で旧スコア経路を削除するまでの橋渡し。
- */
-export const powerFromSkills = (skills: Employee['skills']): number =>
-  Math.round((totalPowerOf(skills) / 100) * 100) / 100;
 
 /** 主スキル → 旧 role（表示・旧経路の分岐用）。実装ステップ3 で role ごと削除する */
 export const roleFromSkills = (skills: Employee['skills']): EmployeeRole => {

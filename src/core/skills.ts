@@ -60,15 +60,19 @@ export const totalPowerFor = (rank: GachaRank, level: number, lv1Roll = 0.5): nu
  * - 1スキル … そのまま1分野に乗る（尖る）
  * - 2スキル … 分散ペナルティを掛けてから2分野へ配分（**専門特化のほうが総合力が高い**）
  */
-export const distributeSkills = (totalPower: number, ids: SkillId[]): SkillSet => {
+export const distributeSkills = (
+  totalPower: number,
+  ids: SkillId[],
+  spreadPenalty: number = SKILL_CONFIG.spreadPenalty,
+): SkillSet => {
   if (ids.length === 0) return {};
   if (ids.length === 1) return { [ids[0]]: Math.round(totalPower * 10) / 10 };
-  const eff = totalPower * SKILL_CONFIG.spreadPenalty;
-  const { primary, secondary } = SKILL_CONFIG.spreadRatio;
-  return {
-    [ids[0]]: Math.round(eff * primary * 10) / 10,
-    [ids[1]]: Math.round(eff * secondary * 10) / 10,
-  };
+  const eff = Math.round(totalPower * spreadPenalty * 10) / 10;
+  const { primary } = SKILL_CONFIG.spreadRatio;
+  const head = Math.round(eff * primary * 10) / 10;
+  // 端数は副スキル側で吸収する。こうしないと丸めで合計が総合力からズレる
+  // （実装ステップ1 は「総合力 ＝ 旧 power × 100」が成り立つことが前提）
+  return { [ids[0]]: head, [ids[1]]: Math.round((eff - head) * 10) / 10 };
 };
 
 /** 社員が実際に持っているスキルの ID（値が 0 より大きいもの） */
@@ -115,16 +119,53 @@ export const rollRank4 = (kind: GachaKind, rng: Rng = Math.random, pityCount = 0
 };
 
 /**
+ * 主スキルの抽選重み。**旧 `ROLE_DICE`（programmer 40% / designer 40% / pr 20%）を
+ * そのまま再現する**ように配分してある。
+ *
+ * 旧 role は 3種、スキルは 5種。graphics / sound / scenario はどれも旧 designer に
+ * 対応するので、この3つで 40% を分け合う。こうすると `roleFromSkills` を通した
+ * 職種の分布が旧実装と一致し、**バグ抑制（プログラマーの power 合計）の期待値が変わらない**。
+ *
+ * 実装ステップ3 で role を廃止したら、均等（各20%）に戻す。
+ */
+const PRIMARY_SKILL_WEIGHTS: readonly (readonly [SkillId, number])[] = [
+  ['programming', 0.4],
+  ['graphics', 0.4 / 3],
+  ['sound', 0.4 / 3],
+  ['scenario', 0.4 / 3],
+  ['pr', 0.2],
+] as const;
+
+const pickWeighted = (rng: Rng): SkillId => {
+  const r = rng();
+  let acc = 0;
+  for (const [id, w] of PRIMARY_SKILL_WEIGHTS) {
+    acc += w;
+    if (r < acc) return id;
+  }
+  return 'programming';
+};
+
+/**
  * 採用時のスキル抽選。
  * スキル数（1つ／2つ）は確率で決まり、**ランクとは無関係**。
+ *
+ * `totalPower` は呼び出し側が渡す。実装ステップ1 では**旧 `power` × 100** を渡して
+ * 数値を凍結しており、ランクの天井（`totalPowerFor`）が効き始めるのは実装ステップ3 から。
  */
-export const rollSkills = (rank: GachaRank, rng: Rng): SkillSet => {
+export const rollSkills = (
+  totalPower: number,
+  rng: Rng,
+  spreadPenalty: number = SKILL_CONFIG.spreadPenalty,
+): SkillSet => {
   const two = rng() < SKILL_CONFIG.twoSkillChance;
-  const pool = [...ALL_SKILL_IDS];
-  const primary = pool.splice(Math.floor(rng() * pool.length), 1)[0];
+  const primary = pickWeighted(rng);
   const ids: SkillId[] = [primary];
-  if (two) ids.push(pool[Math.floor(rng() * pool.length)]);
-  return distributeSkills(totalPowerFor(rank, 1, rng()), ids);
+  if (two) {
+    const rest = ALL_SKILL_IDS.filter((id) => id !== primary);
+    ids.push(rest[Math.floor(rng() * rest.length)]);
+  }
+  return distributeSkills(totalPower, ids, spreadPenalty);
 };
 
 /**

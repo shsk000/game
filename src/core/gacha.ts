@@ -16,7 +16,10 @@ import type { Rng } from './ports';
  * 判定順は S → A → B（rates の合計は 1.0 前提。normal は S=0 なので S は出ない）。
  */
 /**
- * @deprecated 実装ステップ1 で `core/skills.ts` の `rollRank4`（C を含む4種）に置き換えた。
+ * 実装ステップ1〜2 で使う現行のランク抽選（B/A/S の3種）。
+ * C を含む4種（`core/skills.ts` の `rollRank4`）への切り替えは実装ステップ3。
+ * C の天井 40 はスキルがスコアに直結してから効くので、それまで排出すると
+ * 「C と表示されるが実際は B と同じ」という別の嘘になる。
  * 旧テーブル `GACHA_CONFIG[kind].rates` を読むため C も出るが、新しい正は `GACHA_RANK_RATES`。
  * 参照が消えたら削除する。
  */

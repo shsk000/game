@@ -293,14 +293,33 @@ describe('スキル移行（実装ステップ1・docs/spec/score-model.md §1�
     expect(storage.load()?.employees[0].skills).toEqual({ graphics: 61, sound: 22 });
   });
 
-  it('power が壊れていても（範囲外）スキルが 0〜100 に収まる', () => {
+  it('スキルは常に power × 100 と一致する（負の power は 0 で止める）', () => {
+    // 実装ステップ1 の不変条件は「総合力 ＝ 旧 power × 100」。
+    // 上限 100 で切ると、育った社員（S の Lv10 は power 1.645）でこの関係が壊れる。
+    // スキルを 0〜100 に収めるのは、スキルが直接スコアに乗る実装ステップ3 から。
     const d = storage.defaults();
     storage.save({
       ...d,
-      employees: [legacyEmployee('programmer', 9), legacyEmployee('designer', -1)],
+      employees: [legacyEmployee('programmer', 1.5), legacyEmployee('designer', -1)],
     });
     const loaded = storage.load();
-    expect(loaded?.employees[0].skills.programming).toBe(100);
+    expect(loaded?.employees[0].skills.programming).toBe(150);
     expect(loaded?.employees[1].skills.graphics).toBe(0);
+  });
+
+  it('移行した社員にランクが復元される（basePower の帯どおり・数値は動かない）', () => {
+    const d = storage.defaults();
+    storage.save({
+      ...d,
+      employees: [
+        legacyEmployee('programmer', 0.3),
+        legacyEmployee('designer', 0.5),
+        legacyEmployee('pr', 0.6),
+      ],
+    });
+    const loaded = storage.load();
+    expect(loaded?.employees.map((e) => e.rank)).toEqual(['B', 'A', 'S']);
+    // power は移行前後で変わらない
+    expect(loaded?.employees.map((e) => e.power)).toEqual([0.3, 0.5, 0.6]);
   });
 });

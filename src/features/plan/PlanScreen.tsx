@@ -4,10 +4,12 @@ import { JacketView } from '../../components/JacketView';
 import { Tutorial } from '../../components/Tutorial';
 import { PixelButton, PixelModal, PixelWindow } from '../../components/ui';
 import { bugSuppression } from '../../core/bugs';
+import { jobTitleOf } from '../../core/skills';
 import { investPrice } from '../../core/invest';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
 import { planWeeksAllowance, ROLE_EFFECT } from '../../data/balance';
 import { compatLabel, getCompat } from '../../data/compatibility';
+import { formatSkills } from '../office/employeeDisplay';
 import { sumMonthlySalaries } from '../../data/employees';
 import type { GenreId } from '../../data/genres';
 import { GENRE_BY_ID, GENRES } from '../../data/genres';
@@ -451,22 +453,17 @@ export const PlanScreen = () => {
                   <li key={e.id} style={{ fontSize: 12, color: COLORS.textDark }}>
                     <strong>{e.name}</strong>
                     <span style={{ fontSize: 11, color: COLORS.textSub, marginLeft: 6 }}>
-                      {e.role === 'programmer'
-                        ? '🧑‍💻 プログラマー'
-                        : e.role === 'designer'
-                          ? '🎨 デザイナー'
-                          : '📣 広報'}{' '}
-                      ／ Lv{e.level}
+                      {jobTitleOf(e.skills)} ／ Lv{e.level} ／ {formatSkills(e.skills)}
                     </span>
                   </li>
                 ))}
               </ul>
               {(() => {
                 // このチームで作ると何が起きるか（効き先の可視化。値は balance.ts から生成）
+                // ここに出すのは**実際にスコア・売上へ効くものだけ**。
                 // 「開発速度 LoC/秒」は自動開発機能が存在しないため表示しない（進捗は打鍵のみ）
-                const quality = employees
-                  .filter((e) => e.role === 'designer')
-                  .reduce((a, b) => a + b.power * ROLE_EFFECT.designerQualityBonus, 0);
+                // 「🎨 品質 +X」は designerQualityBonus がどの計算にも繋がっておらず、
+                // 何も起きない数値だったため撤去した（docs/spec/glossary.md の ❌廃止）
                 const sales = employees
                   .filter((e) => e.role === 'pr')
                   .reduce((a, b) => a + b.power * ROLE_EFFECT.prSalesBonus, 0);
@@ -483,7 +480,6 @@ export const PlanScreen = () => {
                       rowGap: 2,
                     }}
                   >
-                    <span>🎨 品質 +{quality.toFixed(1)}</span>
                     <span>📣 売上 +{Math.round(sales * 100)}%</span>
                     <span>🐛 バグ抑制 {suppress}%</span>
                   </div>
