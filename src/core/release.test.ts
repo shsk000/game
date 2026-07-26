@@ -1,12 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { AXIS_QUALITY_BONUS_CAP, EQUIP_QUALITY_BONUS_CAP } from '../data/balance';
 import { newCandidate } from '../data/employees';
-import { rollRank } from './gacha';
 import { SCALE_BY_ID } from '../data/scales';
 import type { CurrentProject, DevAxes, Employee, Work } from '../state/types';
 import { ZERO_AXES } from '../state/types';
 import { INITIAL_SHARE } from '../utils/sales';
-import { mulberry32 } from './ports';
+import { setGameDeps, useGameStore } from '../state/gameStore';
+import { defaultDeps, mulberry32 } from './ports';
 import {
   applyLaunchAd,
   computeRelease,
@@ -500,23 +500,38 @@ describe('序盤バランスのガード（採用 → 発売の通し）', () =>
    * ガチャで実際に引いた社員で発売まで通し、**プレイヤーが受け取る結果**を固定する。
    *
    * 上のゴールデン値テストは power を直接渡すので、「式は同じだが入力の分布が変わった」
-   * 事故（実装ステップ1 の回帰）では落ちない。ここは採用から通すので落ちる。
+   * 事故（実装ステップ1 の回帰）では落ちない。ここは**本番の入口（`pullGacha`）から**
+   * 採用して通すので落ちる（lessons #16：ガードは本番が実際に呼ぶ入口から通す）。
    *
    * 序盤（社員2人・ミニゲーム）はメタスコアがヒット区分の境界（29/30）付近に居るため、
    * 採用が少し弱くなるだけで 失敗 ×3.333 → 致命的失敗 ×0.333 に落ちて売上が桁で変わる。
    * ゲーム開始時の社員は0人なので、全プレイヤーが必ずここを通る。
    */
+  afterEach(() => {
+    setGameDeps(defaultDeps);
+    useGameStore.setState({ candidate: null, gachaPity: 0 });
+  });
+
+  /** 本番の入口（pullGacha）から社員を2人引く */
+  const hireTwoViaStore = (): Employee[] => {
+    const out: Employee[] = [];
+    for (let k = 0; k < 2; k++) {
+      useGameStore.setState({ funds: 1e12, gachaPity: 0, candidate: null });
+      useGameStore.getState().pullGacha('normal');
+      const c = useGameStore.getState().candidate;
+      if (c) out.push({ ...c, id: `e${k}` } as Employee);
+    }
+    return out;
+  };
+
   it('序盤チームの平均売上と致命的失敗率が基準から動かない', () => {
-    const rng = mulberry32(101);
+    setGameDeps({ rng: mulberry32(101), now: () => 0 });
     let sum = 0;
     let metaSum = 0;
     let fatal = 0;
     const N = 2_000;
     for (let i = 0; i < N; i++) {
-      const employees = [0, 1].map((k) => ({
-        ...newCandidate({ rng, now: () => 0 }, rollRank('normal', rng)),
-        id: `e${k}`,
-      })) as Employee[];
+      const employees = hireTwoViaStore();
       const c = ctx({
         employees,
         current: project({ scale: 'mini', assignedEmployeeIds: employees.map((e) => e.id) }),
