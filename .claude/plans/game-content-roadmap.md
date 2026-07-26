@@ -97,7 +97,7 @@ Top 5 で「**育成軸復活 × 達成リズム × 探索深化 × 演出品質
 ## 参照
 
 ### 仕様書
-- [/home/shsk/git/game/docs/v09/spec.md](../../docs/v09/spec.md) — v0.9 仕様（spec:56 広告、spec:147 ライバル、spec:357 殿堂、spec:415 複数ライン、spec:431 長期モチベ）
+- 旧 `docs/v09/spec.md`（2026-07-25 削除・git 履歴） — v0.9 仕様（spec:56 広告、spec:147 ライバル、spec:357 殿堂、spec:415 複数ライン、spec:431 長期モチベ）
 - [/home/shsk/git/game/CLAUDE.md](../../CLAUDE.md) — プロジェクトガイド
 - [/home/shsk/git/game/tasks/todo.md](../../tasks/todo.md) — 既存 tasks F `[~]` バグ緑フラッシュ、G リリースビルドログ
 - [/home/shsk/git/game/tasks/lessons.md](../../tasks/lessons.md) — 過去の気付き

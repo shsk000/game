@@ -330,7 +330,7 @@ describe('computeRelease', () => {
     expect(fast.ghostBeaten).toBe(true); // 60 秒 ≤ 記録 120 秒
   });
 
-  // v0.29：ジャンル/テーマは発売で自動解放しない（解放は購入のみ）。docs/v29/spec.md
+  // v0.29：ジャンル/テーマは発売で自動解放しない（解放は購入のみ）。v0.29（資料は削除済み）
   it('発売でジャンル/テーマは自動解放されない（累計売上・ヒット作が閾値を超えても不変）', () => {
     const hitWork = (id: string): Work => ({
       id,

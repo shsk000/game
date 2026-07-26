@@ -190,7 +190,7 @@ export const computeRelease = (
   const axisQualityBonus = positiveAxisBonus - axes.bugRate * 0.2 - bugPenalty.qualityPenalty;
   // v0.25：装備（設備）ボーナス。参加社員のロードアウトを集約したカテゴリ倍率で、
   // devStats の「増えた分だけ」を**既存8点枠とは別枠**で加点する（未装備なら 0＝挙動不変）。
-  // 独立枠 EQUIP_QUALITY_BONUS_CAP で頭打ち（青天井にすると分布ガードが壊れる）。docs/v25 §4-2。
+  // 独立枠 EQUIP_QUALITY_BONUS_CAP で頭打ち（青天井にすると分布ガードが壊れる）。v0.25 §4-2。
   const equipMul = computeEquipCategoryMul(assignedEmployees.map((e) => e.equipped ?? {}));
   const equipQualityBonus = Math.min(
     EQUIP_QUALITY_BONUS_CAP,
@@ -299,7 +299,7 @@ export const computeRelease = (
   const newLibrary = [work, ...ctx.library];
   // v0.29：ジャンル/テーマの発売時自動解放（computeStageUnlocks）を廃止。
   // stage2+ の解放は buyGenre/buyTheme（購入）が唯一の経路（案A→案B）。
-  // カテゴリの自動解放は据え置き（対象外）。docs/v29/spec.md。
+  // カテゴリの自動解放は据え置き（対象外）。v0.29（資料は削除済み）。
   const projectedLifetimeRevenue = ctx.lifetimeRevenue + initialRevenue;
   const newCategoryUnlocks = computeNewlyUnlockedCategories(
     ctx.unlockedCategories,

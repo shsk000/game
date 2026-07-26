@@ -9,7 +9,7 @@ import {
 export type { EquipLoadout };
 
 /**
- * v0.25 装備システムの純粋計算（docs/v25/spec.md §4-2）。
+ * v0.25 装備システムの純粋計算（v0.25（資料は削除済み） §4-2）。
  * 状態・乱数・時刻を持たない（logic-architecture §2）。
  *
  * 装備は社員単位（EquipLoadout）だが、devStats はプロジェクト単位の累積なので、

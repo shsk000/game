@@ -56,7 +56,7 @@ export const trendMultiplier = (trend: Trend | null, g: GenreId, t: ThemeId): nu
  *  - どちらか片方合致: +5
  *  - 合致なし: 0
  * ※ 売上への二重掛け（softBonus 側）は廃止し、トレンドは「スコアを上げて段を押し上げる」形で
- *   売上に効かせる（docs/scoring.md）。
+ *   売上に効かせる（docs/spec/scoring.md）。
  */
 export const trendScoreBonus = (trend: Trend | null, g: GenreId, t: ThemeId): number => {
   if (!trend) return 0;

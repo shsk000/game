@@ -39,7 +39,7 @@
 ### 問題C：デッドコード＋ドキュメント不整合
 
 - `metascore.ts:83` の `launchBonus = launchAdActive ? 0.1 : 0` は**到達不能**
-- `docs/scoring.md:95`「ローンチ広告 = +10%」はその到達不能コードを説明した誤記
+- `docs/spec/scoring.md:95`「ローンチ広告 = +10%」はその到達不能コードを説明した誤記
 
 ### 問題D：企画画面の「予想売上レンジ／予想利益」が実式と**別の数列**
 
@@ -87,7 +87,7 @@
 ### D-2. デッドコードとドキュメントの整理
 
 - `metascore.ts` の `launchAdActive` 引数と `launchBonus` を削除、`ReleaseOpts.launchAd` も削除
-- `docs/scoring.md` §3-3 からローンチ広告を除去し、§4 に「発売後リワード」として実態を明記
+- `docs/spec/scoring.md` §3-3 からローンチ広告を除去し、§4 に「発売後リワード」として実態を明記
 
 ### D-3. 企画画面の売上予測を実式に接続
 
