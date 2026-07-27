@@ -24,7 +24,7 @@ const project = (over: Partial<CurrentProject> = {}): CurrentProject => ({
   scale: 'mini',
   phase: 'release',
   axes: { ...ZERO_AXES },
-  devStats: { program: 0, graphics: 0, sound: 0, design: 0 },
+  devStats: { program: 0, graphics: 0, sound: 0, scenario: 0 },
   requiredLoC: 100,
   doneLoC: 100,
   maxCombo: 50,
@@ -154,7 +154,7 @@ describe('computeRelease', () => {
     const plain = computeRelease(ctx(), undefined, deps()).work;
     const built = computeRelease(
       ctx({
-        current: project({ devStats: { program: 100, graphics: 100, sound: 100, design: 100 } }),
+        current: project({ devStats: { program: 100, graphics: 100, sound: 100, scenario: 100 } }),
       }),
       undefined,
       deps(),
@@ -258,7 +258,7 @@ describe('computeRelease', () => {
   const builtProgram = () =>
     project({
       assignedEmployeeIds: ['e1'],
-      devStats: { program: 100, graphics: 0, sound: 0, design: 0 },
+      devStats: { program: 100, graphics: 0, sound: 0, scenario: 0 },
     });
 
   it('装備なしと「初期装備（効果1.0）」は品質が一致する（装備枠は未装備で0）', () => {

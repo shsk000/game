@@ -12,12 +12,12 @@ import {
 
 describe('loadoutCategoryMul', () => {
   it('未装備（空ロードアウト）は全カテゴリ 1.0', () => {
-    expect(loadoutCategoryMul({})).toEqual({ program: 1, graphics: 1, sound: 1, design: 1 });
+    expect(loadoutCategoryMul({})).toEqual({ program: 1, graphics: 1, sound: 1, scenario: 1 });
   });
 
   it('初期装備（cost0・categoryMulなし）も 1.0', () => {
     const lo: EquipLoadout = { pc: 'pc-laptop', chair: 'chair-basic', misc: 'misc-none' };
-    expect(loadoutCategoryMul(lo)).toEqual({ program: 1, graphics: 1, sound: 1, design: 1 });
+    expect(loadoutCategoryMul(lo)).toEqual({ program: 1, graphics: 1, sound: 1, scenario: 1 });
   });
 
   it('スロットのカテゴリ倍率をカテゴリごとに掛け合わせる（PC×チェア）', () => {
@@ -27,7 +27,7 @@ describe('loadoutCategoryMul', () => {
     expect(m.program).toBeCloseTo(1.2 * 1.05, 5);
     expect(m.graphics).toBeCloseTo(1.05, 5);
     expect(m.sound).toBeCloseTo(1.05, 5);
-    expect(m.design).toBeCloseTo(1.05, 5);
+    expect(m.scenario).toBeCloseTo(1.05, 5);
   });
 
   it('小物のカテゴリ特化（液タブ=graphics）が乗る', () => {
@@ -41,14 +41,14 @@ describe('loadoutCategoryMul', () => {
       program: 1,
       graphics: 1,
       sound: 1,
-      design: 1,
+      scenario: 1,
     });
   });
 });
 
 describe('computeEquipCategoryMul（集約）', () => {
   it('社員ゼロは全カテゴリ 1.0', () => {
-    expect(computeEquipCategoryMul([])).toEqual({ program: 1, graphics: 1, sound: 1, design: 1 });
+    expect(computeEquipCategoryMul([])).toEqual({ program: 1, graphics: 1, sound: 1, scenario: 1 });
   });
 
   it('全員同じ装備なら、その増分が満額で乗る', () => {
@@ -69,7 +69,7 @@ describe('computeEquipCategoryMul（集約）', () => {
   it('渡した byId を使う（依存注入）', () => {
     const m = computeEquipCategoryMul([{ pc: 'pc-gaming' }], EQUIPMENT_BY_ID);
     expect(m.program).toBeCloseTo(1.35, 5);
-    expect(m.design).toBeCloseTo(1.1, 5);
+    expect(m.scenario).toBeCloseTo(1.1, 5);
   });
 });
 

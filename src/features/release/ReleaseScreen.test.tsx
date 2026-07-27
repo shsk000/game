@@ -15,7 +15,7 @@ const finishedProject: CurrentProject = {
   scale: 'mini',
   phase: 'release',
   axes: { ...ZERO_AXES },
-  devStats: { program: 0, graphics: 0, sound: 0, design: 0 },
+  devStats: { program: 0, graphics: 0, sound: 0, scenario: 0 },
   requiredLoC: 100,
   doneLoC: 24,
   maxCombo: 50,

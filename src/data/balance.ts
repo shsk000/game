@@ -5,7 +5,7 @@
  * 詳しい説明と「ここを触ると何が起きるか」は BALANCE_README.md を参照。
  *
  * 各定数の決定根拠と議論履歴は v0.10（資料は削除済み） にある。
- * 数値を変えたら balance-design.md の §11 変更履歴に追記すること。
+ * 数値を変えたら balance-scenario.md の §11 変更履歴に追記すること。
  */
 
 import type { Scale } from './scales';
@@ -17,7 +17,7 @@ import type { Scale } from './scales';
 /**
  * リアル時間 ↔ ゲーム内 1 週の変換レート（ms）。
  *
- * 設計：開発中は速く、アイドル中は遅く（balance-design §6-2）。
+ * 設計：開発中は速く、アイドル中は遅く（balance-scenario §6-2）。
  * - typingActive: 開発画面でタイピング中（リアル 7.5 秒 = ゲーム内 1 週）
  * - idle: オフィス画面等のアイドル中（リアル 30 秒 = ゲーム内 1 週）
  */
@@ -37,7 +37,7 @@ export const TIME_RATE_MS_PER_WEEK = {
 export const INITIAL_FUNDS = 5_000_000; // ¥500 万
 
 // ============================================================
-// スコア帯（balance-design §2）
+// スコア帯（balance-scenario §2）
 // ============================================================
 
 /**
@@ -62,7 +62,7 @@ export const SCORE_TIERS = {
 } as const;
 
 /**
- * メタスコア帯ごとの売上倍率（balance-design §5-2、v0.10 仕上げで再調整）。
+ * メタスコア帯ごとの売上倍率（balance-scenario §5-2、v0.10 仕上げで再調整）。
  *
  * 各規模の baseRevenue に掛けて最終売上を算出する。
  * 「ほとんどのゲームは赤字 or トントン」現実準拠の難易度に合わせて
@@ -269,6 +269,42 @@ export const GACHA_RANK_RATES: Record<GachaKind, Record<GachaRank, number>> = {
 // v0.16：社員成長（spec v16 §1。Lv10 = 数十作品規模＝終盤・オーナー確定）
 // ============================================================
 
+/**
+ * 特徴ポイントのゲーム規模係数（docs/spec/score-model.md §3）🔧
+ *
+ * 規模ごとに「入門チーム」（その規模を解放した直後の想定チーム）を基準に決めてある。
+ * 全規模を最強構成で基準化すると、序盤のスキル値では特徴ポイントが17程度しか出ず、
+ * どう頑張ってもミニゲームで黒字に届かない破産ウォールになる（実測）。
+ *
+ * 🔧 **入門チーム前提はまだ検証していない。** 実測の解放時レベルは Lv3/5/7/8
+ * （経験値の規模連動を入れたあと）。係数の校正は実装ステップ3 の通しシミュレーションで行う。
+ */
+export const FEATURE_SCALE_COEF: Record<Scale, number> = {
+  mini: 1.32,
+  mobile: 0.25,
+  indie: 0.09,
+  hit: 0.048,
+  aaa: 0.035,
+};
+
+/**
+ * 打鍵倍率（docs/spec/score-model.md §3）。合計 0.95〜1.05。
+ *
+ * **ヒット区分を腕で越えさせないための幅**。上位の区分は幅が狭い
+ * （ヒット10点／大ヒット10点／名作5点／神ゲー6点）ため、倍率が 1.07 を超えると区分をまたぐ。
+ * 実測では ×1.32 で3区分＝売上15倍差が動いていた（game-scenario §10-3 に反する）。
+ */
+export const TYPING_MULTIPLIER = {
+  speed: { good: 0.97, great: 1.0, perfect: 1.03 },
+  /** コンボ帯（高い方から先に判定） */
+  combo: [
+    { minCombo: 100, mul: 1.02 },
+    { minCombo: 30, mul: 1.01 },
+    { minCombo: 10, mul: 1.0 },
+    { minCombo: 0, mul: 0.98 },
+  ],
+} as const;
+
 export const GROWTH = {
   /** レベル上限 */
   levelCap: 10,
@@ -305,7 +341,7 @@ export const GROWTH = {
 } as const;
 
 // ============================================================
-// 月給テーブル（balance-design §6-1、v0.16 で正規化 power に追従）
+// 月給テーブル（balance-scenario §6-1、v0.16 で正規化 power に追従）
 // ============================================================
 
 /**
@@ -328,7 +364,7 @@ export const computeMonthlyWage = (power: number, level = 1): number =>
   (Math.max(1, level) - 1) * MONTHLY_WAGE_FORMULA.perLevel;
 
 // ============================================================
-// 賃料（balance-design §6-2、一律固定）
+// 賃料（balance-scenario §6-2、一律固定）
 // ============================================================
 
 /**
@@ -338,7 +374,7 @@ export const computeMonthlyWage = (power: number, level = 1): number =>
 export const MONTHLY_RENT = 300_000; // ¥30 万
 
 // ============================================================
-// 借金（balance-design §6-7）
+// 借金（balance-scenario §6-7）
 // ============================================================
 
 /**
@@ -358,7 +394,7 @@ export const computeBorrowingLimit = (monthlyTotalFixedCost: number): number =>
   monthlyTotalFixedCost * DEBT_CONFIG.borrowingLimitMonths;
 
 // ============================================================
-// 規模別バランス（balance-design §5-1）
+// 規模別バランス（balance-scenario §5-1）
 // ============================================================
 
 /**
@@ -385,7 +421,9 @@ export const SCALE_BALANCE: Record<
     baseRevenue: 300_000, // normal(×10) で ¥300 万
     unlockSalesRequired: 0,
     unlockCost: 0,
-    neededWeeks: 8, // 2 ヶ月 = リアル 60 秒
+    // 実装ステップ2：8週 → 4週（docs/spec/score-model.md §3。序盤の破産ウォール対策）。
+    // 総文数 24 → 12。開発は打鍵で終わるので、固定費が3ヶ月ぶん→1ヶ月ぶんに減る
+    neededWeeks: 4,
   },
   mobile: {
     devCost: 3_000_000, // ¥300 万
@@ -449,7 +487,7 @@ export const INVEST_CONFIG = {
 } as const;
 
 // ============================================================
-// 品質計算の難易度補正（balance-design §2, §6-3〜§6-5）
+// 品質計算の難易度補正（balance-scenario §2, §6-3〜§6-5）
 // ============================================================
 
 /**
@@ -457,7 +495,7 @@ export const INVEST_CONFIG = {
  *
  * ⚠ 現在の値は charPower 0.60 / genreAffinity 0.15 / typingScore 0.15 / luck 0.10。
  * v0.16 で「勝敗の決定因は会社の育ち（社員能力）／タイピングは体験の入口と手触り」に方針が
- * 確定したため、社員を最大レバーに戻した（game-design スキル §0・§10-3）。
+ * 確定したため、社員を最大レバーに戻した（game-scenario スキル §0・§10-3）。
  *
  * 旧コメントには「タイピング 15%→37% に引き上げて最大レバー化」と書かれていたが、
  * これは v0.14 時点の方針で、現在は**逆**。数値も一致していなかったので書き換えた。
@@ -583,7 +621,7 @@ export const JUICE_CONFIG = {
 } as const;
 
 /**
- * 各スコアの計算基準値（balance-design §6-3〜§6-5）。
+ * 各スコアの計算基準値（balance-scenario §6-3〜§6-5）。
  * 「何もしないと base 30」設計。base + 各種ボーナスで 100 まで上がる。
  */
 export const SCORE_BASE = 30;

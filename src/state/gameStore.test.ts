@@ -14,7 +14,7 @@ const devProject = (over: Partial<CurrentProject> = {}): CurrentProject => ({
   scale: 'mini',
   phase: 'development',
   axes: { ...ZERO_AXES },
-  devStats: { program: 0, graphics: 0, sound: 0, design: 0 },
+  devStats: { program: 0, graphics: 0, sound: 0, scenario: 0 },
   requiredLoC: 100,
   doneLoC: 24,
   maxCombo: 0,
@@ -91,7 +91,7 @@ describe('devSkipDevelopment（DEV検証フック：平均成績で“それな�
         workTarget: 100,
         doneLoC: 10,
         perf: { wpm: 0, maxCombo: 0, accuracy: 1 },
-        devStats: { program: 0, graphics: 0, sound: 0, design: 0 },
+        devStats: { program: 0, graphics: 0, sound: 0, scenario: 0 },
       }),
     });
     useGameStore.getState().devSkipDevelopment();
@@ -103,7 +103,7 @@ describe('devSkipDevelopment（DEV検証フック：平均成績で“それな�
     expect(s.current?.perf.wpm).toBeGreaterThan(0);
     expect(s.current?.perf.maxCombo).toBeGreaterThan(0);
     const st = s.current?.devStats;
-    expect((st?.program ?? 0) + (st?.graphics ?? 0) + (st?.sound ?? 0) + (st?.design ?? 0)).toBeGreaterThan(0);
+    expect((st?.program ?? 0) + (st?.graphics ?? 0) + (st?.sound ?? 0) + (st?.scenario ?? 0)).toBeGreaterThan(0);
   });
 
   it('プロジェクトが無ければ何もしない（発売に飛ばない）', () => {
@@ -414,5 +414,59 @@ describe('applyLaunchAd（ローンチ広告を store 経由で適用）', () =>
     resetStore({ funds: 5_000_000 });
     expect(useGameStore.getState().applyLaunchAd()).toBe(0);
     expect(useGameStore.getState().funds).toBe(5_000_000);
+  });
+});
+
+describe('実装ステップ2：総打鍵量はカバー分野数に連動する', () => {
+  const emp = (id: string, skills: Record<string, number>) =>
+    ({
+      id,
+      name: id,
+      role: 'designer' as const,
+      power: 0.3,
+      basePower: 0.3,
+      level: 1,
+      exp: 0,
+      wage: 1,
+      specialties: [],
+      skills,
+      rank: 'B' as const,
+    }) as never;
+
+  const targetFor = (employees: unknown[]) => {
+    useGameStore.setState({ employees: employees as never, current: null, funds: 5e8 });
+    useGameStore.getState().startProject('puzzle', 'sushi', 'mini');
+    return useGameStore.getState().current?.workTarget;
+  };
+
+  it('4分野そろうと 12文、2分野なら 6文、1分野なら 3文', () => {
+    // docs/spec/score-model.md §3：1分野あたりの文数は固定（総文数 ÷ 4）で、
+    // カバー分野が少ないと総打鍵量が減る＝開発が早く終わる（月固定費が安い）。
+    expect(
+      targetFor([
+        emp('p', { programming: 30 }),
+        emp('g', { graphics: 30 }),
+        emp('s', { sound: 30 }),
+        emp('c', { scenario: 30 }),
+      ]),
+    ).toBe(12);
+    expect(targetFor([emp('g', { graphics: 30 }), emp('s', { sound: 30 })])).toBe(6);
+    expect(targetFor([emp('g', { graphics: 30 })])).toBe(3);
+  });
+
+  it('同じ分野に2人寄せても文数は増えない（集中は「早く安く」であって「多く打つ」ではない）', () => {
+    expect(targetFor([emp('g1', { graphics: 30 }), emp('g2', { graphics: 30 })])).toBe(3);
+  });
+
+  it('広報しかいなくても開発は止まらない（最低1分野ぶんは回る）', () => {
+    expect(targetFor([emp('r', { pr: 90 })])).toBe(3);
+  });
+
+  it('企画開始時に革新性だけ入る（打鍵では伸びない）', () => {
+    useGameStore.setState({ employees: [emp('g', { graphics: 30 })] as never, current: null, library: [] });
+    useGameStore.getState().startProject('puzzle', 'sushi', 'mini');
+    const f = useGameStore.getState().current?.features;
+    expect(f?.innovationPt).toBe(100);
+    expect(f?.graphicsPt).toBe(0);
   });
 });

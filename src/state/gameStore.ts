@@ -10,6 +10,7 @@ import { simulateAverageDevRun } from '../core/devSimulate';
 import { computeBorrow, computeMonthlyTick, computeRepay, computeSpend } from '../core/economy';
 import { canBuyEquipment, freeCopies, type OwnedItems } from '../core/equip';
 import { gachaPrice, nextPityCount, rollRank } from '../core/gacha';
+import { addFeature, coveredFieldsOf, initialFeatures } from '../core/features';
 import type { LevelUp } from '../core/growth';
 import { investPrice } from '../core/invest';
 import { type Deps, defaultDeps } from '../core/ports';
@@ -50,8 +51,16 @@ import type {
   OfflineReport,
   Screen,
   Work,
+  DevSkillId,
 } from './types';
-import { addWeeks, DEV_PHASE_ORDER, INITIAL_GAME_DATE, ZERO_AXES } from './types';
+import {
+  addWeeks,
+  DEV_PHASE_ORDER,
+  DEV_SKILL_IDS,
+  INITIAL_GAME_DATE,
+  ZERO_AXES,
+  ZERO_FEATURES,
+} from './types';
 
 /**
  * v0.11：開発フェーズの「MISSION 名・見出し」を生成（演出専用）。
@@ -144,7 +153,8 @@ type Actions = {
   /** v0.15：バグ侵食（完成度じわ減り。0 未満にならない） */
   erodeDevelopLoC: (n: number) => void;
   /** v0.15：ビルドアップ・タイピングの属性ポイント加算 */
-  addDevStat: (key: 'program' | 'graphics' | 'sound' | 'design', n: number) => void;
+  addFeaturePoint: (field: DevSkillId, gain: number) => void;
+  addDevStat: (key: 'program' | 'graphics' | 'sound' | 'scenario', n: number) => void;
   reportCombo: (combo: number) => void;
   reportWPM: (wpm: number) => void;
   reportAccuracy: (acc: number) => void;
@@ -325,8 +335,18 @@ export const useGameStore = create<GameState>()(
       const title = titleInput?.trim() || generateTitle(genreId, themeId, deps.rng);
       // v0.11 後期：締切（残り時間）を廃止し進捗オンリーに。
       // 作業量目標 workTarget（完走フレーズ数）まで打って初めて完了する（AFK では終わらない）。
-      // 例：mini neededWeeks 8 × 3 = 24 フレーズ。速く打つほど少ない本数で到達＝早期完了。
-      const workTarget = Math.max(3, Math.round(def.neededWeeks * DEV_PHRASES_PER_WEEK));
+      //
+      // 実装ステップ2（docs/spec/score-model.md §3）：
+      // **1分野あたりの文数は固定**（総文数 ÷ 4）で、実際に打つのは**カバーしている分野だけ**。
+      // 分野を絞ると総打鍵量が減り、開発が早く終わる（＝月固定費が安い）。これが
+      // 「集中＝早く安く回す／均等＝1本のスコアを取る」の対価構造そのもの。
+      // カバー分野数で割る方式（1分野あたりの文数を増やす）は不採用：
+      // 「文数が倍」＋「スキルが集中して倍」の二重取りで、2分野集中が支配戦略になっていた。
+      const fullTarget = Math.max(4, Math.round(def.neededWeeks * DEV_PHRASES_PER_WEEK));
+      const perField = Math.max(1, Math.round(fullTarget / DEV_SKILL_IDS.length));
+      const assigned = get().employees.filter((e) => e.skills && Object.keys(e.skills).length > 0);
+      const coveredCount = coveredFieldsOf(assigned).length;
+      const workTarget = perField * Math.max(1, coveredCount);
       const project: CurrentProject = {
         title,
         genreId,
@@ -334,7 +354,9 @@ export const useGameStore = create<GameState>()(
         scale,
         phase: 'planning',
         axes: { ...ZERO_AXES },
-        devStats: { program: 0, graphics: 0, sound: 0, design: 0 },
+        // 革新性だけ企画時点で決まる（同じジャンル×テーマの連投で下がる）
+        features: initialFeatures(get().library, genreId, themeId),
+        devStats: { program: 0, graphics: 0, sound: 0, scenario: 0 },
         requiredLoC: def.requiredLoC,
         doneLoC: 0,
         maxCombo: 0,
@@ -462,10 +484,18 @@ export const useGameStore = create<GameState>()(
       set({ current: { ...cur, doneLoC: Math.max(0, cur.doneLoC - n) } });
     },
 
+    addFeaturePoint: (field, gain) => {
+      const cur = get().current;
+      if (!cur || cur.finishedAt !== null || gain <= 0) return;
+      set({
+        current: { ...cur, features: addFeature(cur.features ?? ZERO_FEATURES, field, gain) },
+      });
+    },
+
     addDevStat: (key, n) => {
       const cur = get().current;
       if (!cur || cur.finishedAt !== null) return;
-      const stats = cur.devStats ?? { program: 0, graphics: 0, sound: 0, design: 0 };
+      const stats = cur.devStats ?? { program: 0, graphics: 0, sound: 0, scenario: 0 };
       set({ current: { ...cur, devStats: { ...stats, [key]: stats[key] + n } } });
     },
 

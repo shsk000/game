@@ -242,6 +242,33 @@ export type DevAxis =
 
 export type DevAxes = Record<DevAxis, number>;
 
+/**
+ * 特徴ポイント（docs/spec/score-model.md §2）。**どの作品も常に5つとも持つ。**
+ * 企画で選ぶものではなく、その作品の出来を表す数値（0〜100）。
+ *
+ * 実装ステップ2 では**蓄積と表示だけ**で、スコアには接続しない
+ * （接続は実装ステップ3。それまで現行のスコア・売上は不変）。
+ */
+export const FEATURE_IDS = ['usabilityPt', 'graphicsPt', 'soundPt', 'storyPt', 'innovationPt'] as const;
+export type FeatureId = (typeof FEATURE_IDS)[number];
+export type FeaturePoints = Record<FeatureId, number>;
+
+export const ZERO_FEATURES: FeaturePoints = {
+  usabilityPt: 0,
+  graphicsPt: 0,
+  soundPt: 0,
+  storyPt: 0,
+  innovationPt: 0,
+};
+
+/** 開発スキル → 伸びる特徴ポイント（革新性はスキルでは伸びない） */
+export const SKILL_TO_FEATURE: Record<DevSkillId, FeatureId> = {
+  programming: 'usabilityPt',
+  graphics: 'graphicsPt',
+  sound: 'soundPt',
+  scenario: 'storyPt',
+};
+
 export const ZERO_AXES: DevAxes = {
   funFactor: 0,
   usability: 0,
@@ -274,11 +301,13 @@ export type CurrentProject = {
   phase?: DevPhase;
   /** v0.14：イベントで蓄積する新名称軸。リリース時に既存パイプラインへ合流（spec §5-6） */
   axes?: DevAxes;
+  /** 特徴ポイント5種（実装ステップ2：蓄積のみ・スコア未接続） */
+  features?: FeaturePoints;
   /**
    * v0.15 ビルドアップ・タイピング：打った文の属性ごとに伸びる開発パラメータ。
    * リリース時に品質・売上へ合流（因果を最後まで一本にする）
    */
-  devStats?: { program: number; graphics: number; sound: number; design: number };
+  devStats?: { program: number; graphics: number; sound: number; scenario: number };
   requiredLoC: number;
   doneLoC: number;
   /** ノリ／コンボ最大値（このプロジェクト内） */

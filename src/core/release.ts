@@ -174,10 +174,10 @@ export const computeRelease = (
   // v0.15：ビルドアップ・タイピングの開発パラメータ（文を打って積んだ 4 属性）も品質へ合流。
   // 「打った文がどこに効いたか」の因果をリリース結果まで一本で繋ぐ（重みは叩き台 🔧）
   // v0.16：上限 STAT_QUALITY_BONUS_CAP を導入（旧実装は青天井で序盤の難易度崩壊要因）
-  const stats = cur.devStats ?? { program: 0, graphics: 0, sound: 0, design: 0 };
+  const stats = cur.devStats ?? { program: 0, graphics: 0, sound: 0, scenario: 0 };
   const statQualityBonus = Math.min(
     STAT_QUALITY_BONUS_CAP,
-    stats.program * 0.12 + stats.graphics * 0.08 + stats.sound * 0.08 + stats.design * 0.05,
+    stats.program * 0.12 + stats.graphics * 0.08 + stats.sound * 0.08 + stats.scenario * 0.05,
   );
   // v0.17：残バグを抱えたまま発売した場合のペナルティ（品質減点＋炎上リスク）
   const bugPenalty = remainingBugPenalty(remainingBugs);
@@ -197,7 +197,7 @@ export const computeRelease = (
     stats.program * 0.12 * (equipMul.program - 1) +
       stats.graphics * 0.08 * (equipMul.graphics - 1) +
       stats.sound * 0.08 * (equipMul.sound - 1) +
-      stats.design * 0.05 * (equipMul.design - 1),
+      stats.scenario * 0.05 * (equipMul.scenario - 1),
   );
   const quality = Math.max(
     0,

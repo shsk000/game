@@ -19,7 +19,7 @@ export type { EquipLoadout };
 /** カテゴリ別倍率（1.0 = 無強化）。 */
 export type CategoryMul = Record<TicketCategory, number>;
 
-const ONE_MUL = (): CategoryMul => ({ program: 1, graphics: 1, sound: 1, design: 1 });
+const ONE_MUL = (): CategoryMul => ({ program: 1, graphics: 1, sound: 1, scenario: 1 });
 
 /**
  * 社員1人のロードアウト → カテゴリ別倍率。
@@ -55,7 +55,7 @@ export const computeEquipCategoryMul = (
   byId: Record<string, EquipmentDef> = EQUIPMENT_BY_ID,
 ): CategoryMul => {
   if (loadouts.length === 0) return ONE_MUL();
-  const acc: CategoryMul = { program: 0, graphics: 0, sound: 0, design: 0 };
+  const acc: CategoryMul = { program: 0, graphics: 0, sound: 0, scenario: 0 };
   for (const lo of loadouts) {
     const m = loadoutCategoryMul(lo, byId);
     for (const cat of CATEGORY_ORDER) acc[cat] += m[cat] - 1;

@@ -18,7 +18,7 @@ describe('simulateAverageDevRun', () => {
       devStats.program * 0.12 +
       devStats.graphics * 0.08 +
       devStats.sound * 0.08 +
-      devStats.design * 0.05;
+      devStats.scenario * 0.05;
     // 品質が実感できる水準（上限の半分以上）かつ上限を超えない
     expect(bonus).toBeGreaterThanOrEqual(STAT_QUALITY_BONUS_CAP / 2);
     expect(bonus).toBeLessThanOrEqual(STAT_QUALITY_BONUS_CAP);

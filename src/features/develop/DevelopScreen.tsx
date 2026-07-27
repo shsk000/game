@@ -3,6 +3,14 @@ import { ads } from '../../ads/AdProvider';
 import { PlanMeetingBoard } from '../../components/PlanMeetingBoard';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
 import { bugSuppression, bugsClearedByAd, pickBugFixPhrase } from '../../core/bugs';
+import type { DevSkillId, FeatureId, FeaturePoints } from '../../state/types';
+import { FEATURE_IDS, SKILL_TO_FEATURE, ZERO_FEATURES } from '../../state/types';
+import {
+  coveredCategoriesOf,
+  featureGainFor,
+  TICKET_TO_SKILL,
+  typingMultiplier,
+} from '../../core/features';
 import {
   comboTitleAt,
   type Gear,
@@ -129,6 +137,7 @@ export const DevelopScreen = () => {
   const employees = useGameStore((s) => s.employees);
   const addDevelopLoC = useGameStore((s) => s.addDevelopLoC);
   const addDevStat = useGameStore((s) => s.addDevStat);
+  const addFeaturePoint = useGameStore((s) => s.addFeaturePoint);
   const advancePhase = useGameStore((s) => s.advancePhase);
   // DEV 検証用：タイピングを飛ばし、平均成績を積んで“それなりの品質”で
   // 発売フェーズへ即到達する（docs/qa/bug-hunt.md 参照）
@@ -166,8 +175,24 @@ export const DevelopScreen = () => {
   const [completedTickets, setCompletedTickets] = useState<
     { title: string; category: TicketCategory }[]
   >([]);
-  const currentTicket = useMemo(() => getTicketAt(genreId, ticketIndex), [genreId, ticketIndex]);
-  const nextTicket = useMemo(() => getTicketAt(genreId, ticketIndex + 1), [genreId, ticketIndex]);
+  // 割当社員（装備込みのスキルは core/features 側で解決する）
+  const assignedEmployees = useMemo(
+    () => employees.filter((e) => current?.assignedEmployeeIds.includes(e.id)),
+    [employees, current?.assignedEmployeeIds],
+  );
+  // 特徴ポイントの加算ポップ（「🎨 +2.7」）
+  const [featurePop, setFeaturePop] = useState<{ field: DevSkillId; gain: number; key: number } | null>(null);
+  const featurePopKeyRef = useRef(0);
+  // チームがカバーしている分野の文だけが回ってくる（score-model §3）
+  const coveredCats = useMemo(() => coveredCategoriesOf(assignedEmployees), [assignedEmployees]);
+  const currentTicket = useMemo(
+    () => getTicketAt(genreId, ticketIndex, coveredCats),
+    [genreId, ticketIndex, coveredCats],
+  );
+  const nextTicket = useMemo(
+    () => getTicketAt(genreId, ticketIndex + 1, coveredCats),
+    [genreId, ticketIndex, coveredCats],
+  );
 
   const [ticketPhrase, setTicketPhrase] = useState(() =>
     pickPhrase(currentTicket.category, undefined, current?.scale),
@@ -403,6 +428,21 @@ export const DevelopScreen = () => {
         const gain = Math.max(1, Math.round(ATTR_BASE_GAIN * comboMult * speedMult * feverMult));
         addDevStat(category, gain);
 
+        // 実装ステップ2：特徴ポイントの蓄積（docs/spec/score-model.md §3）
+        // 加算量 ＝ ゲーム規模係数 × 打鍵倍率 × スキル合計（同分野の2人目以降は半減）。
+        // この段階ではスコアに接続しない（接続は実装ステップ3）。
+        const field = TICKET_TO_SKILL[category];
+        const featGain = featureGainFor(
+          field,
+          assignedEmployees,
+          current?.scale ?? 'mini',
+          typingMultiplier(rank === 'PERFECT' ? 'perfect' : rank === 'GREAT' ? 'great' : 'good', comboRef.current),
+        );
+        if (featGain > 0) {
+          addFeaturePoint(field, featGain);
+          setFeaturePop({ field, gain: featGain, key: featurePopKeyRef.current++ });
+        }
+
         const impactNow = computeDevImpact({ wpm: wpmRef.current, accuracy: accuracyRef.current });
         const progressNow =
           progressGain(wpmRef.current, false, comboRef.current) *
@@ -450,7 +490,7 @@ export const DevelopScreen = () => {
             if (finishing) next.push(`// ✅ ${currentTicket.flavor.title} 完了`);
             return next.slice(-4);
           });
-        } else if (category === 'design') {
+        } else if (category === 'scenario') {
           setDesignNotes((l) => [...l, currentTicket.flavor.title].slice(-4));
         } else if (category === 'graphics') {
           setGraphicsFrame((f) => f + 1);
@@ -758,6 +798,9 @@ export const DevelopScreen = () => {
             <SegGauge pct={budgetPct} color={periodColor} track="#0c1207" height={8} />
             <span style={{ fontSize: 10, fontWeight: 700, color: periodColor }}>{periodNote}</span>
           </div>
+          {isDevelopment && (
+            <FeaturePointsBox features={current.features ?? ZERO_FEATURES} pop={featurePop} />
+          )}
 
         </aside>
 
@@ -949,7 +992,7 @@ const PhaseProgressList = ({ phase }: { phase: DevPhase }) => {
 const ROLE_EXCITED_BY: Record<string, TicketCategory[]> = {
   programmer: ['program'],
   designer: ['graphics', 'sound'],
-  pr: ['design'],
+  pr: ['scenario'],
 };
 
 /** 左カラム：チーム状態（割り当て社員＋スキルバー＋気分） */
@@ -967,7 +1010,7 @@ const TeamStatus = ({
   const roleColor: Record<string, string> = {
     programmer: CATEGORY_META.program.color,
     designer: CATEGORY_META.graphics.color,
-    pr: CATEGORY_META.design.color,
+    pr: CATEGORY_META.scenario.color,
   };
   return (
     <div
@@ -1852,7 +1895,7 @@ const SoundMeterPanel = ({ beatKey, title }: { beatKey: number; title: string })
 
 const DesignMemoPanel = ({ notes }: { notes: string[] }) => (
   <div style={{ ...devBox(), gap: 4 }}>
-    <span style={{ fontSize: 11, color: CATEGORY_META.design.color, fontWeight: 700 }}>
+    <span style={{ fontSize: 11, color: CATEGORY_META.scenario.color, fontWeight: 700 }}>
       📋 企画メモ
     </span>
     <div
@@ -2962,3 +3005,72 @@ export const devBox = (): React.CSSProperties => ({
   flexDirection: 'column',
   gap: 6,
 });
+
+
+/** 特徴ポイントの表示メタ（docs/spec/score-model.md §2） */
+const FEATURE_META: Record<FeatureId, { icon: string; label: string; color: string }> = {
+  usabilityPt: { icon: '🕹', label: '操作性', color: '#4db3ff' },
+  graphicsPt: { icon: '🎨', label: 'グラフィック', color: '#5fe08a' },
+  soundPt: { icon: '🎵', label: 'サウンド', color: '#ffd166' },
+  storyPt: { icon: '📖', label: 'ストーリー', color: '#d8a5ff' },
+  innovationPt: { icon: '💡', label: '革新性', color: '#ff9de2' },
+};
+
+/**
+ * 特徴ポイントのリアルタイム表示（実装ステップ2）。
+ *
+ * **この数値はまだスコアに接続していない**（接続は実装ステップ3）。
+ * ここで見せるのは「打った分だけ伸びる」手触りを先に確かめるため。
+ * 革新性だけは打鍵で伸びず、企画時点（同じ組合せの連投判定）で決まる。
+ */
+const FeaturePointsBox = ({
+  features,
+  pop,
+}: {
+  features: FeaturePoints;
+  pop: { field: DevSkillId; gain: number; key: number } | null;
+}) => {
+  const popId = pop ? SKILL_TO_FEATURE[pop.field] : null;
+  return (
+    <div style={{ ...devBox(), gap: 3 }}>
+      <span style={{ fontSize: 11, color: DEV.sub }}>作品の特徴</span>
+      {FEATURE_IDS.map((id) => {
+        const m = FEATURE_META[id];
+        const v = features[id];
+        return (
+          <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: 10, width: 76, color: DEV.sub }}>
+              {m.icon} {m.label}
+            </span>
+            <div style={{ flex: 1 }}>
+              <SegGauge pct={v} color={m.color} track="#0c1207" height={6} />
+            </div>
+            <span
+              style={{
+                fontSize: 10,
+                width: 26,
+                textAlign: 'right',
+                color: m.color,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {Math.round(v)}
+            </span>
+            <span
+              key={pop?.key}
+              style={{
+                fontSize: 10,
+                width: 34,
+                color: m.color,
+                opacity: popId === id ? 1 : 0,
+                transition: 'opacity 240ms',
+              }}
+            >
+              {popId === id && pop ? `+${pop.gain.toFixed(1)}` : ''}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};

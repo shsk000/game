@@ -7,15 +7,16 @@ import type { Scale } from './scales';
  * v0.15.2「作業チケット」システム（オーナー改修指示 2026-07-08）：
  * 開発フェーズを「ゲージを見る画面」から「作業チケットをタイピングで進める画面」に作り替える。
  *
- * - 作業タイプ（カテゴリ）は固定 4 種：プログラム / グラフィック / サウンド / ゲームデザイン
+ * - 作業タイプ（カテゴリ）は固定 4 種：プログラム / グラフィック / サウンド / シナリオ
+ *   （v0.29 実装ステップ2：旧「ゲームデザイン」をシナリオに付け替え。スキル5種と1対1に揃えた）
  * - 作業チケットはジャンルごとに変わる具体的な作業（例：RPG のプログラムなら「敵を配置する」）
  * - 実際に打つひらがな文はカテゴリ単位の汎用プール（チケットの見出し/説明とは独立）
  * - バグ関連の入力はこのチケット周期には含めない（v0.14 のランダムイベント「バグ発生」側で扱う）
  */
 
-export type TicketCategory = 'program' | 'graphics' | 'sound' | 'design';
+export type TicketCategory = 'program' | 'graphics' | 'sound' | 'scenario';
 
-export const CATEGORY_ORDER: TicketCategory[] = ['program', 'graphics', 'sound', 'design'];
+export const CATEGORY_ORDER: TicketCategory[] = ['program', 'graphics', 'sound', 'scenario'];
 
 export const CATEGORY_META: Record<
   TicketCategory,
@@ -24,7 +25,7 @@ export const CATEGORY_META: Record<
   program: { icon: '</>', label: 'プログラム', color: '#4db3ff', dim: '#123a5a' },
   graphics: { icon: '🎨', label: 'グラフィック', color: '#5fe08a', dim: '#124a28' },
   sound: { icon: '🎵', label: 'サウンド', color: '#ffd166', dim: '#4a3a12' },
-  design: { icon: '📋', label: 'ゲームデザイン', color: '#d8a5ff', dim: '#3a2255' },
+  scenario: { icon: '📖', label: 'シナリオ', color: '#d8a5ff', dim: '#3a2255' },
 };
 
 /** 1 チケットを完了させるのに必要な入力フレーズ数（叩き台 🔧） */
@@ -35,7 +36,7 @@ export type TicketFlavor = { title: string; desc: string };
 /**
  * カテゴリ別の汎用入力フレーズプール（ひらがな＋長音符のみ。ジャンル共通・チケットの見出しとは別）。
  * v0.27「言葉を増やす」：既視感を物量で潰すため、各カテゴリ 8 → 80 件に増量（厳密テーマ維持）。
- * program＝実装作業／graphics＝作画・演出／sound＝作編曲・音響／design＝設計・企画 を正確に説明する文。
+ * program＝実装作業／graphics＝作画・演出／sound＝作編曲・音響／scenario＝物語・世界観づくり を正確に説明する文。
  * 制約：ひらがな限定・プール内で完全重複なし（phrasePools.test.ts が機械検査）。
  */
 export const CATEGORY_PHRASE_POOLS: Record<TicketCategory, string[]> = {
@@ -405,127 +406,127 @@ export const CATEGORY_PHRASE_POOLS: Record<TicketCategory, string[]> = {
     'こえをがっきにする',
     'おとにあたたかみをたす',
   ],
-  design: [
-    'ばらんすをかんがえる',
-    'あそびかたをまとめる',
-    'なんいどをきめる',
-    'ゆーざーのこえをよむ',
-    'しようしょをかく',
-    'てすとけいかくをたてる',
-    'あいであをせいりする',
-    'ゆーあいをみなおす',
-    'こあるーぷをくむ',
-    'げーむさいくるをまわす',
-    'しょうりじょうけんをきめる',
-    'るーるをせいりする',
-    'しょうはいをきめる',
-    'てーまをきめる',
-    'せいちょうきょくせんをひく',
-    'なんいどかーぶをひく',
-    'ほうしゅうをせっけいする',
-    'りすくりたーんをきめる',
-    'すてーじをこうせいする',
-    'てきはいちをくむ',
-    'しかけをはいちする',
-    'どうせんをせっけいする',
-    'みせばをつくる',
-    'きゅうそくてんをおく',
-    'ぎみっくをかんがえる',
-    'けいざいばらんすをくむ',
-    'かかくをけんとうする',
-    'どろっぷりつをきめる',
-    'がちゃかくりつをきめる',
-    'いんふれをおさえる',
-    'しげんばらんすをとる',
-    'ほうしゅうかんかくをきめる',
-    'ちゅーとりあるをせっけいする',
-    'さいしょのながれをくむ',
-    'がくしゅうこすとをさげる',
-    'そうさせつめいをかく',
-    'ひんとのだしかたをきめる',
-    'きゅうさいそちをいれる',
-    'りだつてんをへらす',
-    'めたしんこうをせっけいする',
-    'かいほうじゅんをきめる',
-    'やりこみをふやす',
-    'しゅうしゅうようそをくむ',
-    'じっせきをせっけいする',
-    'でいりーみっしょんをくむ',
-    'りてんしょんをたかめる',
-    'ぼりゅーむをみつもる',
-    'こんてんつりょうをきめる',
-    'ぷれいじかんをそうていする',
-    'しなりおをこうせいする',
-    'せかいかんをととのえる',
-    'きゃらづけをかんがえる',
-    'てごたえをせっけいする',
-    'えんしゅつをかんがえる',
-    'こうようかんをたかめる',
+  scenario: [
+    'しゅじんこうをきめる',
+    'ものがたりをかんがえる',
+    'せかいかんをつくる',
+    'きゃらくたーをたてる',
+    'せりふをかきおこす',
+    'ぷろっとをくむ',
+    'じょばんをかきなおす',
+    'ちゅうばんをふくらます',
+    'けつまつをきめる',
+    'どんでんがえしをいれる',
+    'ふくせんをしこむ',
+    'かいしゅうをかんがえる',
+    'なかまをふやす',
+    'らいばるをつくる',
+    'てきやくをかんがえる',
+    'かたきやくをたてる',
+    'なやみをかきだす',
+    'せいちょうをえがく',
+    'たびだちをかく',
+    'わかれをかく',
+    'さいかいをかく',
+    'きずなをふかめる',
+    'うらぎりをしこむ',
+    'ゆるしをかく',
+    'ふっかつをかく',
+    'けっせんをかきあげる',
+    'えぴろーぐをそえる',
+    'ぷろろーぐをかく',
+    'なれーしょんをいれる',
+    'もくじをととのえる',
+    'しょうだてをきめる',
+    'ばめんをてんかんする',
     'てんぽをととのえる',
-    'こんぼをせっけいする',
-    'てざわりをよくする',
-    'ぷれいてすとをする',
-    'ふぃーどばっくをまとめる',
-    'ばぐをせいりする',
-    'ゆうせんどをつける',
-    'しようをれびゅーする',
-    'かいぜんあんをだす',
-    'でーたをぶんせきする',
-    'りりーすばんをきめる',
-    'なんいどせんたくをいれる',
-    'あくせしびりてぃをたかめる',
-    'そうさをかんたんにする',
-    'しきかくにはいりょする',
-    'くりかえしのたんいをきめる',
-    'せっしょんのながさをきめる',
-    'ろーどのまをへらす',
-    'みんなでたのしむようそをくむ',
-    'ひとりたいけんをととのえる',
-    'やりごたえをちょうせつする',
-    'とっつきやすさをたかめる',
-    'くせのつよさをちょうせいする',
-    'あそびのはばをひろげる',
-    'ぜんたいばらんすをととのえる',
-    'こんせぷとをかためる',
-    'せっけいのはしらをきめる',
-    'たーげっとそうをきめる',
-    'せーるすぽいんとをきめる',
-    'あそびのかなめをきめる',
-    'かちすじをきめる',
-    'まけかたをせっけいする',
-    'ぺーしんぐをくむ',
-    'やまばをおく',
-    'がくしゅうきょくせんをひく',
-    'ふらすとれーしょんをへらす',
-    'せいこうたいけんをつくる',
-    'ほうしゅうるーぷをくむ',
-    'くえすとらいんをくむ',
-    'さぶくえすとをはいちする',
-    'すうちきんこうをとる',
-    'なんいどべつにわける',
-    'ちゅーとりあるのながれをくむ',
-    'ぷれいやーどうきをせっけいする',
-    'もくひょうていじをせっけいする',
-    'せんたくしをよういする',
-    'とれーどおふをせっけいする',
-    'りすくにみあうほうしゅうをおく',
-    'さくさくかんをせっけいする',
-    'だればをなくす',
-    'しゅうばんのはりをつくる',
-    'くりあごのめあてをつくる',
-    'かへんせいをもたせる',
-    'らんだむせいをちょうせいする',
-    'うんとぎじゅつをはいぶんする',
-    'しゅうにゅうげんをせっけいする',
-    'こうこくわくをせっけいする',
-    'しんこうどをみえるかする',
-    'たっせいかんをたかめる',
-    'さいゆうせんじこうをきめる',
-    'どうきづけをくふうする',
-    'きゅうそくのりずむをつくる',
-    'ちがうあそびかたをうながす',
-    'けいぞくりつをあげる',
-    'なかだるみをけす',
+    'くちぐせをきめる',
+    'いちにんしょうでかく',
+    'さんにんしょうにする',
+    'かたりべをきめる',
+    'かいそうをいれる',
+    'ゆめのばめんをかく',
+    'てがみをよませる',
+    'にっきをはさむ',
+    'どくはくをかく',
+    'といかけでおわる',
+    'よいんをのこす',
+    'あんしをちりばめる',
+    'ひゆをつかう',
+    'くうはくをいかす',
+    'かんじょうをおさえる',
+    'なきどころをつくる',
+    'わらいをいれる',
+    'きんちょうをたかめる',
+    'あんどをあたえる',
+    'きぼうをのこす',
+    'ぜつぼうをえがく',
+    'めいろをつくる',
+    'なぞをしこむ',
+    'しんそうをあかす',
+    'はんにんをかくす',
+    'どうきをかんがえる',
+    'ありばいをくむ',
+    'しょうげんをならべる',
+    'ぎわくをふかめる',
+    'たねあかしをする',
+    'そうかつをかく',
+    'かんけいずをかく',
+    'かぞくをえがく',
+    'ゆうじょうをかく',
+    'こいごころをかく',
+    'かたおもいをかく',
+    'みのがしをかく',
+    'けんかをかく',
+    'なかなおりをかく',
+    'やくそくをかわす',
+    'やくそくをやぶる',
+    'つぐないをかく',
+    'くいをのこす',
+    'かくごをきめる',
+    'けついをえがく',
+    'まよいをかく',
+    'ためらいをかく',
+    'いきざまをかく',
+    'しをえがく',
+    'いのちをつなぐ',
+    'つぎにたくす',
+    'でんせつをつくる',
+    'しんわをつむぐ',
+    'よげんをしこむ',
+    'のろいをかんがえる',
+    'まほうのりつをきめる',
+    'ぎじゅつをせつめいする',
+    'ようごをそろえる',
+    'ちめいをかんがえる',
+    'ちずをつくる',
+    'ねんぴょうをつくる',
+    'たいりくをわける',
+    'くにをむすばせる',
+    'しゅうきょうをつくる',
+    'まつりをかんがえる',
+    'りょうりをかんがえる',
+    'ふくそうをきめる',
+    'みぶんをきめる',
+    'けいざいをかんがえる',
+    'つうかをきめる',
+    'しごとをきめる',
+    'まちのようすをかく',
+    'むらのようすをかく',
+    'しろのなかをかく',
+    'ちかどうをかく',
+    'もりのおくをかく',
+    'うみのそこをかく',
+    'そらのうえをかく',
+    'はいきょをかく',
+    'まちなみをかく',
+    'きせつをかく',
+    'あめのひをかく',
+    'ゆきのひをかく',
+    'よあけをかく',
+    'たそがれをかく',
+    'よるをかく',
+    'かぜのおとをかく',
   ],
 };
 
@@ -547,7 +548,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '攻撃音を作る', desc: '武器を振った時の効果音を作る' },
       { title: 'レベルアップ音を作る', desc: '経験値が貯まった時の達成感ある音を作る' },
     ],
-    design: [
+    scenario: [
       { title: '戦闘バランスを考える', desc: '敵の強さとプレイヤーの成長速度を調整する' },
       { title: 'レベルデザインを考える', desc: 'マップの難易度配分を設計する' },
       { title: '育成システムを考える', desc: 'キャラクターの成長要素を企画する' },
@@ -569,7 +570,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: 'コンボ音を作る', desc: '連鎖が続いた時の盛り上がる音を作る' },
       { title: 'クリア音を作る', desc: 'ステージクリア時の達成音を作る' },
     ],
-    design: [
+    scenario: [
       { title: '難易度カーブを考える', desc: 'ステージが進むごとの難しさの上げ方を設計する' },
       { title: '盤面サイズを考える', desc: '遊びやすい盤面の大きさを検討する' },
       { title: 'ギミック案を考える', desc: '新しい種類のピースやギミックを企画する' },
@@ -591,7 +592,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: 'ジャンプ音を作る', desc: 'ジャンプ時の軽快な音を作る' },
       { title: 'ボス戦BGMを作る', desc: '緊迫感のあるボス戦専用曲を作る' },
     ],
-    design: [
+    scenario: [
       { title: 'アクションの手触りを考える', desc: '爽快感のある操作感を設計する' },
       { title: 'ボスの攻撃パターンを考える', desc: 'ボス戦の駆け引きを企画する' },
       { title: 'ステージ構成を考える', desc: 'ステージの進行と山場を設計する' },
@@ -613,7 +614,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '爆発音を作る', desc: '敵撃破時の爆発音を作る' },
       { title: '道中BGMを作る', desc: 'ステージ道中の緊張感あるBGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: '弾幕パターンを考える', desc: '避けごたえのある弾幕を設計する' },
       { title: '難易度配分を考える', desc: 'ステージごとの難易度上昇を設計する' },
       { title: 'ボス構成を考える', desc: 'ボスの攻撃フェーズ構成を企画する' },
@@ -635,7 +636,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '街のBGMを作る', desc: 'のどかな街並みのBGMを作る' },
       { title: '謎解き達成音を作る', desc: '謎が解けた時の達成音を作る' },
     ],
-    design: [
+    scenario: [
       { title: 'シナリオ構成を考える', desc: '物語の起承転結を設計する' },
       { title: '謎解きの難易度を考える', desc: 'ヒントの出し方と難易度を調整する' },
       { title: 'キャラクター設定を考える', desc: '登場人物の性格と関係性を企画する' },
@@ -657,7 +658,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '決定音を作る', desc: '施設を建設した時の決定音を作る' },
       { title: '達成音を作る', desc: '目標達成時の達成音を作る' },
     ],
-    design: [
+    scenario: [
       { title: '経済バランスを考える', desc: '収入と支出のバランスを設計する' },
       { title: '成長曲線を考える', desc: '街が発展していく速度を設計する' },
       { title: 'ランダムイベント案を考える', desc: '経営を彩るイベント内容を企画する' },
@@ -679,7 +680,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: 'タイヤの摩擦音を作る', desc: 'コーナリング時の摩擦音を作る' },
       { title: 'レースBGMを作る', desc: 'テンポの速いレースBGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: 'コースレイアウトを考える', desc: '見せ場のあるコース構成を設計する' },
       { title: '難易度別コースを考える', desc: '初級〜上級のコース難易度を設計する' },
       { title: '車種バランスを考える', desc: '車種ごとの性能差を企画する' },
@@ -701,7 +702,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '不穏なBGMを作る', desc: '緊張感を煽るBGMを作る' },
       { title: 'ジャンプスケア音を作る', desc: '驚かせる瞬間の効果音を作る' },
     ],
-    design: [
+    scenario: [
       { title: '恐怖演出のタイミングを考える', desc: '驚かせる間合いを設計する' },
       { title: 'マップ構成を考える', desc: '探索しがいのある館の構成を設計する' },
       { title: 'モンスターの行動パターンを考える', desc: '追跡ロジックの挙動を企画する' },
@@ -723,7 +724,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '必殺技の効果音を作る', desc: '必殺技発動時の効果音を作る' },
       { title: '対戦BGMを作る', desc: '熱い対戦を盛り上げるBGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: 'キャラクター性能を考える', desc: 'キャラごとの技構成と強さを設計する' },
       { title: 'コンボルートを考える', desc: '爽快なコンボの繋ぎを設計する' },
       { title: '対戦バランスを考える', desc: 'キャラ間の有利不利を調整する' },
@@ -745,7 +746,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: 'アイテム取得音を作る', desc: 'アイテムを拾った時の効果音を作る' },
       { title: '死亡時の音を作る', desc: 'やられてしまった時の効果音を作る' },
     ],
-    design: [
+    scenario: [
       { title: '生成ルールを考える', desc: 'ダンジョン生成のルールを設計する' },
       { title: '難易度上昇カーブを考える', desc: '階層が進むごとの難易度を設計する' },
       { title: 'アイテムの種類を考える', desc: '手に入るアイテムの種類を企画する' },
@@ -767,7 +768,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '判定音を作る', desc: 'ノーツを叩いた時の判定音を作る' },
       { title: 'コンボ音を作る', desc: 'コンボが続いた時の音を作る' },
     ],
-    design: [
+    scenario: [
       { title: '譜面パターンを考える', desc: '楽曲に合った譜面を設計する' },
       { title: '難易度別譜面を考える', desc: '易しい〜難しい譜面のバリエーションを作る' },
       { title: '曲目構成を考える', desc: '収録する楽曲のラインナップを企画する' },
@@ -789,7 +790,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '設置音を作る', desc: 'ブロックを置いた時の効果音を作る' },
       { title: 'のんびりBGMを作る', desc: '自由な創作を彩るBGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: '素材の種類を考える', desc: '用意する素材のバリエーションを企画する' },
       { title: 'クラフトレシピを考える', desc: 'アイテムの組み合わせレシピを設計する' },
       { title: '世界の広さを考える', desc: '探索できるワールドの規模を設計する' },
@@ -811,7 +812,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '勝利ファンファーレを作る', desc: '戦闘勝利時の音を作る' },
       { title: '警報音を作る', desc: '敵接近時の警報音を作る' },
     ],
-    design: [
+    scenario: [
       { title: 'ユニット相性を考える', desc: '兵種同士の有利不利を設計する' },
       { title: 'マップ構成を考える', desc: '地形が戦況に与える影響を設計する' },
       { title: '勝利条件を考える', desc: 'シナリオごとの勝利条件を企画する' },
@@ -833,7 +834,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: 'ホイッスル音を作る', desc: '試合開始・終了の笛の音を作る' },
       { title: '実況BGMを作る', desc: '試合を盛り上げる実況風BGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: '試合バランスを考える', desc: '両チームの実力差を設計する' },
       { title: 'ルール構成を考える', desc: '試合時間とルールを設計する' },
       { title: 'キャラ成長要素を考える', desc: '選手が成長する仕組みを企画する' },
@@ -855,7 +856,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '空腹警告音を作る', desc: '空腹時に鳴る警告音を作る' },
       { title: '緊張BGMを作る', desc: '夜の危険を感じさせるBGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: '資源バランスを考える', desc: '食料や素材の希少度を設計する' },
       { title: '危険度カーブを考える', desc: '日数経過による難易度上昇を設計する' },
       { title: 'クラフトレシピを考える', desc: '生存に必要な道具の作り方を企画する' },
@@ -877,7 +878,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '発動音を作る', desc: 'カード効果発動時の音を作る' },
       { title: '対戦BGMを作る', desc: '緊張感のある対戦BGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: 'カードバランスを考える', desc: 'カード同士の強さのバランスを設計する' },
       { title: 'レアリティ配分を考える', desc: 'カードの排出率を設計する' },
       { title: 'デッキ構成案を考える', desc: 'テンプレデッキの構成を企画する' },
@@ -899,7 +900,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '迎撃音を作る', desc: '敵を撃破した時の音を作る' },
       { title: '警報BGMを作る', desc: 'ウェーブ接近時の緊張BGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: 'タワー種類を考える', desc: '攻撃タイプの異なるタワーを設計する' },
       { title: 'ウェーブ構成を考える', desc: '敵の出現パターンを設計する' },
       { title: 'マップ経路を考える', desc: '敵の進行ルートを企画する' },
@@ -921,7 +922,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '決定音を作る', desc: '選択が決まった時の音を作る' },
       { title: 'にぎやかBGMを作る', desc: 'パーティー感のある明るいBGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: 'ミニゲーム案を考える', desc: '短時間で盛り上がる遊びを企画する' },
       { title: 'バランス調整を考える', desc: '運と実力の配分を設計する' },
       { title: '順位演出を考える', desc: '最終順位発表の見せ方を設計する' },
@@ -943,7 +944,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: 'ひらめき音を作る', desc: '謎が解けた瞬間の音を作る' },
       { title: '緊迫BGMを作る', desc: '制限時間が迫るBGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: '謎の難易度を考える', desc: 'ヒントの出し方と難易度を設計する' },
       { title: 'ストーリー構成を考える', desc: '脱出の背景となる物語を設計する' },
       { title: 'ギミック案を考える', desc: '新しい仕掛けのアイデアを企画する' },
@@ -965,7 +966,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '会話送り音を作る', desc: 'セリフを送る時の効果音を作る' },
       { title: '切ないBGMを作る', desc: '心情を彩る優しいBGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: 'キャラクター設定を考える', desc: '登場人物の性格と背景を企画する' },
       { title: '選択肢構成を考える', desc: '好感度に影響する選択肢を設計する' },
       { title: 'シナリオ構成を考える', desc: '物語の起承転結を設計する' },
@@ -987,7 +988,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: 'コマ移動音を作る', desc: 'コマを進めた時の音を作る' },
       { title: '団らんBGMを作る', desc: '和やかな卓上BGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: 'マス目構成を考える', desc: '盤面のイベントマスを設計する' },
       { title: '勝利条件を考える', desc: 'ゲームの決着条件を設計する' },
       { title: 'ルール調整を考える', desc: 'プレイ時間とルールを企画する' },
@@ -1009,7 +1010,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '正解音を作る', desc: '正解時の達成音を作る' },
       { title: '出題BGMを作る', desc: '考える時間を彩るBGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: '問題難易度を考える', desc: '出題する問題の難易度配分を設計する' },
       { title: '出題ジャンルを考える', desc: '扱う知識分野のバランスを設計する' },
       { title: '得点方式を考える', desc: '早押しと正答率の配点を企画する' },
@@ -1031,7 +1032,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: 'コイン取得音を作る', desc: 'コインを取った時の音を作る' },
       { title: '冒険BGMを作る', desc: 'テンポの良い冒険BGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: 'ステージ構成を考える', desc: '足場配置の難易度を設計する' },
       { title: 'ギミック案を考える', desc: '新しい仕掛けを企画する' },
       { title: '難易度カーブを考える', desc: 'ステージが進むごとの難しさを設計する' },
@@ -1053,7 +1054,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: '場面転換音を作る', desc: 'シーンが変わる時の音を作る' },
       { title: '静かなBGMを作る', desc: '物語に寄り添う落ち着いたBGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: 'シナリオ構成を考える', desc: '物語全体の構成を設計する' },
       { title: '分岐構造を考える', desc: '選択肢によるルート分岐を設計する' },
       { title: 'キャラクター設定を考える', desc: '登場人物の性格と関係性を企画する' },
@@ -1075,7 +1076,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: 'お世話音を作る', desc: 'お世話をした時の効果音を作る' },
       { title: 'のどかBGMを作る', desc: 'まったりとしたBGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: '成長ルートを考える', desc: 'お世話の仕方による分岐を設計する' },
       { title: 'パラメータ設計を考える', desc: '空腹度・親密度などの数値を設計する' },
       { title: '進化パターンを考える', desc: '姿が変化する条件を企画する' },
@@ -1097,7 +1098,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: 'あたり音を作る', desc: '魚が食いついた時の音を作る' },
       { title: 'のんびりBGMを作る', desc: '穏やかな釣り場のBGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: '魚の種類を考える', desc: 'レアリティ別の魚を設計する' },
       { title: '釣り場構成を考える', desc: '場所ごとの釣れる魚を設計する' },
       { title: '難易度調整を考える', desc: '大物ほど釣りにくくなる調整を企画する' },
@@ -1119,7 +1120,7 @@ export const GENRE_TICKETS: Record<GenreId, Record<TicketCategory, TicketFlavor[
       { title: 'リロード音を作る', desc: '弾を装填する時の音を作る' },
       { title: '緊迫BGMを作る', desc: '戦闘中の緊張感あるBGMを作る' },
     ],
-    design: [
+    scenario: [
       { title: '武器バランスを考える', desc: '各武器の性能差を設計する' },
       { title: 'マップ構成を考える', desc: '遮蔽物と動線を設計する' },
       { title: '難易度配分を考える', desc: '敵の強さと配置を企画する' },
@@ -1134,16 +1135,22 @@ export const getGenreTickets = (genreId: GenreId): Record<TicketCategory, Ticket
   GENRE_TICKETS[genreId] ?? FALLBACK_TICKETS;
 
 /** チケット通し番号 → { カテゴリ, フレーバー } を導出（周期的に循環） */
+/**
+ * ticketIndex 番目の作業チケット。
+ *
+ * `covered` を渡すと**チームがカバーしている分野だけ**をローテーションする
+ * （docs/spec/score-model.md §3：グラフィッカーがいなければグラフィックの文は回ってこない）。
+ * 省略時は従来どおり4分野を周回する。
+ */
 export const getTicketAt = (
   genreId: GenreId,
   ticketIndex: number,
+  covered?: readonly TicketCategory[],
 ): { category: TicketCategory; flavor: TicketFlavor } => {
-  const category =
-    CATEGORY_ORDER[
-      ((ticketIndex % CATEGORY_ORDER.length) + CATEGORY_ORDER.length) % CATEGORY_ORDER.length
-    ];
+  const order = covered && covered.length > 0 ? covered : CATEGORY_ORDER;
+  const category = order[((ticketIndex % order.length) + order.length) % order.length];
   const flavors = getGenreTickets(genreId)[category];
-  const round = Math.floor(ticketIndex / CATEGORY_ORDER.length);
+  const round = Math.floor(ticketIndex / order.length);
   const flavor = flavors[((round % flavors.length) + flavors.length) % flavors.length];
   return { category, flavor };
 };

@@ -13,7 +13,7 @@ import type { CurrentProject } from '../state/types';
  *   - typingScore ≈ 50
  *     SCORE_BASE 30 + wpm140→+5 + combo250(≥150)→+10 + noBugs→+5、accuracy 0.98 は無罰
  *   - statQualityBonus ≈ 5（上限 8 の中〜高。program18*0.12 + graphics14*0.08 +
- *     sound14*0.08 + design12*0.05 = 5.0）
+ *     sound14*0.08 + scenario12*0.05 = 5.0）
  */
 export type SimulatedRun = {
   perf: CurrentProject['perf'];
@@ -22,5 +22,5 @@ export type SimulatedRun = {
 
 export const simulateAverageDevRun = (): SimulatedRun => ({
   perf: { wpm: 140, maxCombo: 250, accuracy: 0.98 },
-  devStats: { program: 18, graphics: 14, sound: 14, design: 12 },
+  devStats: { program: 18, graphics: 14, sound: 14, scenario: 12 },
 });
