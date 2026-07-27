@@ -3,11 +3,12 @@ import type { CurrentProject } from '../state/types';
 /**
  * DEV 専用：タイピングを飛ばして「平均的な開発プレイ」を再現するための成績値（純関数）。
  *
- * 実プレイでは `current.perf`（wpm/maxCombo/accuracy）と `devStats` に打鍵結果が蓄積し、
- * それが release.ts の `computeQualityV10`（typingScore weight 0.15・上限なし）と
- * `statQualityBonus`（上限 `STAT_QUALITY_BONUS_CAP`=8）へ合流して品質になる。
- * ここではその「平均的な腕前」に相当する固定値を返し、スキップ後も“それなりの品質”で
- * 発売できるようにする。乱数・時刻は使わない（決定的）。
+ * 実プレイでは打鍵のたびに特徴ポイントが積まれる（core/features.ts）。
+ * ここではスキップ時の穴埋めとして「平均的な腕前」に相当する固定値を返す。
+ * 乱数・時刻は使わない（決定的）。
+ *
+ * ⚠ 実装ステップ3 以降、`perf` と `devStats` は**スコアには乗らない**
+ * （記録とビルドアップ表示のみ）。スコアは特徴ポイントの一本道で決まる。
  *
  * 値の狙い（release.ts / metascore.ts の式で逆算）：
  *   - typingScore ≈ 50

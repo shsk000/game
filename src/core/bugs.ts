@@ -31,9 +31,23 @@ export const bugSuppression = (employees: Employee[]): number =>
  */
 export const rollBugOnMiss = (): boolean => BUG_CONFIG.missAlwaysBugs;
 
+/**
+ * バグ率の軸（`axes.bugRate`）による発生率の補正。
+ *
+ * イベントが「バグ率 −10%」と表示して与える報酬の**効き先**。
+ * 実装ステップ3 で旧品質経路を消したとき、この消費側だけが道連れで消え、
+ * 報酬（4イベント）と画面表示だけが残って**効かない数値**になっていた。
+ * `docs/CLAUDE.md` が列挙している事故（軸「売上予測」・「開発 +0.60 LoC/秒」）と同じ形。
+ *
+ * −100% で発生ゼロ、+100% で倍。極端な値でも壊れないよう 0〜2 でクランプする。
+ */
+export const bugRateMultiplier = (bugRate = 0): number =>
+  Math.max(0, Math.min(2, 1 + bugRate / 100));
+
 /** 正打 1 打鍵ごとのバグ発生判定（実装するほどバグは埋まる。ミスゼロでも出る） */
-export const rollBugOnKeystroke = (employees: Employee[], rng: Rng): boolean =>
-  rng() < BUG_CONFIG.onKeystrokeRate * (1 - bugSuppression(employees));
+export const rollBugOnKeystroke = (employees: Employee[], rng: Rng, bugRate = 0): boolean =>
+  rng() <
+  BUG_CONFIG.onKeystrokeRate * (1 - bugSuppression(employees)) * bugRateMultiplier(bugRate);
 
 /**
  * 開発完了時の最低保証（v0.17.1）。抽選が全部外れても最低 minBugsOnDevComplete 匹は

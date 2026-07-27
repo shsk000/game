@@ -9,7 +9,9 @@ import {
  * v0.11 開発フェーズ：中央パネルの「開発への影響（この入力結果）」算出（純関数）。
  *
  * 表示専用の派生値であり、最終作品の品質・バグは既存の
- * `current.perf`（wpm/maxCombo/accuracy）→ releaseWork → computeQualityV10 ルートに
+ * `current.perf`（wpm/maxCombo/accuracy）は記録（ゴースト・ベスト）用。
+ * 実装ステップ3 以降、**スコアには乗らない**（打鍵はその場の特徴ポイント加算に効く）。
+ * 旧ルートは
  * 合流する（このファイルでは store を触らない）。
  */
 

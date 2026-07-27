@@ -70,7 +70,9 @@ balance-design.md §8 と同期：
 |---|---|
 | `src/data/scales.ts` | `SCALE_BALANCE`（devCost、baseRevenue、unlockSalesRequired、unlockCost、neededWeeks）、`MONTHLY_RENT` |
 | `src/data/employees.ts` | `MONTHLY_WAGE_FORMULA`、`computeMonthlyWage()` |
-| `src/utils/metascore.ts` | `QUALITY_WEIGHTS`、`SCORE_BASE`、`GOD_GAME_GACHA`、`SCORE_TIERS` |
+| `src/core/metascore.ts` | メタスコアの式（重み・相性補正・トレンド・評価家のブレ） |
+| `src/data/archetypes.ts` | ジャンルの型と ◎○△ の重み |
+| `src/core/features.ts` | 特徴ポイントの蓄積（規模係数・打鍵倍率・スキル合計） |
 | `src/utils/sales.ts` | `SALES_MULTIPLIER_BY_SCORE`、`salesMultiplierForScore()` |
 | `src/state/storage.ts` | `INITIAL_FUNDS` |
 | `src/state/gameStore.ts` | `DEBT_CONFIG`、`computeBorrowingLimit()` |

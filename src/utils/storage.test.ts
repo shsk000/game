@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeMonthlyWage, INITIAL_FUNDS } from '../data/balance';
-import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import { INITIAL_GENRE_IDS } from '../data/genres';
 import { INITIAL_THEME_IDS } from '../data/themes';
 import * as storage from './storage';
@@ -38,7 +37,6 @@ describe('defaults', () => {
     expect(d.unlockedScales).toEqual(['mini']);
     expect(d.unlockedGenres).toEqual([...INITIAL_GENRE_IDS]);
     expect(d.unlockedThemes).toEqual([...INITIAL_THEME_IDS]);
-    expect(d.unlockedCategories).toEqual([...INITIAL_CATEGORY_IDS]);
     expect(d.version).toBe(7);
   });
 });
@@ -74,11 +72,6 @@ describe('save / load（v5 往復）', () => {
     expect(loaded?.candidate).toBeNull();
   });
 
-  it('カテゴリが空の旧 v5 データは初期3カテゴリに補完される', () => {
-    const d = { ...storage.defaults(), unlockedCategories: [] };
-    storage.save(d as ReturnType<typeof storage.defaults>);
-    expect(storage.load()?.unlockedCategories).toEqual([...INITIAL_CATEGORY_IDS]);
-  });
 
   it('ライブラリで使用済みのジャンル/テーマは解放が維持される（v0.10 再ロック仕様）', () => {
     const d = storage.defaults();
@@ -289,9 +282,14 @@ describe('スキル移行（実装ステップ1・docs/spec/score-model.md §1�
     expect(storage.load()?.employees[0].power).toBe(0.42);
   });
 
-  it('既に skills を持つ社員は上書きされない', () => {
+  it('新スケールに収まっている社員は上書きされない', () => {
+    // 実装ステップ3：天井を超えているものだけ引き直す（超えていなければ触らない）
     const d = storage.defaults();
-    const e = { ...legacyEmployee('programmer', 0.4), skills: { graphics: 61, sound: 22 } };
+    const e = {
+      ...legacyEmployee('programmer', 0.4),
+      rank: 'S' as const,
+      skills: { graphics: 61, sound: 22 },
+    };
     storage.save({ ...d, employees: [e] });
     expect(storage.load()?.employees[0].skills).toEqual({ graphics: 61, sound: 22 });
   });
@@ -324,5 +322,81 @@ describe('スキル移行（実装ステップ1・docs/spec/score-model.md §1�
     expect(loaded?.employees.map((e) => e.rank)).toEqual(['B', 'A', 'S']);
     // power は移行前後で変わらない
     expect(loaded?.employees.map((e) => e.power)).toEqual([0.3, 0.5, 0.6]);
+  });
+});
+
+describe('実装ステップ1〜2 期のセーブも新スケールへ引き直す', () => {
+  it('天井を超えたスキル（旧 power × 100）はランクの帯へ引き直される', () => {
+    // ステップ1〜2 期は「総合力＝旧 power × 100」だったので、Lv5・power 0.7 の社員は
+    // スキル70 を持つ。B ランクの Lv5 は約38 なので、そのままだと天井を超えたまま残る
+    const d = storage.defaults();
+    storage.save({
+      ...d,
+      employees: [
+        {
+          id: 'old',
+          name: '旧スケール',
+          role: 'programmer',
+          power: 0.7,
+          basePower: 0.3,
+          level: 5,
+          exp: 0,
+          wage: 1,
+          specialties: [],
+          skills: { programming: 70 },
+        } as never,
+      ],
+    });
+    const e = storage.load()?.employees[0];
+    expect(e?.rank).toBe('B');
+    expect(e?.skills.programming).toBeLessThanOrEqual(60); // B の天井
+    expect(e?.skills.programming).toBeGreaterThan(0);
+  });
+
+  it('すでに新スケールに収まっている社員は触らない（成長のブレを消さない）', () => {
+    const d = storage.defaults();
+    storage.save({
+      ...d,
+      employees: [
+        {
+          id: 'ok',
+          name: '新スケール',
+          role: 'programmer',
+          power: 0.25,
+          basePower: 0.25,
+          level: 3,
+          exp: 0,
+          wage: 1,
+          specialties: [],
+          rank: 'A',
+          skills: { programming: 25 },
+        } as never,
+      ],
+    });
+    expect(storage.load()?.employees[0].skills.programming).toBe(25);
+  });
+
+  it('2スキル持ちは配分の比率を保ったまま引き直される', () => {
+    const d = storage.defaults();
+    storage.save({
+      ...d,
+      employees: [
+        {
+          id: 'two',
+          name: '2スキル',
+          role: 'designer',
+          power: 0.9,
+          basePower: 0.3,
+          level: 8,
+          exp: 0,
+          wage: 1,
+          specialties: [],
+          skills: { graphics: 60, sound: 30 },
+        } as never,
+      ],
+    });
+    const e = storage.load()?.employees[0];
+    expect(e?.skills.graphics! / e?.skills.sound!).toBeCloseTo(2, 1);
+    expect(e?.skills.graphics! + e?.skills.sound!).toBeLessThanOrEqual(60);
   });
 });

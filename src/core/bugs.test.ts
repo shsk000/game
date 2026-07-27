@@ -10,6 +10,7 @@ import {
   pickBugFixPhrase,
   remainingBugPenalty,
   rollBugOnKeystroke,
+  bugRateMultiplier,
   rollBugOnMiss,
 } from './bugs';
 import { mulberry32 } from './ports';
@@ -138,5 +139,32 @@ describe('BUG_FIX_PHRASES（デバッグ打鍵プールの健全性）', () => {
   it('1フレーズは UI 幅に収まる長さ（11 文字以内）', () => {
     const tooLong = BUG_FIX_PHRASES.filter((p) => [...p].length > 11);
     expect(tooLong).toEqual([]);
+  });
+});
+
+describe('bugRate（イベントの「バグ率 −10%」が実際に効く）', () => {
+  it('マイナスで発生率が下がり、プラスで上がる', () => {
+    expect(bugRateMultiplier(-10)).toBeCloseTo(0.9, 5);
+    expect(bugRateMultiplier(0)).toBe(1);
+    expect(bugRateMultiplier(20)).toBeCloseTo(1.2, 5);
+  });
+
+  it('−100% で発生ゼロ、極端な値でも 0〜2 に収まる', () => {
+    expect(bugRateMultiplier(-100)).toBe(0);
+    expect(bugRateMultiplier(-999)).toBe(0);
+    expect(bugRateMultiplier(999)).toBe(2);
+  });
+
+  it('打鍵ごとの発生判定に効く（表示どおり発生が減る）', () => {
+    const rate = (bugRate: number) => {
+      const rng = mulberry32(5);
+      let hits = 0;
+      for (let i = 0; i < 20_000; i++) if (rollBugOnKeystroke([], rng, bugRate)) hits += 1;
+      return hits / 20_000;
+    };
+    const base = rate(0);
+    // イベント報酬の最大値（−20%）でおよそ2割減る
+    expect(rate(-20)).toBeLessThan(base * 0.9);
+    expect(rate(-100)).toBe(0);
   });
 });

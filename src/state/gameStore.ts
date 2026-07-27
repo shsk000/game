@@ -23,8 +23,6 @@ import {
 } from '../core/release';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { DEV_PHRASES_PER_WEEK, type GachaKind } from '../data/balance';
-import type { CategoryId } from '../data/categories';
-import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import { newCandidate } from '../data/employees';
 import { DEFAULT_LOADOUT, EQUIPMENT_BY_ID, type EquipSlot } from '../data/equipment';
 import type { GenreId } from '../data/genres';
@@ -248,7 +246,6 @@ export type GameState = {
   unlockedScales: Scale[];
   unlockedGenres: GenreId[];
   unlockedThemes: ThemeId[];
-  unlockedCategories: CategoryId[];
   ghosts: Record<Scale, number | null>;
   library: Work[];
   trend: Trend;
@@ -307,7 +304,6 @@ export const useGameStore = create<GameState>()(
     unlockedScales: pureDefaults.unlockedScales,
     unlockedGenres: pureDefaults.unlockedGenres,
     unlockedThemes: pureDefaults.unlockedThemes,
-    unlockedCategories: [...INITIAL_CATEGORY_IDS],
     ghosts: pureDefaults.ghosts,
     library: [],
     trend: { genreId: GENRES[0].id, themeId: THEMES[0].id, expiresAt: 0 },
@@ -670,7 +666,9 @@ export const useGameStore = create<GameState>()(
     noteBugOnKeystroke: () => {
       const cur = get().current;
       if (!cur || cur.finishedAt !== null) return false;
-      if (!rollBugOnKeystroke(get().employees, deps.rng)) return false;
+      // イベントの「バグ率 −10%」等（axes.bugRate）はここで効く
+      if (!rollBugOnKeystroke(get().employees, deps.rng, get().current?.axes?.bugRate ?? 0))
+        return false;
       set({ current: { ...cur, bugCount: cur.bugCount + 1 } });
       return true;
     },
@@ -849,7 +847,6 @@ export const useGameStore = create<GameState>()(
         unlockedScales: d.unlockedScales,
         unlockedGenres: d.unlockedGenres,
         unlockedThemes: d.unlockedThemes,
-        unlockedCategories: d.unlockedCategories,
         ghosts: d.ghosts,
         library: d.library,
         trend: ensureTrend(null, now(), deps.rng),

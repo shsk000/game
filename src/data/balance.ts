@@ -48,8 +48,8 @@ export const INITIAL_FUNDS = 5_000_000; // ¥500 万
  * - 「ほとんどのゲームは赤字」現実準拠
  * - 神ゲー（95+）は 1%、出会えると喜びピーク
  *
- * この分布は computeQualityV10 + 補正の結果として実現される。
- * 実機での分布が想定とずれる場合、metascore.ts の難易度補正と各スコアの正規化を見直す。
+ * この分布は「特徴ポイント → メタスコア」（core/metascore.ts）の結果として実現される。
+ * 実機での分布が想定とずれる場合は FEATURE_SCALE_COEF と重み（data/archetypes.ts）を見直す。
  */
 export const SCORE_TIERS = {
   catastrophic: { min: 0, max: 29, expectedRate: 0.2 },
@@ -330,7 +330,10 @@ export const FEATURE_SCALE_COEF: Record<Scale, number> = {
   mobile: 0.25,
   indie: 0.09,
   hit: 0.048,
-  aaa: 0.035,
+  // AAA だけ天井基準（最強構成でようやく100）。0.035 では入門チーム（A級Lv8）が
+  // 名作＝粗利¥200億 になり「大作を当てにいく」緊張が消えたため 0.03 に下げた。
+  // 実測：A級Lv8 でメタ79（ヒット）＝収支トントン、A級Lv10 で神ゲー＝粗利¥400億
+  aaa: 0.03,
 };
 
 /**
@@ -556,27 +559,7 @@ export const INVEST_CONFIG = {
  * 能力抜きでは品質 +30 が上限＝スコア帯は会社の育ちでしか上がらない。
  * 旧: charPower 0.35 / genreAffinity 0.25 / typingScore 0.37 / luck 0.03
  */
-export const QUALITY_WEIGHTS = {
-  charPower: 0.6,
-  genreAffinity: 0.15,
-  typingScore: 0.15,
-  luck: 0.1,
-} as const;
 
-/**
- * v0.16：ビルドアップ属性ボーナス（devStats → 品質加点）の上限。
- * 旧実装は上限なしで青天井だったため、序盤でもスコアが積み上がりすぎた。
- */
-export const STAT_QUALITY_BONUS_CAP = 8;
-
-/**
- * v0.17.1：軸ボーナス（企画の面白さ/操作性/バランス×0.3 ＋ ビルドアップ属性）の
- * **正の合計の上限**。これらはコンボ・速度倍率＝タイピングの腕で増えるため、
- * 上限がないと QUALITY_WEIGHTS のタイピング 0.15 を裏口で迂回してしまう
- * （オーナー指摘「タイピングは0.15のはずなのにかなり加算されてる」）。
- * 上限 8 ＝ 分布シミュレーションで「序盤はメタ70に届かない」帯を維持できる最大値 🔧
- */
-export const AXIS_QUALITY_BONUS_CAP = 8;
 
 /**
  * v0.25：装備（設備）によるカテゴリ品質ボーナスの上限。
@@ -585,7 +568,6 @@ export const AXIS_QUALITY_BONUS_CAP = 8;
  * 青天井にすると分布ガード（メタ95は終盤）を壊すため上限付き。
  * 値は装備込み/なし両シナリオで balanceSimulation / progressionSimulation が緑になる交点で確定する 🔧
  */
-export const EQUIP_QUALITY_BONUS_CAP = 6;
 
 // ============================================================
 // v0.17：バグ発生システム（spec v17 §4。数値は叩き台 🔧）

@@ -1,14 +1,14 @@
 import { computeStageUnlocks } from '../core/progression';
-import { capSkill, totalPowerFor } from '../core/skills';
+import { capSkill, ownedSkillIds, totalPowerFor, totalPowerOf } from '../core/skills';
 import {
   computeMonthlyWage,
   GACHA_CONFIG,
   type GachaRank,
   INITIAL_FUNDS,
+  RANK_TOTAL_POWER,
   SCALE_BALANCE,
+  SKILL_CONFIG,
 } from '../data/balance';
-import type { CategoryId } from '../data/categories';
-import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import type { GenreId } from '../data/genres';
 import { INITIAL_GENRE_IDS } from '../data/genres';
 import type { Scale } from '../data/scales';
@@ -65,7 +65,6 @@ export type Persisted = {
   unlockedScales: Scale[];
   unlockedGenres: GenreId[];
   unlockedThemes: ThemeId[];
-  unlockedCategories: CategoryId[];
   ghosts: Record<Scale, number | null>;
   library: Work[];
   trend: Trend | null;
@@ -123,7 +122,6 @@ export const defaults = (): Persisted => ({
   // ファンタジー・SF・忍者などの人気テーマは終盤解放。
   unlockedGenres: [...INITIAL_GENRE_IDS],
   unlockedThemes: [...INITIAL_THEME_IDS],
-  unlockedCategories: [...INITIAL_CATEGORY_IDS],
   ghosts: emptyGhostsRecord(),
   library: [],
   trend: null,
@@ -247,13 +245,31 @@ const rankFromBasePower = (basePower: number): GachaRank => {
 
 const ensureSkills = (e: Employee): Employee => {
   const rank = e.rank ?? rankFromBasePower(e.basePower ?? e.power);
-  const owned = Object.values(e.skills ?? {}).filter((v) => (v ?? 0) > 0);
-  if (owned.length > 0) return e.rank ? e : { ...e, rank };
-  const primary = ROLE_TO_PRIMARY_SKILL[e.role] ?? 'programming';
-  // 実装ステップ3：総合力は**ランクとレベルから引き直す**（旧 power × 100 では
-  // 新しいスケール（Lv1 15〜28／Lv10 で天井）と対応が取れず、移行組だけ天井を超える）。
-  const total = totalPowerFor(rank, e.level ?? 1);
-  return { ...e, rank, skills: { [primary]: capSkill(total) } };
+  const level = e.level ?? 1;
+  const owned = ownedSkillIds(e.skills ?? {});
+
+  // 実装ステップ3：総合力は**ランクとレベルから引き直す**（Lv1 15〜28／Lv10 で天井）。
+  // 旧スケール（旧 power × 100）のままだと天井を超えたまま残る。
+  // 実装ステップ1〜2 期のセーブは**すでにスキルを持っている**ので、
+  // 「スキルが無い社員だけ」を対象にすると引き直しから漏れる（実際に漏れていた）。
+  const total = totalPowerFor(rank, level);
+
+  if (owned.length === 0) {
+    const primary = ROLE_TO_PRIMARY_SKILL[e.role] ?? 'programming';
+    return { ...e, rank, skills: { [primary]: capSkill(total) } };
+  }
+
+  // すでに新スケールに収まっているなら触らない（毎回引き直すと成長のブレが消える）
+  const current = totalPowerOf(e.skills ?? {});
+  const ceiling = RANK_TOTAL_POWER[rank].lv10;
+  if (current <= ceiling + 0.5) return e.rank ? e : { ...e, rank };
+
+  // 天井を超えている＝旧スケールのまま。配分の比率を保って引き直す
+  const spread = owned.length >= 2 ? SKILL_CONFIG.spreadPenalty : 1;
+  const eff = total * spread;
+  const skills: Employee['skills'] = {};
+  for (const id of owned) skills[id] = capSkill(eff * ((e.skills?.[id] ?? 0) / current));
+  return { ...e, rank, skills };
 };
 
 /** v0.9 → v0.10 用：work の金額を ×10,000 倍する */
@@ -296,10 +312,6 @@ const migrateFromV4 = (raw: string): Persisted | null => {
       unlockedScales: (old.unlockedScales ?? base.unlockedScales) as Scale[],
       unlockedGenres: (old.unlockedGenres ?? base.unlockedGenres) as GenreId[],
       unlockedThemes: (old.unlockedThemes ?? base.unlockedThemes) as ThemeId[],
-      unlockedCategories:
-        old.unlockedCategories && old.unlockedCategories.length > 0
-          ? (old.unlockedCategories as CategoryId[])
-          : [...INITIAL_CATEGORY_IDS],
       ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
       library,
       trend: old.trend ?? null,
@@ -342,7 +354,6 @@ const migrateFromV3 = (raw: string): Persisted | null => {
       unlockedScales: (old.unlockedScales ?? base.unlockedScales) as Scale[],
       unlockedGenres: (old.unlockedGenres ?? base.unlockedGenres) as GenreId[],
       unlockedThemes: (old.unlockedThemes ?? base.unlockedThemes) as ThemeId[],
-      unlockedCategories: [...INITIAL_CATEGORY_IDS],
       ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
       library,
       trend: old.trend ?? null,
@@ -384,7 +395,6 @@ const migrateFromV2 = (raw: string): Persisted | null => {
       unlockedScales: (old.unlockedScales ?? ['mini']) as Scale[],
       unlockedGenres: (old.unlockedGenres ?? base.unlockedGenres) as GenreId[],
       unlockedThemes: (old.unlockedThemes ?? base.unlockedThemes) as ThemeId[],
-      unlockedCategories: [...INITIAL_CATEGORY_IDS],
       ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
       library,
       trend: old.trend ?? null,
@@ -410,7 +420,6 @@ const migrateFromV1 = (raw: string): Persisted | null => {
       ...base,
       funds: Math.round((old.funds ?? 0) * V10_MONEY_MULTIPLIER),
       unlockedScales: (old.unlockedScales ?? ['mini']) as Scale[],
-      unlockedCategories: [...INITIAL_CATEGORY_IDS],
       ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
       library: (old.library ?? []).map(migrateWorkV2).map(rescaleWorkForV10),
       currentDate: { ...INITIAL_GAME_DATE },
@@ -464,10 +473,6 @@ const shapeLoaded = (parsed: Persisted): Persisted => {
   merged.employees = merged.employees.map((e) =>
     normalizeEmployeeV6({ ...e, specialties: e.specialties ?? [] }),
   );
-  merged.unlockedCategories =
-    parsed.unlockedCategories && parsed.unlockedCategories.length > 0
-      ? parsed.unlockedCategories
-      : [...INITIAL_CATEGORY_IDS];
   merged.currentDate = parsed.currentDate ?? { ...INITIAL_GAME_DATE };
   // v0.22：旧 v7 セーブにはガチャフィールドが無い（デフォルト補完）
   merged.candidate = parsed.candidate ?? null;

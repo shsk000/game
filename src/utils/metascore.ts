@@ -1,11 +1,5 @@
 import type { Rng } from '../core/ports';
-import {
-  LUCK_DEFAULT,
-  QUALITY_WEIGHTS,
-  SCALE_BALANCE,
-  SCORE_BASE,
-  salesMultiplierForScore,
-} from '../data/balance';
+import { SCALE_BALANCE, salesMultiplierForScore } from '../data/balance';
 import type { GenreId } from '../data/genres';
 import type { Scale } from '../data/scales';
 import type { ThemeId } from '../data/themes';
@@ -147,39 +141,6 @@ export const computeQuality = (
  * 結果レンジ：下手 5-25 / 普通 30-45 / 上手 65-90
  * タイピング能力が「勝負を分ける」設計（品質の 37% を握る最大レバー）。
  */
-export const computePerformanceScore = (perf: {
-  wpm: number;
-  maxCombo: number;
-  accuracy: number;
-  bugsCleared?: number;
-  noBugs?: boolean;
-}): number => {
-  let score = SCORE_BASE;
-
-  // WPM 寄与（120 基準 -25〜+30）
-  if (perf.wpm <= 0) score -= 5;
-  else {
-    const t = clamp((perf.wpm - 120) / 120, -1, 1);
-    score += t * (t >= 0 ? 30 : 25);
-  }
-
-  // コンボ寄与
-  if (perf.maxCombo >= 600) score += 25;
-  else if (perf.maxCombo >= 300) score += 18;
-  else if (perf.maxCombo >= 150) score += 10;
-  else if (perf.maxCombo >= 50) score += 5;
-
-  // 精度ペナルティ（97% 未満から効く）
-  if (perf.accuracy < 0.97) {
-    const def = (0.97 - perf.accuracy) / 0.97; // 0..1
-    score -= clamp(def * 60, 0, 25);
-  }
-
-  // バグなし完走
-  if (perf.noBugs) score += 5;
-
-  return clamp(Math.round(score), 0, 100);
-};
 
 /**
  * v0.10：4要素ウェイト品質計算式。
@@ -207,44 +168,6 @@ export type QualityV10Breakdown = {
   luckMultiplier: number;
 };
 
-export const computeQualityV10 = (
-  args: {
-    charPower: number;
-    genreAffinity: number;
-    typingScore: number;
-    luck?: number;
-  },
-  rng: Rng = Math.random,
-): { Q: number; breakdown: QualityV10Breakdown } => {
-  const charPower = clamp(args.charPower, 0, 100);
-  const genreAffinity = clamp(args.genreAffinity, 0, 100);
-  const typingScore = clamp(args.typingScore, 0, 100);
-  const luck = clamp(args.luck ?? LUCK_DEFAULT, 0, 100);
-
-  // ウェイト（balance-design §0、QUALITY_WEIGHTS）
-  const base =
-    charPower * QUALITY_WEIGHTS.charPower +
-    genreAffinity * QUALITY_WEIGHTS.genreAffinity +
-    typingScore * QUALITY_WEIGHTS.typingScore +
-    luck * QUALITY_WEIGHTS.luck;
-
-  // ±3% の運乱数（v0.14：±10%→±3%。運は味付けに留め、壁は腕で越えさせる）
-  const luckMultiplier = 0.97 + rng() * 0.06;
-
-  // 神ゲーガチャは v0.10 で廃止：4 要素の合算とタイピング演技で正面突破する設計
-  const Q = clamp(Math.round(base * luckMultiplier), 0, 100);
-  return {
-    Q,
-    breakdown: {
-      charPower,
-      genreAffinity,
-      typingScore,
-      luck,
-      base: Math.round(base),
-      luckMultiplier: Math.round(luckMultiplier * 100) / 100,
-    },
-  };
-};
 
 /** リリース時のファン増分。広報ボーナスで底上げ */
 export const fanDelta = (metascore: number, prBonus = 0): number => {

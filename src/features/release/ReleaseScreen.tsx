@@ -39,7 +39,6 @@ const stageReached = (current: RevealStage, target: RevealStage): boolean => {
   return order.indexOf(current) >= order.indexOf(target);
 };
 
-/** 4 要素ウェイト（v0.14 で再配分。balance.ts の QUALITY_WEIGHTS と同期） */
 
 /**
  * v0.14 §5-3：開発完了（打ち上げ）のフレーバー追加評価。
