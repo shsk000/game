@@ -353,6 +353,7 @@ body {
 }
 
 .release-info {
+  gap: 6px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -374,7 +375,7 @@ body {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 6px 16px;
   background: var(--panel-2);
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -390,7 +391,7 @@ body {
   font-size: 13px;
 }
 .meta-value {
-  font-size: 56px;
+  font-size: 40px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: var(--accent-2);
@@ -400,7 +401,8 @@ body {
 }
 
 .meta-flavor {
-  font-size: 18px;
+  font-size: 13px;
+  margin: 0;
   color: var(--warn);
 }
 
@@ -418,6 +420,8 @@ body {
   grid-template-columns: 1fr 1fr;
   gap: 6px;
   color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .release-stats .revenue {
@@ -1038,16 +1042,18 @@ body {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
+/* 内訳は7行（特徴5＋相性＋ブレ）に増えたので、1280×720 に収まるよう詰める */
 .breakdown-row {
   display: grid;
-  grid-template-columns: 28px 1fr auto;
-  gap: 10px;
+  grid-template-columns: 20px 1fr auto;
+  gap: 8px;
   align-items: baseline;
-  font-size: 14px;
+  font-size: 11px;
+  line-height: 1.3;
   animation: bd-fade 0.45s ease both;
 }
 .breakdown-emoji {
-  font-size: 20px;
+  font-size: 15px;
 }
 .breakdown-label {
   color: var(--muted);
@@ -1059,8 +1065,9 @@ body {
 }
 .breakdown-total {
   border-top: 1px dashed var(--border);
-  padding-top: 8px;
-  margin-top: 4px;
+  padding-top: 5px;
+  margin-top: 3px;
+  font-size: 13px;
   color: var(--text);
   font-weight: 800;
 }

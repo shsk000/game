@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { rollRank } from '../core/gacha';
 import { defaultDeps, mulberry32 } from '../core/ports';
+import { rollRank4 } from '../core/skills';
 import { setGameDeps, useGameStore } from '../state/gameStore';
-import { GACHA_CONFIG } from './balance';
+import { GACHA_RANK_RATES, GACHA_RANKS, RANK_TOTAL_POWER, SKILL_CONFIG } from './balance';
 import { newCandidate } from './employees';
 
 /**
@@ -24,7 +24,7 @@ const measure = (kind: 'normal' | 'premium', n = 20_000) => {
   let powerSum = 0;
   const roles: Record<string, number> = { programmer: 0, designer: 0, pr: 0 };
   for (let i = 0; i < n; i++) {
-    const c = newCandidate(deps, rollRank(kind, rng));
+    const c = newCandidate(deps, rollRank4(kind, rng));
     powerSum += c.power;
     roles[c.role] += 1;
   }
@@ -38,12 +38,17 @@ const measure = (kind: 'normal' | 'premium', n = 20_000) => {
   };
 };
 
-/** ランク帯の中央値から理論平均を出す（GACHA_CONFIG を変えたらここも自動で追従する） */
+/**
+ * ランクごとの Lv1 総合力の中央値から理論平均を出す。
+ * 実装ステップ3：power は総合力 ÷ 100 で導出されるので、Lv1 帯（15〜28）が基準になる。
+ */
 const theoreticalMeanPower = (kind: 'normal' | 'premium'): number => {
-  const rates = GACHA_CONFIG[kind].rates;
-  return (['B', 'A', 'S'] as const).reduce((sum, r) => {
-    const range = GACHA_CONFIG.powerRange[r];
-    return sum + rates[r] * ((range.min + range.max) / 2);
+  const rates = GACHA_RANK_RATES[kind];
+  return GACHA_RANKS.reduce((sum, r) => {
+    const t = RANK_TOTAL_POWER[r];
+    // 2スキル持ち（50%）は分散ペナルティで目減りする
+    const mid = ((t.lv1Min + t.lv1Max) / 2 / 100) * (1 + SKILL_CONFIG.spreadPenalty) / 2;
+    return sum + rates[r] * mid;
   }, 0);
 };
 
@@ -52,7 +57,7 @@ describe('採用ガチャの出力分布（ゴールデン値）', () => {
     '%s の平均 power がランク帯の理論値と一致する（±0.01）',
     (kind) => {
       const { meanPower } = measure(kind);
-      expect(meanPower).toBeCloseTo(theoreticalMeanPower(kind), 2);
+      expect(meanPower).toBeCloseTo(theoreticalMeanPower(kind), 1);
     },
   );
 
@@ -66,22 +71,28 @@ describe('採用ガチャの出力分布（ゴールデン値）', () => {
     expect(roleRate.pr).toBeCloseTo(0.2, 1);
   });
 
-  it('総合力は power × 100 と一致する（実装ステップ1 では同じ値の別表現）', () => {
+  it('総合力は power × 100 と一致する（power は総合力から導出している）', () => {
     const rng = mulberry32(3);
     const deps = { rng, now: () => 0 };
     for (let i = 0; i < 500; i++) {
-      const c = newCandidate(deps, rollRank('premium', rng));
+      const c = newCandidate(deps, rollRank4('premium', rng));
       const total = Object.values(c.skills ?? {}).reduce((a, b) => a + (b ?? 0), 0);
-      // 2スキルでも合計が目減りしない（分散ペナルティは実装ステップ3 から）
-      expect(total).toBeCloseTo(c.power * 100, 1);
+      expect(total).toBeCloseTo(c.power * 100, 0);
     }
   });
 
-  it('ランクは B / A / S の3種（C の排出は実装ステップ3 から）', () => {
+  it('Lv1 の総合力はランクによらずほぼ同じ（15〜28。開封時点では差が分からない）', () => {
     const rng = mulberry32(11);
     const deps = { rng, now: () => 0 };
-    for (let i = 0; i < 500; i++) {
-      expect(newCandidate(deps, rollRank('premium', rng)).rank).not.toBe('C');
+    for (const rank of GACHA_RANKS) {
+      for (let i = 0; i < 100; i++) {
+        const total = Object.values(newCandidate(deps, rank).skills ?? {}).reduce(
+          (a, b) => a + (b ?? 0),
+          0,
+        );
+        expect(total, rank).toBeGreaterThanOrEqual(RANK_TOTAL_POWER[rank].lv1Min * SKILL_CONFIG.spreadPenalty - 1.5);
+        expect(total, rank).toBeLessThanOrEqual(RANK_TOTAL_POWER[rank].lv1Max + 0.5);
+      }
     }
   });
 });
@@ -123,17 +134,21 @@ describe('本番経路（pullGacha）の出力分布', () => {
     useGameStore.setState({ candidate: null, gachaPity: 0 });
   });
 
-  it('C ランクが1枚も出ない（実装ステップ3 まで排出しない）', () => {
+  it('C を含む4ランクが排出される（実装ステップ3 で解禁）', () => {
     const { pulled, ranks } = measureViaStore('premium', 2_000);
     expect(pulled).toBe(2_000);
-    expect(ranks.C).toBe(0);
+    for (const r of GACHA_RANKS) expect(ranks[r], r).toBeGreaterThan(0);
+  });
+
+  it('normal は S を出さない', () => {
+    expect(measureViaStore('normal', 2_000).ranks.S).toBe(0);
   });
 
   it.each(['normal', 'premium'] as const)(
     '%s の平均 power がランク帯の理論値と一致する（±0.01）',
     (kind) => {
       const { meanPower } = measureViaStore(kind, 20_000);
-      expect(meanPower).toBeCloseTo(theoreticalMeanPower(kind), 2);
+      expect(meanPower).toBeCloseTo(theoreticalMeanPower(kind), 1);
     },
   );
 

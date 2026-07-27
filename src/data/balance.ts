@@ -76,26 +76,53 @@ export const SCORE_TIERS = {
  * - 名作（×250）：mini ¥7500 万
  * - 神ゲー帯（×500）：mini ¥1.5 億
  */
+/**
+ * ヒット区分の売上倍率（docs/spec/score-model.md §5）。
+ *
+ * 旧 ×0.33〜×500（レンジ1500倍）は「神ゲー＝1%の稀な当たり」を前提にした数字。
+ * 新モデルでは終盤に名作・神ゲーが常態になるため、そのままだと1作で兆が出る（実測）。
+ * **1作の売上は現実に近づけ、上限は数百億とする（オーナー確定）。**
+ *
+ * 隣接区分の比率は 1.7〜2.4倍。「区分をまたぐと売上が約2倍」の跳ね感は維持する。
+ * **基準売上 ＝ 普通（×1）のときの売上**に再定義した（旧は普通=×10 換算で分かりにくかった）。
+ */
 export const SALES_MULTIPLIER_BY_SCORE = {
-  catastrophic: 0.333,
-  failure: 3.333,
-  normal: 10,
-  hit: 33,
-  bigHit: 100,
-  masterpiece: 250,
-  godGame: 500,
+  catastrophic: 0.25,
+  failure: 0.6,
+  normal: 1,
+  hit: 2,
+  bigHit: 3.5,
+  masterpiece: 6,
+  godGame: 10,
 } as const;
 
-/** スコア帯ごとの売上倍率を引くヘルパー */
-export const salesMultiplierForScore = (metascore: number): number => {
-  if (metascore <= 29) return SALES_MULTIPLIER_BY_SCORE.catastrophic;
-  if (metascore <= 49) return SALES_MULTIPLIER_BY_SCORE.failure;
-  if (metascore <= 69) return SALES_MULTIPLIER_BY_SCORE.normal;
-  if (metascore <= 79) return SALES_MULTIPLIER_BY_SCORE.hit;
-  if (metascore <= 89) return SALES_MULTIPLIER_BY_SCORE.bigHit;
-  if (metascore <= 94) return SALES_MULTIPLIER_BY_SCORE.masterpiece;
-  return SALES_MULTIPLIER_BY_SCORE.godGame;
+/** ヒット区分の表示名（リリース画面・図鑑で共用） */
+export const SCORE_TIER_LABEL = {
+  catastrophic: '致命的失敗',
+  failure: '失敗',
+  normal: '普通',
+  hit: 'ヒット',
+  bigHit: '大ヒット',
+  masterpiece: '名作',
+  godGame: '神ゲー',
+} as const;
+
+export type ScoreTier = keyof typeof SALES_MULTIPLIER_BY_SCORE;
+
+/** メタスコア → ヒット区分 */
+export const scoreTierFor = (metascore: number): ScoreTier => {
+  if (metascore <= 29) return 'catastrophic';
+  if (metascore <= 49) return 'failure';
+  if (metascore <= 69) return 'normal';
+  if (metascore <= 79) return 'hit';
+  if (metascore <= 89) return 'bigHit';
+  if (metascore <= 94) return 'masterpiece';
+  return 'godGame';
 };
+
+/** スコア帯ごとの売上倍率を引くヘルパー */
+export const salesMultiplierForScore = (metascore: number): number =>
+  SALES_MULTIPLIER_BY_SCORE[scoreTierFor(metascore)];
 
 // ============================================================
 // v0.16：power 正規化と役割換算（spec v16 §1-3）
@@ -106,14 +133,11 @@ export const salesMultiplierForScore = (metascore: number): number => {
  * 役割ごとの実効果は使用側でこの係数を掛けて換算する。
  * 旧スケール（プログラマー0.3〜1.2 / デザイナー2〜10 / 広報5〜20）は v5→v6 セーブ移行で換算。
  */
-export const ROLE_EFFECT = {
-  /** プログラマー：自動開発速度 LoC/秒 = power × この値 */
-  programmerLocPerSec: 1.2,
-  /** デザイナー：品質基礎+ = power × この値 */
-  designerQualityBonus: 10,
-  /** 広報：売上ボーナス（比率）= power × この値（例 power 0.5 → +10%） */
-  prSalesBonus: 0.2,
-} as const;
+/**
+ * 広報スキル100 あたりの売上ボーナス（docs/spec/score-model.md §1）。
+ * 実装ステップ3：旧 `ROLE_EFFECT.prSalesBonus`（役職 pr の power × 0.2）から付け替えた。
+ */
+export const PR_SALES_BONUS_PER_SKILL = 0.2;
 
 // ============================================================
 // v0.22：採用ガチャ（spec v22 §4。旧 CANDIDATE_POWER_RANGE 0.2〜0.6 をランク帯に置換）
@@ -440,7 +464,7 @@ export const SCALE_BALANCE: Record<
 > = {
   mini: {
     devCost: 300_000, // ¥30 万
-    baseRevenue: 300_000, // normal(×10) で ¥300 万
+    baseRevenue: 3_000_000, // 普通（×1）で ¥300 万
     unlockSalesRequired: 0,
     unlockCost: 0,
     // 実装ステップ2：8週 → 4週（docs/spec/score-model.md §3。序盤の破産ウォール対策）。
@@ -449,30 +473,31 @@ export const SCALE_BALANCE: Record<
   },
   mobile: {
     devCost: 3_000_000, // ¥300 万
-    baseRevenue: 3_000_000, // normal(×10) で ¥3000 万
+    baseRevenue: 30_000_000, // 普通（×1）で ¥3000 万
     // v0.18：新分布に整合（旧値 ¥3000万 は初手メタ95時代の設定。8〜12作目で到達する水準に）
-    unlockSalesRequired: 30_000_000, // ¥3000 万（シミュレーションで 8〜16 作目に調整）
+    // 実装ステップ3：各規模を7〜9本ずつ遊べるペースに再校正（docs/spec/score-model.md §5）
+    unlockSalesRequired: 150_000_000, // ¥1.5 億（8作目前後）
     unlockCost: 2_000_000, // ¥200 万
     neededWeeks: 12, // 3 ヶ月
   },
   indie: {
     devCost: 50_000_000, // ¥5000 万
-    baseRevenue: 30_000_000, // normal(×10) で ¥3 億
-    unlockSalesRequired: 200_000_000, // ¥2 億（v0.18）
+    baseRevenue: 300_000_000, // 普通（×1）で ¥3 億
+    unlockSalesRequired: 1_100_000_000, // ¥11 億（16作目前後）
     unlockCost: 15_000_000, // ¥1500 万（v0.18）
     neededWeeks: 20, // 5 ヶ月
   },
   hit: {
     devCost: 1_000_000_000, // ¥10 億
-    baseRevenue: 300_000_000, // normal(×10) で ¥30 億
-    unlockSalesRequired: 2_000_000_000, // ¥20 億（v0.18）
+    baseRevenue: 2_000_000_000, // 普通（×1）で ¥20 億
+    unlockSalesRequired: 4_000_000_000, // ¥40 億（24作目前後）
     unlockCost: 150_000_000, // ¥1.5 億（v0.18）
     neededWeeks: 28, // 7 ヶ月
   },
   aaa: {
     devCost: 10_000_000_000, // ¥100 億
-    baseRevenue: 3_000_000_000, // normal(×10) で ¥300 億
-    unlockSalesRequired: 25_000_000_000, // ¥250 億（v0.18）
+    baseRevenue: 5_000_000_000, // 普通（×1）で ¥50 億
+    unlockSalesRequired: 20_000_000_000, // ¥200 億（32作目前後）
     unlockCost: 1_500_000_000, // ¥15 億（v0.18）
     neededWeeks: 36, // 9 ヶ月
   },
@@ -582,8 +607,11 @@ export const BUG_CONFIG = {
    * 社員能力が高ければ割合が低くなる」。mini（正打 200〜300 打）で 3〜5 匹の期待値
    */
   onKeystrokeRate: 0.02,
-  /** 抑制率 = min(maxSuppression, プログラマー power 合計 / suppressCap) */
-  suppressCap: 2.0,
+  /**
+   * 抑制率 = min(maxSuppression, プログラミングスキル合計 / suppressSkillCap)。
+   * 旧 power 合計（上限2.0）と同じ体感になるよう ×100 スケールに合わせた。
+   */
+  suppressSkillCap: 200,
   maxSuppression: 0.8,
   /**
    * 開発完了時の最低保証バグ数。「どんなコードにもバグはいる」＝

@@ -97,7 +97,7 @@ export const CollectionScreen = () => {
         bestMeta: 0,
       };
       cur.count += 1;
-      cur.bestQ = Math.max(cur.bestQ, w.quality);
+      cur.bestQ = Math.max(cur.bestQ, w.metascore);
       cur.bestRevenue = Math.max(cur.bestRevenue, w.totalRevenue);
       cur.bestMeta = Math.max(cur.bestMeta, w.metascore);
       map.set(key, cur);

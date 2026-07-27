@@ -9,9 +9,12 @@ import {
 } from '../data/balance';
 import { sumMonthlySalaries } from '../data/employees';
 import type { Scale } from '../data/scales';
+import { SCALE_BY_ID } from '../data/scales';
 import type { Employee, EmployeeRole, Work } from '../state/types';
-import { computeCharacterScore } from '../utils/character';
-import { computeMetascore, computeQualityV10, computeRevenue } from '../utils/metascore';
+import { DEV_SKILL_IDS } from '../state/types';
+import { computeRevenue } from '../utils/metascore';
+import { addFeature, featureGainFor, initialFeatures } from './features';
+import { computeMetascore } from './metascore';
 import { INITIAL_SHARE, decayRateFor, settleAllWorks } from '../utils/sales';
 import { computeMonthlyTick, computeSpend } from './economy';
 import { applyReleaseGrowth } from './growth';
@@ -38,9 +41,6 @@ import { mulberry32, type Rng } from './ports';
 const SCALE_ORDER: Scale[] = ['mini', 'mobile', 'indie', 'hit', 'aaa'];
 
 /** 平均的プレイヤー：相性=初期帯平均(31点)・タイピング70・軸ボーナス半分（progression sim と同値） */
-const AFFINITY = 31;
-const TYPING = 70;
-const AXIS_BONUS = 4;
 
 /** 4 週 = 1 ヶ月（types.ts dateToWeekIndex：(month-1)*4）。月境界で固定費を精算する */
 const WEEKS_PER_MONTH = 4;
@@ -49,16 +49,24 @@ const IDLE_SEC_PER_WEEK = TIME_RATE_MS_PER_WEEK.idle / 1000;
 
 const MEDIAN_SEEDS = [1, 42, 777] as const;
 
-const emp = (id: string, role: EmployeeRole, power = 0.4): Employee => ({
+/** 入門チームの1人（B級 Lv1 相当＝スキル18）。役職ごとに1分野を担当する */
+const emp = (id: string, role: EmployeeRole, skill = 18): Employee => ({
   id,
   name: id,
   role,
-  power,
-  basePower: power,
+  power: skill / 100,
+  basePower: skill / 100,
   level: 1,
   exp: 0,
   wage: 0,
-  specialties: [], skills: {},
+  specialties: [],
+  rank: 'B',
+  skills:
+    role === 'programmer'
+      ? { programming: skill }
+      : role === 'designer'
+        ? { graphics: skill }
+        : { sound: skill },
 });
 
 const medianTeam = (): Employee[] => [
@@ -77,7 +85,6 @@ const sellingWork = (salesPool: number, metascore: number): Work => ({
   genreId: 'puzzle',
   themeId: 'sushi',
   scale: 'mini',
-  quality: 0,
   metascore,
   isMasterpiece: false,
   developSec: 1,
@@ -106,6 +113,8 @@ type SolvencyResult = {
   reachedMobileSolvent: boolean;
   finalFunds: number;
   finalDebt: number;
+  /** シミュ全体で引かれた固定費の合計（固定費モデルが効いていることの確認用） */
+  totalFixedCost: number;
   grossLifetime: number;
 };
 
@@ -127,6 +136,7 @@ const simulateSolvency = (seed: number, maxReleases = 20): SolvencyResult => {
 
   let funds = INITIAL_FUNDS;
   let debt = 0;
+  let totalFixedCost = 0;
   let grossLifetime = 0;
   let scaleIdx = 0;
   let library: Work[] = [];
@@ -164,6 +174,7 @@ const simulateSolvency = (seed: number, maxReleases = 20): SolvencyResult => {
         });
         funds = tick.funds;
         debt = tick.debt;
+        totalFixedCost += tick.cost.total;
         if (blackTurnRelease === null && monthSales >= tick.cost.total) {
           blackTurnRelease = release;
         }
@@ -175,14 +186,18 @@ const simulateSolvency = (seed: number, maxReleases = 20): SolvencyResult => {
       }
     }
 
-    // 4) リリース：品質→メタ→売上（progression sim と同じ入力・呼び出しで整合）
-    const { score: charPower } = computeCharacterScore({ assignedEmployees: team, scale });
-    const { Q } = computeQualityV10(
-      { charPower, genreAffinity: AFFINITY, typingScore: TYPING },
+    // 4) リリース：特徴ポイント→メタ→売上（progression sim と同じ入力・呼び出しで整合）
+    const phrasesPerField = Math.max(1, Math.round((SCALE_BY_ID[scale].neededWeeks * 3) / 4));
+    let features = initialFeatures([], 'puzzle', 'sushi');
+    for (const field of DEV_SKILL_IDS) {
+      for (let n = 0; n < phrasesPerField; n++) {
+        features = addFeature(features, field, featureGainFor(field, team, scale, 1.01));
+      }
+    }
+    const meta = computeMetascore(
+      { features, genreId: 'puzzle', themeId: 'sushi', compat: 1.0, trend: null },
       rng,
     );
-    const quality = Math.max(0, Math.min(100, Math.round(Q + AXIS_BONUS)));
-    const meta = computeMetascore(quality, 'puzzle', 'sushi', null, rng);
     const total = computeRevenue(meta.metascore, 'puzzle', 'sushi', scale, null, 0);
     grossLifetime += total;
 
@@ -190,7 +205,7 @@ const simulateSolvency = (seed: number, maxReleases = 20): SolvencyResult => {
     funds += initialRevenue; // 初動は収入（借金ではないので直接加算）
     library = [sellingWork(total - initialRevenue, meta.metascore), ...library];
 
-    team = applyReleaseGrowth(team, ids, meta.metascore).employees;
+    team = applyReleaseGrowth(team, ids, meta.metascore, scale).employees;
 
     // 5) 解放判定：粗累計（既存 progression sim と同一ロジック）
     while (
@@ -214,6 +229,7 @@ const simulateSolvency = (seed: number, maxReleases = 20): SolvencyResult => {
     reachedMobileSolvent,
     finalFunds: funds,
     finalDebt: debt,
+    totalFixedCost,
     grossLifetime,
   };
 };
@@ -317,11 +333,14 @@ describe('solvency シミュ（§10-②：序盤の破産でプレイヤーの�
     expect(solvent.length, 'seeds reaching mobile without bankruptcy').toBeGreaterThanOrEqual(1);
   });
 
-  it('中央値プレイヤーが少なくとも 1 度は借金に沈む（固定費モデルが効いている＝資金十分の前提ではない）', () => {
-    // 既存 progression sim（wage:0・資金無限）との差分を保証：本シミュは固定費で必ず借金が発生する。
+  it('固定費モデルが効いている（資金無限の前提ではない）', () => {
+    // 既存 progression sim（wage:0・資金無限）との差分を保証。
+    // 実装ステップ3＋ミニ4週化で序盤の粗利が黒字になったため「必ず借金する」ことは
+    // もう保証しない（借金を強制するのは §10-2 の「誰も弾かない」に反する）。
+    // ここで見るのは「固定費が実際に引かれていること」だけ。
     for (const seed of MEDIAN_SEEDS) {
       const r = simulateSolvency(seed);
-      expect(r.finalDebt, `seed=${seed} debt`).toBeGreaterThan(0);
+      expect(r.totalFixedCost, `seed=${seed} 固定費`).toBeGreaterThan(0);
     }
   });
 });

@@ -3,6 +3,7 @@ import { ads } from '../../ads/AdProvider';
 import { PlanMeetingBoard } from '../../components/PlanMeetingBoard';
 import { PixelStatusBar, SegGauge } from '../../components/ui';
 import { bugSuppression, bugsClearedByAd, pickBugFixPhrase } from '../../core/bugs';
+import { withEffectiveSkills } from '../../core/equip';
 import type { DevSkillId, FeatureId, FeaturePoints } from '../../state/types';
 import { FEATURE_IDS, SKILL_TO_FEATURE, ZERO_FEATURES } from '../../state/types';
 import {
@@ -175,9 +176,9 @@ export const DevelopScreen = () => {
   const [completedTickets, setCompletedTickets] = useState<
     { title: string; category: TicketCategory }[]
   >([]);
-  // 割当社員（装備込みのスキルは core/features 側で解決する）
+  // 割当社員。**装備を掛けた実効スキル**で特徴ポイントを積む（score-model §1）
   const assignedEmployees = useMemo(
-    () => employees.filter((e) => current?.assignedEmployeeIds.includes(e.id)),
+    () => withEffectiveSkills(employees.filter((e) => current?.assignedEmployeeIds.includes(e.id))),
     [employees, current?.assignedEmployeeIds],
   );
   // 特徴ポイントの加算ポップ（「🎨 +2.7」）
@@ -369,9 +370,10 @@ export const DevelopScreen = () => {
         const comboMult = comboAttrMultiplier(comboRef.current);
         const gain = Math.max(1, Math.round(PLAN_BASE_GAIN * comboMult * speedMult));
         const weights = PLAN_CATEGORY_META[t.category].effects;
-        const funGain = weights.funFactor * gain;
+        // 実装ステップ3：企画フェーズの打鍵は期待度（発売時のファン増加）に一本化した
+        const funGain = 0;
         const hypeGain = weights.hype * gain;
-        applyAxisDelta({ funFactor: funGain, hype: hypeGain });
+        applyAxisDelta({ hype: hypeGain });
 
         sfx[rank === 'PERFECT' ? 'success' : 'complete']();
         setLastResult({
@@ -528,12 +530,12 @@ export const DevelopScreen = () => {
           sfx.crunch();
         }
 
-        // 進捗（完成度）は従来通り：速度＋コンボ倍率＋フィーバー×2
-        const progress =
-          progressGain(wpmRef.current, false, comboRef.current) *
-          (feverActiveRef.current ? 2 : 1) *
-          (crunchActive ? JUICE_CONFIG.crunch.progressMult : 1);
-        addDevelopLoC(progress);
+        // 進捗は**打ち切った文の数**で数える（docs/spec/score-model.md §3）。
+        // 速度で進捗が増える旧方式だと、速く打つほど少ない文数で開発が終わり、
+        // 「1分野あたりの文数は固定」が壊れて後半の分野に文が回らなくなる
+        // （実測：2分野カバーなのにグラフィックの文が1回も出ずに完成した）。
+        // 腕は「同じ文数を短い時間で打ち切る」＝実時間の短縮に出る。
+        addDevelopLoC(1);
 
         // 待機中のイベントがあれば、次の文としてイベント文を投入（途中差し替えしない）
         if (pendingRef.current) {

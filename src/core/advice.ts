@@ -1,35 +1,57 @@
 /**
- * v0.18：リリース結果の「次の一手」アドバイス（spec §3）。
+ * リリース結果の「次の一手」アドバイス。
  *
- * 4 要素ブレイクダウンから**最大のボトルネックを 1 つだけ**選び、
- * プレイヤーへの日本語アドバイス 1 行に翻訳する純粋関数。
- * 「赤字が自分のせい＋改善の道筋が見える」なら継続動機になる（診断3）。
+ * メタスコアの内訳から**最大のボトルネックを1つだけ**選び、日本語1行に翻訳する純粋関数。
+ * 「赤字が自分のせい＋改善の道筋が見える」なら継続動機になる。
  *
- * 注：Work には残バグ数が保存されていない（品質減点は breakdown.axisBonus に
- * 溶けている）ため、残バグ専用のアドバイスは出さず 3 要素比較に徹する。
- * バグ情報を Work に載せたら分岐を足すこと。
+ * 実装ステップ3：旧4要素（キャラ能力／ジャンル相性／タイピング演技）から
+ * **特徴ポイント5種**（docs/spec/score-model.md §2）に付け替えた。
+ * 指摘するのは「そのジャンルで重い（◎）のに低い分野」＝伸ばせば一番効くところ。
  */
+import { normalizedWeightsFor } from '../data/archetypes';
 import { ADVICE_GOOD_THRESHOLD } from '../data/balance';
-import type { Work } from '../state/types';
+import type { FeatureId, Work } from '../state/types';
+import { FEATURE_IDS } from '../state/types';
 
-export const ADVICE_CHAR_POWER = '👥 社員の力不足が響いた。育成か採用で会社を強くしよう';
-export const ADVICE_GENRE_AFFINITY = '🧩 ジャンル×テーマの相性が低い。図鑑で好相性を探そう';
-export const ADVICE_PERFORMANCE = '⌨ タイピングの乱れが品質を下げた。正確に打とう';
 export const ADVICE_ALL_GOOD = '🎉 死角なし。この調子で次回作へ';
 
+/** 分野ごとのアドバイス文（低いときに出す） */
+export const FEATURE_ADVICE: Record<FeatureId, string> = {
+  usabilityPt: '🕹 操作性が足りない。プログラミングの高い社員を入れて打ち込もう',
+  graphicsPt: '🎨 見た目が弱い。グラフィックの高い社員を入れて打ち込もう',
+  soundPt: '🎵 音が弱い。サウンドの高い社員を入れて打ち込もう',
+  storyPt: '📖 物語が薄い。シナリオの高い社員を入れて打ち込もう',
+  innovationPt: '💡 既視感がある。ジャンルかテーマを変えて新しい組合せを試そう',
+};
+
 /**
- * 3 要素（キャラ能力・ジャンル相性・タイピング演技。各 0..100）の最小値を
- * ボトルネックとして 1 つだけ指摘する。決定的：
- * - 最小値が ADVICE_GOOD_THRESHOLD 以上 → 死角なし
- * - 同点時の優先順位は キャラ能力 → 相性 → タイピング（固定）
+ * ボトルネックを1つだけ指摘する。決定的：
+ * - **そのジャンルでの重み × 不足分**が最大の分野を選ぶ
+ *   （重い分野の不足ほど効くので、「◎なのに低い」を優先して拾う）
+ * - すべて ADVICE_GOOD_THRESHOLD 以上なら死角なし
+ * - 同点時は FEATURE_IDS の順（操作性 → グラフィック → サウンド → ストーリー → 革新性）
  */
 export const adviceFor = (work: Work): string => {
-  const charPower = work.breakdown.charPower ?? 0;
-  const genreAffinity = work.breakdown.genreAffinity ?? 0;
-  const performance = work.breakdown.performance ?? 0;
-  const min = Math.min(charPower, genreAffinity, performance);
-  if (min >= ADVICE_GOOD_THRESHOLD) return ADVICE_ALL_GOOD;
-  if (charPower === min) return ADVICE_CHAR_POWER;
-  if (genreAffinity === min) return ADVICE_GENRE_AFFINITY;
-  return ADVICE_PERFORMANCE;
+  const contributions = work.breakdown.features ?? {};
+  const weights = normalizedWeightsFor(work.genreId);
+
+  let worst: FeatureId | null = null;
+  let worstLoss = -1;
+  let minPoint = Number.POSITIVE_INFINITY;
+
+  for (const id of FEATURE_IDS) {
+    const w = weights[id];
+    // 内訳は「特徴ポイント × 重み」なので、割り戻して素の特徴ポイントに戻す
+    const point = w > 0 ? (contributions[id] ?? 0) / w : 0;
+    minPoint = Math.min(minPoint, point);
+    // 伸ばしたときに増える点＝重み × 不足分
+    const loss = w * (100 - point);
+    if (loss > worstLoss) {
+      worstLoss = loss;
+      worst = id;
+    }
+  }
+
+  if (minPoint >= ADVICE_GOOD_THRESHOLD) return ADVICE_ALL_GOOD;
+  return worst ? FEATURE_ADVICE[worst] : ADVICE_ALL_GOOD;
 };

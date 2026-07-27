@@ -1,10 +1,15 @@
 import type { Deps, Rng } from '../core/ports';
 import { defaultDeps } from '../core/ports';
 import { rollRank } from '../core/gacha';
-import { primarySkillOf, rollSkills } from '../core/skills';
+import {
+  primarySkillOf,
+  prSkillTotalOf,
+  rollSkills,
+  totalPowerFor,
+  totalPowerOf,
+} from '../core/skills';
 import type { Candidate, Employee, EmployeeRole, EmployeeSpecialty, SkillId } from '../state/types';
-import { computeMonthlyWage, GACHA_CONFIG, type GachaRank, ROLE_EFFECT } from './balance';
-import type { CategoryId } from './categories';
+import { computeMonthlyWage, GACHA_CONFIG, type GachaRank, PR_SALES_BONUS_PER_SKILL } from './balance';
 
 const SURNAMES = [
   '佐藤',
@@ -94,7 +99,7 @@ export const employeeMonthlyWage = (e: Employee): number => wageFor(e.role, e.po
 export const sumMonthlySalaries = (employees: Employee[]): number =>
   employees.reduce((sum, e) => sum + employeeMonthlyWage(e), 0);
 
-const ALL_CATEGORY_IDS: CategoryId[] = [
+const ALL_CATEGORY_IDS: string[] = [
   'graphics',
   'sound',
   'story',
@@ -103,7 +108,7 @@ const ALL_CATEGORY_IDS: CategoryId[] = [
   'innovation',
 ];
 
-const PRIMARY_CATEGORIES_BY_ROLE: Record<EmployeeRole, CategoryId[]> = {
+const PRIMARY_CATEGORIES_BY_ROLE: Record<EmployeeRole, string[]> = {
   programmer: ['gameplay', 'innovation'],
   designer: ['graphics', 'sound'],
   pr: ['story', 'presentation'],
@@ -141,15 +146,12 @@ export const newCandidate = (
   rank: GachaRank = rollRank('normal', deps.rng),
 ): Candidate => {
   const { rng, now } = deps;
-  // 実装ステップ1 は「表示とデータ構造の器を作る」だけ。**値の生成は旧ロジックのまま凍結**する。
-  // power をスキルから導出しようとすると、旧 power 帯（B 0.2〜0.4）と新しい総合力帯
-  // （Lv1 15〜28）で単位が合わず、採用社員が一律に弱くなる（序盤の売上が桁で落ちる）。
-  // ランクの天井を効かせる切り替えは実装ステップ3 で一点に集約して行う。
-  const power = rollPowerForRank(rank, rng);
-  // 総合力＝旧 power × 100（同じ値の別表現）。分散ペナルティはステップ3 から効かせるので、
-  // ここでは総合力を保存する（2スキルでも合計は power × 100 のまま）。
-  const skills = rollSkills(Math.round(power * 100 * 10) / 10, rng, 1);
+  // 実装ステップ3：**スキルが真**。ランクの天井（RANK_TOTAL_POWER）から総合力を決め、
+  // 分散ペナルティ（2スキルは ×0.9）も効かせる。
+  const skills = rollSkills(totalPowerFor(rank, 1, rng()), rng);
   const role = roleFromSkills(skills);
+  // 互換：給与計算がまだ power を使う。総合力 ÷ 100 で導出する（同じスケールになった）
+  const power = Math.round((totalPowerOf(skills) / 100) * 1000) / 1000;
   counter += 1;
   return {
     id: `c-${now()}-${counter}`,
@@ -181,17 +183,15 @@ export const roleFromSkills = (skills: Employee['skills']): EmployeeRole => {
 export const sumProgrammerPower = (employees: Employee[]): number =>
   employees.filter((e) => e.role === 'programmer').reduce((a, b) => a + b.power, 0);
 
-/** デザイナーの品質基礎ボーナス合計。v0.16：正規化 power × 係数 */
-export const sumDesignerBonus = (employees: Employee[]): number =>
-  employees
-    .filter((e) => e.role === 'designer')
-    .reduce((a, b) => a + b.power * ROLE_EFFECT.designerQualityBonus, 0);
-
-/** 広報の売上ボーナス合計（比率）。v0.16：正規化 power × 係数 */
+/**
+ * 広報の売上ボーナス（比率）。
+ *
+ * 実装ステップ3：役職 `pr` の `power` 合計 → **広報スキルの合計**に付け替えた
+ * （同分野の2人目以降は半減。`prSkillTotalOf`）。
+ * スキル100 の広報1人で +20%、2人目は +10% 上乗せ。
+ */
 export const sumPrBonus = (employees: Employee[]): number =>
-  employees
-    .filter((e) => e.role === 'pr')
-    .reduce((a, b) => a + b.power * ROLE_EFFECT.prSalesBonus, 0);
+  Math.round((prSkillTotalOf(employees) / 100) * PR_SALES_BONUS_PER_SKILL * 1000) / 1000;
 
 /**
  * 割当従業員のうち、選択カテゴリにマッチする specialty.bonus の総和。
@@ -199,7 +199,7 @@ export const sumPrBonus = (employees: Employee[]): number =>
 export const sumEmployeeCategoryBonus = (
   employees: Employee[],
   selectedIds: string[],
-  categoryIds: CategoryId[],
+  categoryIds: string[],
 ): number => {
   const selectedSet = new Set(selectedIds);
   const categorySet = new Set(categoryIds);

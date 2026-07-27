@@ -64,13 +64,15 @@ describe('applyReleaseGrowth', () => {
     expect(r.levelUps).toEqual([]);
   });
 
-  it('しきい値を越えるとレベルアップし、power と月給が上がる', () => {
-    const a = emp({ id: 'a', exp: nextExpFor(1) - 5 }); // あと 5 で Lv2
+  it('しきい値を越えるとレベルアップし、スキル・power・月給が上がる', () => {
+    // 実装ステップ3：伸びるのは**総合力**で、power はそこから導出される
+    const a = emp({ id: 'a', exp: nextExpFor(1) - 5, rank: 'B', skills: { programming: 18 } });
     const r = applyReleaseGrowth([a], ['a'], 50); // +15 exp
     const grown = r.employees[0];
     expect(grown.level).toBe(2);
     expect(grown.exp).toBe(a.exp + 15 - nextExpFor(1));
-    expect(grown.power).toBe(powerAt(a.basePower, 2));
+    expect(grown.skills!.programming!).toBeGreaterThan(a.skills!.programming!);
+    expect(grown.power).toBeCloseTo(grown.skills!.programming! / 100, 2);
     expect(grown.wage).toBe(Math.round(computeMonthlyWage(grown.power, 2)));
     expect(r.levelUps).toEqual([
       expect.objectContaining({ employeeId: 'a', name: a.name, level: 2 }),

@@ -66,14 +66,19 @@ export const distributeSkills = (
   spreadPenalty: number = SKILL_CONFIG.spreadPenalty,
 ): SkillSet => {
   if (ids.length === 0) return {};
-  if (ids.length === 1) return { [ids[0]]: Math.round(totalPower * 10) / 10 };
+  if (ids.length === 1) return { [ids[0]]: capSkill(totalPower) };
   const eff = Math.round(totalPower * spreadPenalty * 10) / 10;
   const { primary } = SKILL_CONFIG.spreadRatio;
-  const head = Math.round(eff * primary * 10) / 10;
-  // 端数は副スキル側で吸収する。こうしないと丸めで合計が総合力からズレる
-  // （実装ステップ1 は「総合力 ＝ 旧 power × 100」が成り立つことが前提）
-  return { [ids[0]]: head, [ids[1]]: Math.round((eff - head) * 10) / 10 };
+  const head = capSkill(eff * primary);
+  // 端数は副スキル側で吸収する（丸めで合計が総合力からズレないように）
+  return { [ids[0]]: head, [ids[1]]: capSkill(eff - head) };
 };
+
+/**
+ * スキル値は **0〜100**（docs/spec/score-model.md §1）。
+ * 装備を掛けた**実効**スキルは 100 を超えてよいが、社員が持つ素の値はここで頭打ちにする。
+ */
+export const capSkill = (v: number): number => Math.round(Math.max(0, Math.min(100, v)) * 10) / 10;
 
 /** 社員が実際に持っているスキルの ID（値が 0 より大きいもの） */
 export const ownedSkillIds = (skills: SkillSet): SkillId[] =>
@@ -196,7 +201,7 @@ export const growSkills = (skills: SkillSet, rank: GachaRank, newLevel: number):
   const eff = next * spread;
   const out: SkillSet = {};
   ids.forEach((id, i) => {
-    out[id] = Math.round(eff * ratio[i] * 10) / 10;
+    out[id] = capSkill(eff * ratio[i]);
   });
   return out;
 };
@@ -211,8 +216,30 @@ export const growSkills = (skills: SkillSet, rank: GachaRank, newLevel: number):
 export const scaleSkills = (skills: SkillSet, factor: number): SkillSet => {
   const out: SkillSet = {};
   for (const id of ownedSkillIds(skills)) {
-    out[id] = Math.round((skills[id] ?? 0) * factor * 10) / 10;
+    out[id] = capSkill((skills[id] ?? 0) * factor);
   }
+  return out;
+};
+
+/**
+ * **育てきったときのスキル値**（Lv10 到達時）。
+ *
+ * Lv1 の総合力はランクによらずほぼ同じなので、開封した瞬間の数値では差が分からない。
+ * 「グラフィック 24 → 育てば 100」と**到達点**を出すことで、ランクバッジが何を約束して
+ * いるのかが伝わる（docs/spec/score-model.md §1）。
+ *
+ * **2スキル持ちは分散ペナルティ込み**で返す（S の2スキル持ちは合計90＝49.5/40.5 であって
+ * 100 ではない）。スキルごとの到達値を出せば専門特化と器用貧乏の違いも同時に伝わる。
+ */
+export const skillsAtCap = (skills: SkillSet, rank: GachaRank): SkillSet => {
+  const ids = ownedSkillIds(skills);
+  if (ids.length === 0) return {};
+  const current = totalPowerOf(skills);
+  if (current <= 0) return skills;
+  const spread = ids.length >= 2 ? SKILL_CONFIG.spreadPenalty : 1;
+  const eff = RANK_TOTAL_POWER[rank].lv10 * spread;
+  const out: SkillSet = {};
+  for (const id of ids) out[id] = capSkill(eff * ((skills[id] ?? 0) / current));
   return out;
 };
 

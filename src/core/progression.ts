@@ -1,4 +1,3 @@
-import type { CategoryId } from '../data/categories';
 import type { GenreId } from '../data/genres';
 import { GENRES } from '../data/genres';
 import type { ThemeId } from '../data/themes';
@@ -58,45 +57,6 @@ export const computeStageUnlocks = (
  *  - presentation: ヒット作 5 本（メタ 70+）
  *  - innovation: 累計売上 ¥1 億
  */
-export const computeNewlyUnlockedCategories = (
-  current: CategoryId[],
-  library: Work[],
-  lifetimeRevenue: number,
-): CategoryId[] => {
-  const set = new Set(current);
-  const added: CategoryId[] = [];
-
-  // story: 初期 3 カテゴリで作品リリース済み
-  if (!set.has('story')) {
-    const used = new Set<CategoryId>();
-    for (const w of library) {
-      for (const cid of w.selectedCategories ?? []) used.add(cid as CategoryId);
-    }
-    if (used.has('graphics') && used.has('sound') && used.has('gameplay')) {
-      set.add('story');
-      added.push('story');
-    }
-  }
-
-  // presentation: ヒット作 5 本
-  if (!set.has('presentation')) {
-    const hits = library.filter((w) => w.metascore >= HIT_METASCORE_THRESHOLD).length;
-    if (hits >= 5) {
-      set.add('presentation');
-      added.push('presentation');
-    }
-  }
-
-  // innovation: 累計売上 ¥1 億
-  if (!set.has('innovation')) {
-    if (lifetimeRevenue >= 100_000_000) {
-      set.add('innovation');
-      added.push('innovation');
-    }
-  }
-
-  return added;
-};
 
 export type AchievementContext = {
   library: Work[];

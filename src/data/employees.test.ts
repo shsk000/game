@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { mulberry32 } from '../core/ports';
 import { ownedSkillIds, totalPowerOf } from '../core/skills';
-import { computeMonthlyWage, GACHA_CONFIG, type GachaRank } from './balance';
+import {
+  computeMonthlyWage,
+  GACHA_CONFIG,
+  GACHA_RANKS,
+  type GachaRank,
+  RANK_TOTAL_POWER,
+} from './balance';
 import {
   newCandidate,
   rollPowerForRank,
@@ -31,22 +37,22 @@ describe('newCandidate', () => {
     expect(c.exp).toBe(0);
   });
 
-  it('スキルは1つか2つで、合計（総合力）は旧 power × 100 と一致する', () => {
-    // 実装ステップ1 では総合力は**旧 power の別表現**。ランクの天井（RANK_TOTAL_POWER）が
-    // 効き始めるのは実装ステップ3 から（docs/spec/score-model.md §1）。
-    // ここで Lv1 帯（15〜28）を期待すると、まだ入っていない仕様を先取りすることになる。
-    for (const rank of ['B', 'A', 'S'] as GachaRank[]) {
-      const range = GACHA_CONFIG.powerRange[rank];
+  it('スキルは1つか2つで、合計（総合力）がランクの Lv1 帯に収まる', () => {
+    // 実装ステップ3：総合力はランクの天井（RANK_TOTAL_POWER）から決まる。
+    // Lv1 はランクによらずほぼ同じ（15〜28）で、差がつくのは育ててから
+    for (const rank of GACHA_RANKS) {
+      const r = RANK_TOTAL_POWER[rank];
       for (let seed = 0; seed < 40; seed++) {
         const c = newCandidate(fixedDeps(seed), rank);
         const owned = ownedSkillIds(c.skills);
         expect(owned.length, `${rank} seed=${seed}`).toBeGreaterThanOrEqual(1);
         expect(owned.length, `${rank} seed=${seed}`).toBeLessThanOrEqual(2);
-        // power は旧ロジックのままランク帯から引かれる
-        expect(c.power, `${rank} seed=${seed}`).toBeGreaterThanOrEqual(range.min);
-        expect(c.power, `${rank} seed=${seed}`).toBeLessThanOrEqual(range.max);
-        // 総合力は power × 100（2スキルでも目減りしない）
-        expect(totalPowerOf(c.skills), `${rank} seed=${seed}`).toBeCloseTo(c.power * 100, 1);
+        const total = totalPowerOf(c.skills);
+        // 2スキルは分散ペナルティで目減りする
+        expect(total, `${rank} seed=${seed}`).toBeGreaterThanOrEqual(r.lv1Min * 0.9 - 0.5);
+        expect(total, `${rank} seed=${seed}`).toBeLessThanOrEqual(r.lv1Max + 0.5);
+        // power は総合力から導出される
+        expect(c.power, `${rank} seed=${seed}`).toBeCloseTo(total / 100, 2);
       }
     }
   });

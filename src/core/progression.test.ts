@@ -3,7 +3,6 @@ import { GENRES } from '../data/genres';
 import { THEMES } from '../data/themes';
 import type { Work } from '../state/types';
 import {
-  computeNewlyUnlockedCategories,
   computeStageUnlocks,
   evaluateAchievements,
   HIT_METASCORE_THRESHOLD,
@@ -15,7 +14,6 @@ const work = (over: Partial<Work> = {}): Work => ({
   genreId: 'puzzle',
   themeId: 'sushi',
   scale: 'mini',
-  quality: 50,
   metascore: 50,
   isMasterpiece: false,
   developSec: 1,
@@ -75,31 +73,6 @@ describe('computeStageUnlocks', () => {
   });
 });
 
-describe('computeNewlyUnlockedCategories', () => {
-  const INITIAL = ['graphics', 'sound', 'gameplay'] as const;
-
-  it('初期3カテゴリすべてで作品リリース済みなら story 解放', () => {
-    const lib = [work({ selectedCategories: ['graphics', 'sound', 'gameplay'] })];
-    expect(computeNewlyUnlockedCategories([...INITIAL], lib, 0)).toEqual(['story']);
-  });
-
-  it('ヒット作 5 本で presentation 解放', () => {
-    const lib = ['a', 'b', 'c', 'd', 'e'].map(hit);
-    expect(computeNewlyUnlockedCategories([...INITIAL], lib, 0)).toContain('presentation');
-  });
-
-  it('累計売上 ¥1 億で innovation 解放（境界値）', () => {
-    expect(computeNewlyUnlockedCategories([...INITIAL], [], 100_000_000)).toContain('innovation');
-    expect(computeNewlyUnlockedCategories([...INITIAL], [], 99_999_999)).not.toContain(
-      'innovation',
-    );
-  });
-
-  it('解放済みカテゴリは newly に含まれない', () => {
-    const cur = [...INITIAL, 'innovation'] as const;
-    expect(computeNewlyUnlockedCategories([...cur], [], 999_999_999)).toEqual([]);
-  });
-});
 
 describe('evaluateAchievements', () => {
   const base = { library: [], fans: 0, lifetimeRevenue: 0, bestCombo: 0 };

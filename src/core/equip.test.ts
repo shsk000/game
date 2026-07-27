@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EQUIPMENT_BY_ID } from '../data/equipment';
+import { ALL_EQUIPMENT, EQUIPMENT_BY_ID } from '../data/equipment';
 import {
   canBuyEquipment,
   computeEquipCategoryMul,
@@ -7,6 +7,7 @@ import {
   type EquipLoadout,
   equipmentPrice,
   freeCopies,
+  effectiveSkillsOf,
   loadoutCategoryMul,
 } from './equip';
 
@@ -104,5 +105,49 @@ describe('countAssigned / freeCopies（実体方式の空き）', () => {
     expect(freeCopies(owned, loadouts, 'pc-desktop')).toBe(1);
     expect(freeCopies(owned, [], 'pc-desktop')).toBe(3);
     expect(freeCopies({}, loadouts, 'pc-desktop')).toBe(-2); // 所有0で2使用中（防御的に負値）
+  });
+});
+
+describe('effectiveSkillsOf（実装ステップ4：装備は社員のスキルに倍率を掛ける）', () => {
+  const emp = (skills: Record<string, number>, equipped = {}) =>
+    ({ id: 'e', name: 'x', role: 'programmer', power: 0, basePower: 0, level: 1, exp: 0, wage: 0, specialties: [], skills, equipped }) as never;
+
+  it('装備なしならスキルは変わらない', () => {
+    expect(effectiveSkillsOf(emp({ graphics: 60 }))).toEqual({ graphics: 60 });
+  });
+
+  it('液タブ（グラフィック ×1.25）でグラフィックだけ伸びる', () => {
+    const e = emp({ graphics: 60, sound: 40 }, { misc: 'misc-pentab' });
+    const s = effectiveSkillsOf(e);
+    expect(s.graphics).toBe(75);
+    expect(s.sound).toBe(40);
+  });
+
+  it('スロットの倍率は掛け合わさる（PC × チェア）', () => {
+    const e = emp({ programming: 100 }, { pc: 'pc-desktop', chair: 'chair-ergo' });
+    // 1.2 × 1.1 = 1.32
+    expect(effectiveSkillsOf(e).programming).toBeCloseTo(132, 0);
+  });
+
+  it('実効スキルは 100 を超えてよい（終盤に装備を買う理由を残す）', () => {
+    const e = emp({ graphics: 100 }, { misc: 'misc-pentab' });
+    expect(effectiveSkillsOf(e).graphics).toBeGreaterThan(100);
+  });
+
+  it('持っていないスキルは装備で生えない', () => {
+    expect(effectiveSkillsOf(emp({ graphics: 50 }, { misc: 'misc-monitor-speaker' })).sound).toBeUndefined();
+  });
+
+  it('広報スキルは装備の対象外（開発4分野だけに掛かる）', () => {
+    const e = emp({ pr: 80 }, { chair: 'chair-ergo' });
+    expect(effectiveSkillsOf(e).pr).toBe(80);
+  });
+
+  it('4つの開発分野すべてに特化アイテムがある（引いた職種が腐らない）', () => {
+    const fields = ['program', 'graphics', 'sound', 'scenario'] as const;
+    for (const f of fields) {
+      const has = ALL_EQUIPMENT.some((d) => (d.categoryMul?.[f] ?? 1) >= 1.2);
+      expect(has, f).toBe(true);
+    }
   });
 });

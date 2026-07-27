@@ -1,4 +1,5 @@
 import { computeStageUnlocks } from '../core/progression';
+import { capSkill, totalPowerFor } from '../core/skills';
 import {
   computeMonthlyWage,
   GACHA_CONFIG,
@@ -103,12 +104,10 @@ const emptyGhostsRecord = (): Record<Scale, number | null> => ({
 });
 
 const defaultBreakdown = (): WorkBreakdown => ({
-  base: 30,
-  categories: 0,
-  employees: 0,
-  performance: 0,
-  ads: 0,
-  variance: 0,
+  base: 0,
+  compatBonus: 0,
+  trendBonus: 0,
+  criticVariance: 0,
 });
 
 export const defaults = (): Persisted => ({
@@ -160,7 +159,6 @@ const migrateWorkV2 = (w: LegacyWork): Work => {
     genreId: (w.genreId ?? 'action') as Work['genreId'],
     themeId: (w.themeId ?? 'fantasy') as Work['themeId'],
     scale: (w.scale ?? 'mini') as Work['scale'],
-    quality: w.quality ?? 0,
     metascore: w.metascore ?? 0,
     isMasterpiece: w.isMasterpiece ?? false,
     developSec: w.developSec ?? 0,
@@ -177,7 +175,6 @@ const migrateWorkV2 = (w: LegacyWork): Work => {
     releasedAt: w.createdAt ?? Date.now(),
     createdAt: w.createdAt ?? Date.now(),
     breakdown: w.breakdown ?? defaultBreakdown(),
-    selectedCategories: w.selectedCategories,
   };
 };
 
@@ -253,9 +250,10 @@ const ensureSkills = (e: Employee): Employee => {
   const owned = Object.values(e.skills ?? {}).filter((v) => (v ?? 0) > 0);
   if (owned.length > 0) return e.rank ? e : { ...e, rank };
   const primary = ROLE_TO_PRIMARY_SKILL[e.role] ?? 'programming';
-  // 総合力＝旧 power × 100（実装ステップ1 では同じ値の別表現）
-  const total = Math.round(Math.max(0, e.power) * 100 * 10) / 10;
-  return { ...e, rank, skills: { [primary]: total } };
+  // 実装ステップ3：総合力は**ランクとレベルから引き直す**（旧 power × 100 では
+  // 新しいスケール（Lv1 15〜28／Lv10 で天井）と対応が取れず、移行組だけ天井を超える）。
+  const total = totalPowerFor(rank, e.level ?? 1);
+  return { ...e, rank, skills: { [primary]: capSkill(total) } };
 };
 
 /** v0.9 → v0.10 用：work の金額を ×10,000 倍する */

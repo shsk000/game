@@ -9,8 +9,9 @@ import {
 import { simulateAverageDevRun } from '../core/devSimulate';
 import { computeBorrow, computeMonthlyTick, computeRepay, computeSpend } from '../core/economy';
 import { canBuyEquipment, freeCopies, type OwnedItems } from '../core/equip';
-import { gachaPrice, nextPityCount, rollRank } from '../core/gacha';
+import { gachaPrice, nextPityCount } from '../core/gacha';
 import { addFeature, coveredFieldsOf, initialFeatures } from '../core/features';
+import { rollRank4 } from '../core/skills';
 import type { LevelUp } from '../core/growth';
 import { investPrice } from '../core/invest';
 import { type Deps, defaultDeps } from '../core/ports';
@@ -368,7 +369,6 @@ export const useGameStore = create<GameState>()(
         adBoostActive: false,
         surveyedCompat: null,
         // v0.14：開発カテゴリ選択は廃止（オーナー決定）。型は後方互換のため残し空配列固定
-        selectedCategories: [],
         // v0.17：常に全員参加
         assignedEmployeeIds: get().employees.map((e) => e.id),
         perf: { wpm: 0, maxCombo: 0, accuracy: 1 },
@@ -710,10 +710,8 @@ export const useGameStore = create<GameState>()(
       const price = gachaPrice(kind, get().unlockedScales);
       if (get().funds < price) return false;
       const pity = get().gachaPity;
-      // 実装ステップ1〜2 は旧ランク抽選（B/A/S）。C を含む rollRank4 への切り替えは
-      // 実装ステップ3（ランクの天井が効くのと同時。それまで C を出すと
-      // 「C と表示されるが power は旧ロジック」という別の嘘になる）
-      const rank = rollRank(kind, deps.rng, pity);
+      // 実装ステップ3：C を含む4種（GACHA_RANK_RATES）。ランクの天井が効くのと同時に解禁した
+      const rank = rollRank4(kind, deps.rng, pity);
       set({
         funds: get().funds - price,
         candidate: newCandidate(deps, rank),

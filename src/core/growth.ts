@@ -1,7 +1,7 @@
 import { computeMonthlyWage, GROWTH } from '../data/balance';
 import type { Scale } from '../data/scales';
 import type { Employee } from '../state/types';
-import { scaleSkills } from './skills';
+import { growSkills, scaleSkills, totalPowerOf } from './skills';
 
 /**
  * v0.16 社員成長システム（spec v16 §1）。純粋関数のみ。
@@ -65,12 +65,14 @@ export const applyReleaseGrowth = (
       reached.push(level);
     }
     if (level === e.level) return { ...e, exp };
-    // 実装ステップ1 では成長も旧ロジックのまま凍結する。power を先に出し、
-    // スキルはそれに同じ比率で追従させる（総合力＝power × 100 を維持）。
-    // ランクの天井（growSkills）に切り替えるのは実装ステップ3。
-    const power = powerAt(e.basePower, level);
-    const factor = e.power > 0 ? power / e.power : 1;
-    const skills = scaleSkills(e.skills ?? {}, factor);
+    // 実装ステップ3：ランクの天井に向かって総合力が伸びる（docs/spec/score-model.md §1）。
+    // ランクを持たない社員（旧セーブ移行組で basePower から復元できなかった場合）だけ、
+    // 旧来の成長率でスキルを一律スケールするフォールバックに落ちる。
+    const skills = e.rank
+      ? growSkills(e.skills ?? {}, e.rank, level)
+      : scaleSkills(e.skills ?? {}, e.power > 0 ? powerAt(e.basePower, level) / e.power : 1);
+    // 互換：給与計算がまだ power を使う
+    const power = Math.round((totalPowerOf(skills) / 100) * 1000) / 1000;
     const wage = Math.round(computeMonthlyWage(power, level));
     for (const lv of reached) {
       levelUps.push({

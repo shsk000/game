@@ -1,5 +1,4 @@
 import type { GachaRank } from '../data/balance';
-import type { CategoryId } from '../data/categories';
 import type { EquipLoadout } from '../data/equipment';
 import type { GenreId } from '../data/genres';
 import type { Scale } from '../data/scales';
@@ -76,7 +75,7 @@ export type Achievement =
 export type EmployeeRole = 'programmer' | 'designer' | 'pr';
 
 export type EmployeeSpecialty = {
-  categoryId: CategoryId;
+  categoryId: string;
   bonus: number;
 };
 
@@ -143,23 +142,27 @@ export type Candidate = Employee;
  *  - trendMul / pioneer はメタスコア/売上に乗る別系統
  *  - 旧 v0.9 4 レバー（categories/employees/ads/variance）は互換用に optional 残置
  */
+/**
+ * メタスコアの内訳（リリース画面の開封演出で見せる）。
+ *
+ * docs/spec/score-model.md §4 の式そのまま：
+ * Σ(特徴ポイント × 正規化重み) ＋ 相性補正 ＋ トレンド合致 ＋ 評価家のブレ。
+ * **画面に出す数値は必ずこの内訳に対応させる**（効かない数値を出さない）。
+ */
 export type WorkBreakdown = {
-  // v0.10 新ブレイクダウン
-  charPower?: number;
-  genreAffinity?: number;
-  performance?: number;
-  luck?: number;
+  /** 特徴ポイントごとの寄与（合計 = base） */
+  features?: Partial<Record<FeatureId, number>>;
+  /** 特徴ポイントの加重和 */
   base?: number;
-  luckMultiplier?: number;
+  /** 相性補正（−8〜+8） */
+  compatBonus?: number;
+  /** トレンド合致（+10 / +5） */
+  trendBonus?: number;
+  /** 評価家のブレ（±5） */
+  criticVariance?: number;
+  /** 売上側の倍率（スコアには効かない） */
   trendMul?: number;
   pioneer?: boolean;
-  /** v0.14：イベント新軸（面白さ/操作性/バランス−バグ率）による品質への加点 */
-  axisBonus?: number;
-  // v0.9 互換
-  categories?: number;
-  employees?: number;
-  ads?: number;
-  variance?: number;
 };
 
 export type Work = {
@@ -168,8 +171,8 @@ export type Work = {
   genreId: GenreId;
   themeId: ThemeId;
   scale: Scale;
-  quality: number;
   metascore: number;
+  /** 神ゲー認定（メタスコア95+）。`scoreTierFor` の結果を保存したもの */
   isMasterpiece: boolean;
   developSec: number;
   /** 初動売上（releaseで即時加算済み） */
@@ -193,8 +196,6 @@ export type Work = {
   createdAt: number;
   /** 品質の4レバー内訳 */
   breakdown: WorkBreakdown;
-  /** ライブラリ表示用：このリリースで選んだカテゴリ */
-  selectedCategories?: CategoryId[];
   /** v0.10：開発に要したゲーム内週数（カレンダー差分。リリース時に確定） */
   developWeeks?: number;
 };
@@ -226,9 +227,9 @@ export const DEV_PHASE_ORDER: DevPhase[] = [
  * `current.axes` に蓄積し、リリース時に既存の品質→メタスコア→売上/ファンへ合流する（spec §5-6）。
  */
 export type DevAxis =
-  | 'funFactor' // 面白さ → 品質
-  | 'usability' // 操作性 → 品質
-  | 'balance' // バランス → 品質
+  // 実装ステップ3：品質系の軸（面白さ / 操作性 / バランス）は削除した。
+  // 品質という合成値そのものを廃止し、作品の出来は特徴ポイント5種で表すようにしたため。
+  // これらを付与していたイベントは hype（期待度）へ付け替えてある。
   | 'hype' // 期待度 → ファン/初動
   // 旧 'salesForecast'（売上予測%）は削除（オーナー判断 2026-07-25）。
   // 「予測」という名前なのに実売上を増やす補正で、効果も buzz と同じ式・同じ分母に足すだけだった＝
@@ -270,9 +271,6 @@ export const SKILL_TO_FEATURE: Record<DevSkillId, FeatureId> = {
 };
 
 export const ZERO_AXES: DevAxes = {
-  funFactor: 0,
-  usability: 0,
-  balance: 0,
   hype: 0,
   buzz: 0,
   bugRate: 0,
@@ -332,7 +330,6 @@ export type CurrentProject = {
   /** 市場調査広告で開示された相性 */
   surveyedCompat: number | null;
   /** 今回開発で選ばれた3つのカテゴリ */
-  selectedCategories: CategoryId[];
   /** 今回開発に割り当てた従業員 */
   assignedEmployeeIds: string[];
   /** タイピングのパフォーマンス指標 */

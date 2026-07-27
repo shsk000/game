@@ -7,8 +7,10 @@ import { bugSuppression } from '../../core/bugs';
 import { jobTitleOf } from '../../core/skills';
 import { investPrice } from '../../core/invest';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
-import { planWeeksAllowance, ROLE_EFFECT } from '../../data/balance';
+import { planWeeksAllowance } from '../../data/balance';
+import { ARCHETYPES, GENRE_ARCHETYPE, weightsFor } from '../../data/archetypes';
 import { compatLabel, getCompat } from '../../data/compatibility';
+import { sumPrBonus } from '../../data/employees';
 import { formatSkills } from '../office/employeeDisplay';
 import { sumMonthlySalaries } from '../../data/employees';
 import type { GenreId } from '../../data/genres';
@@ -464,9 +466,7 @@ export const PlanScreen = () => {
                 // 「開発速度 LoC/秒」は自動開発機能が存在しないため表示しない（進捗は打鍵のみ）
                 // 「🎨 品質 +X」は designerQualityBonus がどの計算にも繋がっておらず、
                 // 何も起きない数値だったため撤去した（docs/spec/glossary.md の ❌廃止）
-                const sales = employees
-                  .filter((e) => e.role === 'pr')
-                  .reduce((a, b) => a + b.power * ROLE_EFFECT.prSalesBonus, 0);
+                const sales = sumPrBonus(employees);
                 const suppress = Math.round(bugSuppression(employees) * 100);
                 return (
                   <div
@@ -549,6 +549,34 @@ export const PlanScreen = () => {
           </p>
           <p style={{ ...hintStyle, marginTop: 2 }}>
             合致：スコア +5／+10・売上 +5%／+10%（片方／両方）
+          </p>
+        </PixelWindow>
+
+        {/* このジャンルで重要な分野（docs/spec/score-model.md §4）。
+            プレイヤーが「手持ちのスキルに合うジャンルを選ぶ」判断をするための表示 */}
+        <PixelWindow
+          title={`🎯 ${ARCHETYPES[GENRE_ARCHETYPE[genreId]].label}で重要な分野`}
+          variant="standard"
+          bodyStyle={{ padding: 8 }}
+        >
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {FEATURE_ROWS.map((row) => {
+              const label = weightsFor(genreId)[row.id];
+              const color =
+                label === '◎' ? COLORS.trendHot : label === '○' ? COLORS.textDark : COLORS.textSub;
+              return (
+                <span
+                  key={row.id}
+                  style={{ fontSize: 12, color, fontWeight: label === '◎' ? 700 : 400 }}
+                >
+                  {label} {row.icon}
+                  {row.label}
+                </span>
+              );
+            })}
+          </div>
+          <p style={{ ...hintStyle, marginTop: 4 }}>
+            ◎ が重い。打って伸ばした分野がジャンルに合うほどメタスコアが伸びる
           </p>
         </PixelWindow>
 
@@ -700,3 +728,13 @@ export const PlanScreen = () => {
     </div>
   );
 };
+
+
+/** 企画画面で出す特徴ポイントの見出し（docs/spec/score-model.md §2 の順） */
+const FEATURE_ROWS = [
+  { id: 'usabilityPt', icon: '🕹', label: '操作性' },
+  { id: 'graphicsPt', icon: '🎨', label: 'グラフィック' },
+  { id: 'soundPt', icon: '🎵', label: 'サウンド' },
+  { id: 'storyPt', icon: '📖', label: 'ストーリー' },
+  { id: 'innovationPt', icon: '💡', label: '革新性' },
+] as const;

@@ -26,7 +26,6 @@ const devProject: CurrentProject = {
   finishedAt: null,
   adBoostActive: false,
   surveyedCompat: null,
-  selectedCategories: [],
   assignedEmployeeIds: [],
   perf: { wpm: 0, maxCombo: 0, accuracy: 1 },
   startDate: { year: 2026, month: 1, week: 1 },

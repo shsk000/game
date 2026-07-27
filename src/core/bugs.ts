@@ -1,7 +1,7 @@
 import { BUG_CONFIG } from '../data/balance';
-import { sumProgrammerPower } from '../data/employees';
 import type { Employee } from '../state/types';
 import type { Rng } from './ports';
+import { skillTotalsOf } from './skills';
 
 /**
  * v0.17 バグ発生システム（spec v17 §4）。純粋関数のみ。
@@ -9,15 +9,21 @@ import type { Rng } from './ports';
  * エンジニア（プログラマー）の質が高いほど発生が抑制される。
  */
 
-/** プログラマー power 合計（正規化スケール） */
-const programmerPowerSum = (employees: Employee[]): number => sumProgrammerPower(employees);
-
 /**
- * バグ抑制率（0..maxSuppression）。プログラマーの power 合計で決まる。
- * 例：新人 1 人（0.4）→ 20% 抑制 / 育った 2 人（合計 2.0）→ 80% 抑制（上限）
+ * バグ抑制率（0..maxSuppression）。**プログラミングスキルの合計**で決まる。
+ *
+ * 実装ステップ3：旧「役職 programmer の power 合計」から付け替えた
+ * （docs/spec/score-model.md §1）。役職という枠をやめたので、
+ * 「プログラミングを持っている人が何人いるか」で決まる形にした。
+ * 同分野の2人目以降は半減（`skillTotalsOf`）＝分業のロスは他と同じ扱い。
+ *
+ * 例：スキル40 が1人 → 20% 抑制 ／ スキル100 が2人（合計150）→ 75% 抑制
  */
 export const bugSuppression = (employees: Employee[]): number =>
-  Math.min(BUG_CONFIG.maxSuppression, programmerPowerSum(employees) / BUG_CONFIG.suppressCap);
+  Math.min(
+    BUG_CONFIG.maxSuppression,
+    skillTotalsOf(employees).programming / BUG_CONFIG.suppressSkillCap,
+  );
 
 /**
  * ミス打鍵はバグ確定（v0.17.1 オーナー指示「入力間違えた場合はバグ」）。

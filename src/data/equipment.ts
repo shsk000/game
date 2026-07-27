@@ -7,7 +7,17 @@
  * 効果はリリース品質に効くが、既存の STAT/AXIS ボーナス枠（8点）とは別枠で加点する
  * （EQUIP_QUALITY_BONUS_CAP で頭打ち）。純粋な倍率計算は src/core/equip.ts。
  *
- * 価格・categoryMul の値は叩き台 🔧（分布/進行ガードで挟んで確定＝spec §8）。
+ * 価格・categoryMul の値は叩き台 🔧。
+ *
+ * 実装ステップ4（docs/spec/score-model.md §1）：
+ * **装備は社員のスキルに分野別の倍率を掛ける**（作品側の数値には直接掛けない）。
+ * 実効スキルは 100 を超えてよい ── 上限を置くとスキル100 の社員に装備が無意味になり、
+ * 終盤に装備を買う理由が消えるため。効果は「特徴ポイントを速く積める」＝開発が早く終わる
+ * ＝固定費が安い、に出る。
+ *
+ * スロットの役割：**PC と小物で分野特化、チェアで全分野の底上げ**。
+ * 4つの開発分野それぞれに特化アイテムがある（program=デスクトップ / graphics=液タブ /
+ * sound=モニタースピーカー / scenario=資料本）。
  */
 
 import type { TicketCategory } from './devPhrases';
@@ -87,10 +97,10 @@ export const MISC_ITEMS: EquipmentDef[] = [
   {
     id: 'misc-book',
     slot: 'misc',
-    name: '技術書',
+    name: '資料本',
     tier: 1,
     cost: 5_000_000,
-    categoryMul: { scenario: 1.2 },
+    categoryMul: { scenario: 1.25 },
     sprite: 'book',
   },
   {
@@ -101,6 +111,15 @@ export const MISC_ITEMS: EquipmentDef[] = [
     cost: 30_000_000,
     categoryMul: { graphics: 1.25 },
     sprite: 'pentab',
+  },
+  {
+    id: 'misc-monitor-speaker',
+    slot: 'misc',
+    name: 'モニタースピーカー',
+    tier: 1,
+    cost: 30_000_000,
+    categoryMul: { sound: 1.25 },
+    sprite: 'plant',
   },
   {
     id: 'misc-plant',

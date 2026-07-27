@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { PixelButton } from '../../components/ui';
 import type { Candidate } from '../../state/types';
-import { jobTitleOf } from '../../core/skills';
+import { jobTitleOf, skillsAtCap } from '../../core/skills';
 import { formatSkills, RANK_VISUAL } from './employeeDisplay';
 
 /**
@@ -80,6 +80,11 @@ export const GachaReveal = ({ candidate, funds, isFull, onHire, onDismiss }: Pro
       </div>
       <div style={{ fontSize: 13, marginTop: 8, color: '#eef3fa' }}>
         {formatSkills(candidate.skills)}
+      </div>
+      {/* 育てきったときの値（docs/spec/score-model.md §1）。
+          Lv1 はランクによらずほぼ同じなので、ここで初めてランクの意味が伝わる */}
+      <div style={{ fontSize: 12, marginTop: 4, color: rankVisual.color, fontWeight: 700 }}>
+        ▲ 育てば {formatSkills(skillsAtCap(candidate.skills, rank))}
       </div>
       {isFull && (
         <div style={{ fontSize: 12, color: '#c66', marginTop: 6 }}>

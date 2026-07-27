@@ -14,19 +14,25 @@ import {
 } from './bugs';
 import { mulberry32 } from './ports';
 
-const programmer = (power: number, id = 'p1'): Employee => ({
+/** @param skill プログラミングスキル（0〜100）。バグ抑制はこれで決まる */
+const programmer = (skill: number, id = 'p1'): Employee => ({
   id,
   name: 'エンジニア',
   role: 'programmer',
-  power,
-  basePower: power,
+  power: skill / 100,
+  basePower: skill / 100,
   level: 1,
   exp: 0,
   wage: 0,
-  specialties: [], skills: {},
+  specialties: [],
+  skills: { programming: skill },
 });
 
-const designer = (power: number): Employee => ({ ...programmer(power, 'd1'), role: 'designer' });
+const designer = (skill: number): Employee => ({
+  ...programmer(0, 'd1'),
+  role: 'designer',
+  skills: { graphics: skill },
+});
 
 describe('bugSuppression（エンジニアの質がバグを抑える）', () => {
   it('プログラマー不在なら抑制 0', () => {
@@ -34,9 +40,10 @@ describe('bugSuppression（エンジニアの質がバグを抑える）', () =>
     expect(bugSuppression([designer(1)])).toBe(0);
   });
 
-  it('プログラマー power 合計に比例し、上限で頭打ち', () => {
-    expect(bugSuppression([programmer(0.5)])).toBeCloseTo(0.5 / BUG_CONFIG.suppressCap);
-    expect(bugSuppression([programmer(1), programmer(1, 'p2'), programmer(1, 'p3')])).toBe(
+  it('プログラミングスキル合計に比例し、上限で頭打ち', () => {
+    expect(bugSuppression([programmer(50)])).toBeCloseTo(50 / BUG_CONFIG.suppressSkillCap);
+    // 同じ分野の2人目以降は半減（100 + 50 + 50 = 200 で上限に届く）
+    expect(bugSuppression([programmer(100), programmer(100, 'p2'), programmer(100, 'p3')])).toBe(
       BUG_CONFIG.maxSuppression,
     );
   });
@@ -59,7 +66,7 @@ describe('rollBugOnMiss / rollBugOnKeystroke（発生判定）', () => {
   });
 
   it('エンジニアを入れると正打鍵の発生率が下がる', () => {
-    expect(rate([programmer(1)])).toBeLessThan(rate([]) * 0.7);
+    expect(rate([programmer(100)])).toBeLessThan(rate([]) * 0.7);
   });
 });
 

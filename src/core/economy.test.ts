@@ -135,7 +135,6 @@ describe('computeOfflineEarnings', () => {
     genreId: 'puzzle',
     themeId: 'sushi',
     scale: 'mini',
-    quality: 50,
     metascore: 50,
     isMasterpiece: false,
     developSec: 1,

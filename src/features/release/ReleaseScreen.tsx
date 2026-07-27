@@ -4,7 +4,6 @@ import { JacketView } from '../../components/JacketView';
 import { PixelWindow } from '../../components/ui';
 import { adviceFor } from '../../core/advice';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
-import { QUALITY_WEIGHTS } from '../../data/balance';
 import { compatLabel, getCompat } from '../../data/compatibility';
 import { sumMonthlySalaries } from '../../data/employees';
 import { GENRE_BY_ID } from '../../data/genres';
@@ -15,25 +14,25 @@ import type { Achievement } from '../../state/types';
 import { formatRoi, formatWeeks, formatYen } from '../../utils/format';
 import { scoreFlavor } from '../../utils/metascore';
 import { computeProfit } from '../../utils/profit';
+import { normalizedWeightsFor, weightsFor } from '../../data/archetypes';
+import type { FeatureId } from '../../state/types';
 import { sfx } from '../../utils/sfx';
 
-type RevealStage =
-  | 'pre-ads'
-  | 'reveal-character'
-  | 'reveal-affinity'
-  | 'reveal-performance'
-  | 'reveal-luck'
-  | 'reveal-total'
-  | 'done';
+type RevealStage = 'pre-ads' | 'reveal-features' | 'reveal-bonus' | 'reveal-total' | 'done';
 
-const STAGE_SEQUENCE: RevealStage[] = [
-  'reveal-character',
-  'reveal-affinity',
-  'reveal-performance',
-  'reveal-luck',
-  'reveal-total',
-  'done',
+const STAGE_SEQUENCE: RevealStage[] = ['reveal-features', 'reveal-bonus', 'reveal-total', 'done'];
+
+/** 内訳に出す特徴ポイント（docs/spec/score-model.md §2 の順） */
+const FEATURE_ROWS: { id: FeatureId; emoji: string; label: string }[] = [
+  { id: 'usabilityPt', emoji: '🕹', label: '操作性' },
+  { id: 'graphicsPt', emoji: '🎨', label: 'グラフィック' },
+  { id: 'soundPt', emoji: '🎵', label: 'サウンド' },
+  { id: 'storyPt', emoji: '📖', label: 'ストーリー' },
+  { id: 'innovationPt', emoji: '💡', label: '革新性' },
 ];
+
+/** 実績・レベルアップの表示行数の上限（1280×720 スクロール禁止） */
+const MAX_BADGE_ROWS = 1;
 
 const stageReached = (current: RevealStage, target: RevealStage): boolean => {
   const order: RevealStage[] = ['pre-ads', ...STAGE_SEQUENCE];
@@ -41,12 +40,6 @@ const stageReached = (current: RevealStage, target: RevealStage): boolean => {
 };
 
 /** 4 要素ウェイト（v0.14 で再配分。balance.ts の QUALITY_WEIGHTS と同期） */
-const WEIGHTS = {
-  charPower: QUALITY_WEIGHTS.charPower,
-  genreAffinity: QUALITY_WEIGHTS.genreAffinity,
-  performance: QUALITY_WEIGHTS.typingScore,
-  luck: QUALITY_WEIGHTS.luck,
-};
 
 /**
  * v0.14 §5-3：開発完了（打ち上げ）のフレーバー追加評価。
@@ -116,32 +109,29 @@ export const ReleaseScreen = () => {
     if (!work) return;
     if (current) return;
     setNewAchievements(useGameStore.getState().newlyAchieved);
-    const charContrib = (work.breakdown.charPower ?? 0) * WEIGHTS.charPower;
     sfx.complete(); // 開封（評価ブレイクダウン再生）の合図
-    setStage('reveal-character');
+    setStage('reveal-features');
     setResultStep('score');
-    setDisplayQ(Math.round(charContrib));
+    setDisplayQ(Math.round(work.breakdown.base ?? 0));
 
     const timers: number[] = [];
     const schedule = (ms: number, fn: () => void) => {
       timers.push(window.setTimeout(fn, ms));
     };
 
-    schedule(500, () => {
-      setStage('reveal-affinity');
+    schedule(700, () => {
+      setStage('reveal-bonus');
       setDisplayQ(
-        (q) => q + Math.round((work.breakdown.genreAffinity ?? 0) * WEIGHTS.genreAffinity),
+        (q) =>
+          q +
+          Math.round(
+            (work.breakdown.compatBonus ?? 0) +
+              (work.breakdown.trendBonus ?? 0) +
+              (work.breakdown.criticVariance ?? 0),
+          ),
       );
     });
-    schedule(1100, () => {
-      setStage('reveal-performance');
-      setDisplayQ((q) => q + Math.round((work.breakdown.performance ?? 0) * WEIGHTS.performance));
-    });
-    schedule(1700, () => {
-      setStage('reveal-luck');
-      setDisplayQ((q) => q + Math.round((work.breakdown.luck ?? 50) * WEIGHTS.luck));
-    });
-    schedule(2300, () => {
+    schedule(1500, () => {
       setStage('reveal-total');
     });
     schedule(2900, () => {
@@ -281,14 +271,9 @@ export const ReleaseScreen = () => {
   }
 
   // ブレイクダウン演出後の表示
-  const charContrib = (work.breakdown.charPower ?? 0) * WEIGHTS.charPower;
-  const affContrib = (work.breakdown.genreAffinity ?? 0) * WEIGHTS.genreAffinity;
-  const perfContrib = (work.breakdown.performance ?? 0) * WEIGHTS.performance;
-  const luckContrib = (work.breakdown.luck ?? 50) * WEIGHTS.luck;
-  const total = Math.max(
-    0,
-    Math.min(100, Math.round(charContrib + affContrib + perfContrib + luckContrib)),
-  );
+  const bd = work.breakdown;
+  const weights = normalizedWeightsFor(work.genreId);
+  const labels = weightsFor(work.genreId);
   const isDone = stage === 'done';
 
   return (
@@ -298,10 +283,11 @@ export const ReleaseScreen = () => {
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        gap: 12,
-        padding: 12,
+        gap: 8,
+        padding: 8,
         minHeight: 0,
-        overflow: 'auto',
+        // 1280×720 に収める（スクロール禁止）。内訳が7行に増えたぶん余白を詰めてある
+        overflow: 'hidden',
         background: '#c9ccd0',
       }}
     >
@@ -322,78 +308,57 @@ export const ReleaseScreen = () => {
 
           <div style={{ display: resultStep === 'score' ? undefined : 'none' }}>
             <div className="breakdown-list">
-              {/* v0.14：内訳の読み方を明示（「41 → +14」が何なのか分からない問題への対応） */}
-              <p style={{ margin: '0 0 4px', fontSize: 11, opacity: 0.75 }}>
-                各要素の実力（0〜100 点）× 重み ＝ 品質 Q への加点。合計が Q になる
+              {/* 内訳の読み方（docs/spec/score-model.md §4：この一本以外でスコアは動かない） */}
+              <p style={{ margin: '0 0 2px', fontSize: 10, opacity: 0.7 }}>
+                特徴（0〜100）× ジャンルの重み ＝ メタスコアへの加点
               </p>
-              {stageReached(stage, 'reveal-character') && (
-                <div className="breakdown-row">
-                  <span className="breakdown-emoji">🧑‍💻</span>
-                  <span className="breakdown-label">
-                    キャラ能力 {work.breakdown.charPower ?? 0}点 ×{' '}
-                    {Math.round(WEIGHTS.charPower * 100)}%
-                  </span>
-                  <span className="breakdown-value">品質 +{Math.round(charContrib)}</span>
-                </div>
-              )}
-              {stageReached(stage, 'reveal-affinity') && (
+              {stageReached(stage, 'reveal-features') &&
+                FEATURE_ROWS.filter(
+                  // 0点の分野は畳む（1280×720 に収める。伸ばす余地は「次の一手」で伝える）
+                  (row) => (bd.features?.[row.id] ?? 0) > 0,
+                ).map((row) => {
+                  const contrib = bd.features?.[row.id] ?? 0;
+                  const weight = weights[row.id];
+                  const point = weight > 0 ? Math.round(contrib / weight) : 0;
+                  return (
+                    <div className="breakdown-row" key={row.id}>
+                      <span className="breakdown-emoji">{row.emoji}</span>
+                      <span className="breakdown-label">
+                        {row.label} {point}点 × {labels[row.id]}（{Math.round(weight * 100)}%）
+                      </span>
+                      <span className="breakdown-value">+{contrib.toFixed(1)}</span>
+                    </div>
+                  );
+                })}
+              {stageReached(stage, 'reveal-bonus') && (bd.compatBonus ?? 0) !== 0 && (
                 <div className="breakdown-row">
                   <span className="breakdown-emoji">🧩</span>
                   <span className="breakdown-label">
-                    ジャンル相性 {work.breakdown.genreAffinity ?? 0}点 ×{' '}
-                    {Math.round(WEIGHTS.genreAffinity * 100)}%
+                    相性 {compatLabel(compat)}（{compat.toFixed(2)}x）
                   </span>
-                  <span className="breakdown-value">品質 +{Math.round(affContrib)}</span>
+                  <span className="breakdown-value">
+                    {(bd.compatBonus ?? 0) > 0 ? '+' : ''}
+                    {bd.compatBonus}
+                  </span>
                 </div>
               )}
-              {stageReached(stage, 'reveal-performance') && (
+              {stageReached(stage, 'reveal-bonus') && (bd.trendBonus ?? 0) !== 0 && (
                 <div className="breakdown-row">
-                  <span className="breakdown-emoji">⚡</span>
-                  <span className="breakdown-label">
-                    タイピング演技 {work.breakdown.performance ?? 0}点 ×{' '}
-                    {Math.round(WEIGHTS.performance * 100)}%
-                  </span>
-                  <span className="breakdown-value">品質 +{Math.round(perfContrib)}</span>
+                  <span className="breakdown-emoji">📈</span>
+                  <span className="breakdown-label">トレンド合致</span>
+                  <span className="breakdown-value">+{bd.trendBonus}</span>
                 </div>
               )}
-              {stageReached(stage, 'reveal-luck') && (
+              {stageReached(stage, 'reveal-bonus') && (
                 <div className="breakdown-row">
                   <span className="breakdown-emoji">🎲</span>
-                  <span className="breakdown-label">
-                    運 {work.breakdown.luck ?? 50}点 × {Math.round(WEIGHTS.luck * 100)}%
-                  </span>
-                  <span className="breakdown-value">品質 +{Math.round(luckContrib)}</span>
-                </div>
-              )}
-              {/* v0.14：開発中イベントの成果（面白さ/操作性/バランス−バグ率）を品質加点として開示 */}
-              {stageReached(stage, 'reveal-luck') && (work.breakdown.axisBonus ?? 0) !== 0 && (
-                <div className="breakdown-row">
-                  <span className="breakdown-emoji">🎪</span>
-                  <span className="breakdown-label">イベント成果（開発中に稼いだ面白さ等）</span>
+                  <span className="breakdown-label">評価家のブレ</span>
                   <span className="breakdown-value">
-                    品質 {(work.breakdown.axisBonus ?? 0) > 0 ? '+' : ''}
-                    {work.breakdown.axisBonus}
+                    {(bd.criticVariance ?? 0) > 0 ? '+' : ''}
+                    {bd.criticVariance}
                   </span>
                 </div>
               )}
-              {stageReached(stage, 'reveal-total') && (
-                <div className="breakdown-row breakdown-total">
-                  <span className="breakdown-emoji">🎯</span>
-                  <span className="breakdown-label">品質 Q</span>
-                  <span className="breakdown-value">{total}</span>
-                </div>
-              )}
-              {stageReached(stage, 'reveal-total') &&
-                work.breakdown.luckMultiplier !== undefined &&
-                work.breakdown.luckMultiplier !== 1 && (
-                  <div className="breakdown-row" style={{ fontSize: 11, opacity: 0.85 }}>
-                    <span className="breakdown-emoji">✨</span>
-                    <span className="breakdown-label">
-                      運揺らぎ ×{work.breakdown.luckMultiplier}
-                    </span>
-                    <span className="breakdown-value">適用済</span>
-                  </div>
-                )}
             </div>
 
             {/* v0.17：レーダー図は内訳行と情報重複のため撤去（1280×720 スクロール禁止を優先） */}
@@ -430,7 +395,7 @@ export const ReleaseScreen = () => {
               {work.ghostBeaten && <div className="ghost-update-badge">🏁 ゴースト記録更新！</div>}
               {newAchievements.length > 0 && (
                 <div className="achievement-badge-stack">
-                  {newAchievements.map((a) => {
+                  {newAchievements.slice(0, MAX_BADGE_ROWS).map((a) => {
                     const def = ACHIEVEMENT_BY_ID[a];
                     return (
                       <div key={a} className="achievement-badge">
@@ -438,22 +403,32 @@ export const ReleaseScreen = () => {
                       </div>
                     );
                   })}
+                  {newAchievements.length > MAX_BADGE_ROWS && (
+                    <div className="achievement-badge">
+                      🏆 ほか {newAchievements.length - MAX_BADGE_ROWS} 件の実績
+                    </div>
+                  )}
                 </div>
               )}
-              {/* v0.16：社員成長。参加社員のレベルアップを開封演出に同居させる */}
+              {/* v0.16：社員成長。参加社員のレベルアップを開封演出に同居させる。
+                  件数が可変なので**行数上限を切る**（1280×720 スクロール禁止） */}
               {lastLevelUps.length > 0 && (
                 <div className="achievement-badge-stack">
-                  {lastLevelUps.map((lu) => (
+                  {lastLevelUps.slice(0, MAX_BADGE_ROWS).map((lu) => (
                     <div key={`${lu.employeeId}-${lu.level}`} className="achievement-badge">
-                      ⬆ {lu.name} が Lv{lu.level} になった！（power {lu.powerBefore.toFixed(2)}→
-                      {lu.powerAfter.toFixed(2)}・給与 +{formatYen(lu.wageDelta)}/月）
+                      ⬆ {lu.name} が Lv{lu.level} になった！（給与 +{formatYen(lu.wageDelta)}/月）
                     </div>
                   ))}
+                  {lastLevelUps.length > MAX_BADGE_ROWS && (
+                    <div className="achievement-badge">
+                      ⬆ ほか {lastLevelUps.length - MAX_BADGE_ROWS} 人が成長した
+                    </div>
+                  )}
                 </div>
               )}
               <ul className="release-stats">
                 <li>
-                  品質 Q {work.quality} ／ 相性 {compatLabel(compat)} ({compat.toFixed(2)}x) ／ 👥
+                  相性 {compatLabel(compat)} ({compat.toFixed(2)}x) ／ 👥
                   ファン +{work.fansGained}
                 </li>
                 <li>

@@ -14,7 +14,6 @@ const sellingWork = (over: Partial<Work> = {}): Work => ({
   genreId: 'puzzle',
   themeId: 'sushi',
   scale: 'mini',
-  quality: 60,
   metascore: 60,
   isMasterpiece: false,
   developSec: 60,

@@ -59,7 +59,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'あいであをかたちにする',
       missionLabel: 'アイデアを形にする',
       rate: 0.2,
-      success: { funFactor: 15, hype: 10 },
+      success: { hype: 25 },
     },
     {
       id: 'plan-drift',
@@ -69,7 +69,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'ほうこうせいをきめなおす',
       missionLabel: '方向性を決め直す',
       rate: 0.12,
-      success: { funFactor: 5 },
+      success: { hype: 5 },
     },
     {
       id: 'plan-trend',
@@ -132,7 +132,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'あいであをじっそうする',
       missionLabel: 'アイデアを実装する',
       rate: 0.2,
-      success: { funFactor: 8, buzz: 10 },
+      success: { hype: 8, buzz: 10 },
     },
     {
       id: 'dev-rival',
@@ -152,7 +152,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'しようをくみなおす',
       missionLabel: '仕様を組み直す',
       rate: 0.1,
-      success: { funFactor: 5 },
+      success: { hype: 5 },
     },
   ],
   testing: [
@@ -164,7 +164,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'そうさかんをちょうせいする',
       missionLabel: '操作感を調整する',
       rate: 0.15,
-      success: { usability: 10 },
+      success: { hype: 10 },
     },
     {
       id: 'test-difficulty',
@@ -174,7 +174,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'なんいどをちょうせいする',
       missionLabel: '難易度を調整する',
       rate: 0.15,
-      success: { balance: 10 },
+      success: { hype: 10 },
     },
     {
       id: 'test-hiddenbug',
@@ -204,7 +204,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'がめんをみやすくする',
       missionLabel: 'UIを改善する',
       rate: 0.12,
-      success: { usability: 6 },
+      success: { hype: 6 },
     },
   ],
   debugging: [
@@ -226,7 +226,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'くらっしゅをなおす',
       missionLabel: 'クラッシュを直す',
       rate: 0.15,
-      success: { funFactor: 8 },
+      success: { hype: 8 },
     },
     {
       id: 'debug-save',
@@ -256,7 +256,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'しゅうせいをかくにんする',
       missionLabel: '修正内容を確認する',
       rate: 0.12,
-      success: { funFactor: 5 },
+      success: { hype: 5 },
     },
   ],
   // release フェーズのイベントは全削除（オーナー判断 2026-07-25）。
@@ -271,9 +271,6 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
 
 /** 軸 → 表示ラベル＆単位（イベント結果テロップ用） */
 export const AXIS_META: Record<DevAxis, { label: string; unit: string }> = {
-  funFactor: { label: '面白さ', unit: '' },
-  usability: { label: '操作性', unit: '' },
-  balance: { label: 'バランス', unit: '' },
   hype: { label: '期待度', unit: '' },
   buzz: { label: '話題性', unit: '' },
   bugRate: { label: 'バグ率', unit: '%' },
