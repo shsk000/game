@@ -324,7 +324,12 @@ export const computeRelease = (
   });
 
   // v0.16：社員成長。参加社員に exp を一括付与し、レベルアップを反映（spec v16 §1）
-  const growth = applyReleaseGrowth(ctx.employees, cur.assignedEmployeeIds, meta.metascore);
+  const growth = applyReleaseGrowth(
+    ctx.employees,
+    cur.assignedEmployeeIds,
+    meta.metascore,
+    cur.scale,
+  );
 
   const patch: ReleasePatch = {
     library: newLibrary,

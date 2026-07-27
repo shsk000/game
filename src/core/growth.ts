@@ -1,4 +1,5 @@
 import { computeMonthlyWage, GROWTH } from '../data/balance';
+import type { Scale } from '../data/scales';
 import type { Employee } from '../state/types';
 import { scaleSkills } from './skills';
 
@@ -17,10 +18,13 @@ export const powerAt = (basePower: number, level: number): number => {
   return Math.round(basePower * (1 + GROWTH.powerGrowthPerLevel * (lv - 1)) * 100) / 100;
 };
 
-/** リリース 1 回で得る exp（参加社員全員一律。メタスコア連動） */
-export const expForRelease = (metascore: number): number => {
+/**
+ * リリース 1 回で得る exp（参加社員全員一律）。
+ * メタスコア連動の基礎値に、**ゲーム規模の倍率**を掛ける（score-model.md §1）。
+ */
+export const expForRelease = (metascore: number, scale: Scale = 'mini'): number => {
   const bonus = GROWTH.expByMeta.find((t) => metascore >= t.minMeta)?.bonus ?? 0;
-  return GROWTH.expBase + bonus;
+  return Math.round((GROWTH.expBase + bonus) * GROWTH.expScaleMultiplier[scale]);
 };
 
 export type LevelUp = {
@@ -44,9 +48,10 @@ export const applyReleaseGrowth = (
   employees: Employee[],
   assignedIds: string[],
   metascore: number,
+  scale: Scale = 'mini',
 ): { employees: Employee[]; levelUps: LevelUp[] } => {
   const assigned = new Set(assignedIds);
-  const gained = expForRelease(metascore);
+  const gained = expForRelease(metascore, scale);
   const levelUps: LevelUp[] = [];
 
   const updated = employees.map((e) => {

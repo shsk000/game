@@ -280,6 +280,23 @@ export const GROWTH = {
     { minMeta: 70, bonus: 15 },
     { minMeta: 50, bonus: 5 },
   ],
+  /**
+   * **ゲーム規模ごとの exp 倍率**（docs/spec/score-model.md §1）。
+   *
+   * 定額だと解放ペースに育成が追いつかない。解放は累計売上ゲートで、売上も閾値も
+   * 規模ごとに ×10 で伸びるため各規模は数本で次を解放するのに、必要 exp は lv^1.5 で
+   * 急増するため。実測では 話題作の解放時に Lv4（想定 A級Lv7〜8）まで開いていた。
+   *
+   * 「大きい作品を作るほど学ぶ」を入れて追いつかせる。副作用として
+   * **上位規模で失敗しても経験値は入る**ので、「失敗続きで育て直しに戻れない」死の螺旋にならない。
+   */
+  expScaleMultiplier: {
+    mini: 1,
+    mobile: 3,
+    indie: 6,
+    hit: 12,
+    aaa: 24,
+  },
   /** 次のレベルに必要な exp = expCurveBase × lv^expCurveExp */
   expCurveBase: 20,
   expCurveExp: 1.5,

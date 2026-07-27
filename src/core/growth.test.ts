@@ -116,3 +116,35 @@ describe('旧セーブから移行した社員（rank なし）の成長', () =>
     expect(after.skills!.graphics! / after.skills!.sound!).toBeCloseTo(30 / 20, 2);
   });
 });
+
+describe('ゲーム規模ごとの exp 倍率（docs/spec/score-model.md §1）', () => {
+  it('大きい規模ほど1本あたりの exp が増える', () => {
+    const meta = 63;
+    const gains = (['mini', 'mobile', 'indie', 'hit', 'aaa'] as const).map((s) =>
+      expForRelease(meta, s),
+    );
+    for (let i = 1; i < gains.length; i++) {
+      expect(gains[i]).toBeGreaterThan(gains[i - 1]);
+    }
+    // ミニゲームは従来どおり（倍率 ×1）
+    expect(gains[0]).toBe(GROWTH.expBase + 5);
+  });
+
+  it('規模を省略するとミニゲーム扱い（既存の呼び出しの挙動を変えない）', () => {
+    expect(expForRelease(63)).toBe(expForRelease(63, 'mini'));
+  });
+
+  it('上位規模は失敗しても経験値が入る（育て直しに戻れない死の螺旋を防ぐ）', () => {
+    // メタが低くても規模の倍率は掛かるので、AAA で失敗し続けても育つ
+    const failAtAaa = expForRelease(20, 'aaa');
+    const successAtMini = expForRelease(95, 'mini');
+    expect(failAtAaa).toBeGreaterThan(successAtMini);
+  });
+
+  it('applyReleaseGrowth に規模が伝わる', () => {
+    const e = emp({ id: 'e1', exp: 0 });
+    const mini = applyReleaseGrowth([e], ['e1'], 63, 'mini');
+    const aaa = applyReleaseGrowth([e], ['e1'], 63, 'aaa');
+    expect(aaa.employees[0].level).toBeGreaterThan(mini.employees[0].level);
+  });
+});
