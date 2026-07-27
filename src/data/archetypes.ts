@@ -14,11 +14,20 @@ import type { GenreId } from './genres';
 
 export type WeightLabel = '◎' | '○' | '△';
 
-/** 段階の素の値 🔧（ここを変えると全ジャンルに反映される） */
+/**
+ * 段階の素の値 🔧（ここを変えると全ジャンルに反映される）。
+ *
+ * △ は 0.3 → **0.5**。◎ の数だけを見る公平性チェックには盲点があり、
+ * △ を数えると 📖ストーリーは27ジャンル中14（過半数）が △ だった。
+ * 0.3 のままだと正規化後の寄与が 3.6% しかなく、
+ * **シナリオライターが半分以上のジャンルで実質置物**になる（game-design §10-4 に反する）。
+ * 0.5 なら 5.9%＝ミスマッチな専門家でも寄与が見える。
+ * 型テーブルの組み替えは行わない（27ジャンルの割当は後戻りが重く、納得感も崩れる）。
+ */
 export const WEIGHT_VALUE: Record<WeightLabel, number> = {
   '◎': 3,
   '○': 1,
-  '△': 0.3,
+  '△': 0.5,
 };
 
 export type ArchetypeId = 'action' | 'sensory' | 'tactical' | 'party' | 'illustrated' | 'narrative';

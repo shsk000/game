@@ -80,17 +80,39 @@ describe('normalizedWeightsFor（正規化）', () => {
 
   it('段階の素の値を変えると全ジャンルに反映される（調整が3定数で済む）', () => {
     expect(WEIGHT_VALUE['◎'] / WEIGHT_VALUE['○']).toBe(3);
-    expect(WEIGHT_VALUE['○'] / WEIGHT_VALUE['△']).toBeCloseTo(1 / 0.3, 5);
+    expect(WEIGHT_VALUE['○'] / WEIGHT_VALUE['△']).toBe(2);
+  });
+
+  it('△ のジャンルでも寄与が見える（ミスマッチな専門家が置物にならない）', () => {
+    // △ = 0.3 のままだと寄与 3.6%。📖ストーリーは27ジャンル中14が △ なので、
+    // シナリオライターが半分以上のジャンルで実質置物になっていた（game-design §10-4）
+    for (const g of GENRES) {
+      const w = normalizedWeightsFor(g.id);
+      for (const id of FEATURE_IDS) {
+        expect(w[id], `${g.id}/${id}`).toBeGreaterThan(0.05);
+      }
+    }
   });
 
   it('ホラーの正規化重みが spec の例と一致する', () => {
-    // spec §4：🎵0.36 📖0.36 🎨0.12 🕹0.04 💡0.12（素の合計 8.3）
+    // spec §4：🎵0.35 📖0.35 🎨0.12 🕹0.06 💡0.12（素の合計 8.5）
     const w = normalizedWeightsFor('horror');
-    expect(w.soundPt).toBeCloseTo(0.36, 2);
-    expect(w.storyPt).toBeCloseTo(0.36, 2);
+    expect(w.soundPt).toBeCloseTo(0.35, 2);
+    expect(w.storyPt).toBeCloseTo(0.35, 2);
     expect(w.graphicsPt).toBeCloseTo(0.12, 2);
-    expect(w.usabilityPt).toBeCloseTo(0.04, 2);
+    expect(w.usabilityPt).toBeCloseTo(0.06, 2);
     expect(w.innovationPt).toBeCloseTo(0.12, 2);
+  });
+
+  it('△ になるジャンル数も spec の集計と一致する（◎だけ見ると盲点になる）', () => {
+    // spec §4：🕹10 ／ 🎨0 ／ 🎵3 ／ 📖14 ／ 💡0
+    const count = (id: (typeof FEATURE_IDS)[number]) =>
+      GENRES.filter((g) => weightsFor(g.id)[id] === '△').length;
+    expect(count('usabilityPt')).toBe(10);
+    expect(count('graphicsPt')).toBe(0);
+    expect(count('soundPt')).toBe(3);
+    expect(count('storyPt')).toBe(14);
+    expect(count('innovationPt')).toBe(0);
   });
 });
 
