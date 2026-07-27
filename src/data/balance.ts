@@ -279,6 +279,28 @@ export const GACHA_RANK_RATES: Record<GachaKind, Record<GachaRank, number>> = {
  * 🔧 **入門チーム前提はまだ検証していない。** 実測の解放時レベルは Lv3/5/7/8
  * （経験値の規模連動を入れたあと）。係数の校正は実装ステップ3 の通しシミュレーションで行う。
  */
+/**
+ * 特徴ポイント → メタスコア（docs/spec/score-model.md §4）。
+ *
+ * ⚠ **実装ステップ3 で `computeRelease` から呼ぶまで未使用。**
+ */
+export const METASCORE = {
+  /**
+   * 相性（0.7〜2.0）→ 相性補正（−8〜+8）。
+   * トレンド合致と同じ形＝「良い組合せの発見がヒット区分を1つ押し上げる」。
+   * 相性は学習できる（図鑑に記録される）ので、点に直結させても運ゲーにならない。
+   * 🔧 center は相性分布の中央値に合わせる（±0付近が平均になるように）。
+   */
+  compat: { center: 1.0, span: 1.0, max: 8 },
+  /** トレンド合致（ジャンルとテーマの両方／片方） */
+  trend: { both: 10, one: 5 },
+  /**
+   * 評価家のブレ（±5）。同じ作りでも毎回ぶれるのが中毒の肝（game-design §5）。
+   * ヒット区分をまたぐほどの幅は持たせない。
+   */
+  variance: 5,
+} as const;
+
 export const FEATURE_SCALE_COEF: Record<Scale, number> = {
   mini: 1.32,
   mobile: 0.25,
