@@ -191,6 +191,14 @@ type Actions = {
    * 1開発1回。使用済み・バグ 0・プロジェクト無しのときは false。
    */
   adDebugAssist: () => boolean;
+  /**
+   * 開発ビルド限定：残バグを一括で 0 にする（QA フック）。
+   *
+   * デバッグフェーズは 1バグ = 2文の打鍵で、バグが多いと検証したい先（発売・売上・
+   * 解放）に届く前に時間を使い切る。バグの発生・修正そのものを検証したいときは
+   * 通常フローで、それ以外を見たいときはここで飛ばす（docs/qa/bug-hunt.md）。
+   */
+  devClearAllBugs: () => void;
   hireCandidate: () => boolean;
   /**
    * v0.22：採用ガチャを1回引く（spec v22 §3〜4）。v0.22.1：種類（normal/premium）を指定。
@@ -685,6 +693,12 @@ export const useGameStore = create<GameState>()(
       const cleared = bugsClearedByAd(cur.bugCount);
       set({ current: { ...cur, bugCount: cur.bugCount - cleared, adDebugUsed: true } });
       return true;
+    },
+
+    devClearAllBugs: () => {
+      const cur = get().current;
+      if (!cur) return;
+      set({ current: { ...cur, bugCount: 0 } });
     },
 
     hireCandidate: () => {

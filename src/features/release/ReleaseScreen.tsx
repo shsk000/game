@@ -517,14 +517,14 @@ export const ReleaseScreen = () => {
                         <span>{formatYen(work.initialRevenue + work.salesPool)}</span>
                       </div>
                       <div className="sales-formula-note">
-                        総売上の 20% が初動で即入金、残り 80% は時間をかけて売れる
+                        このうち 20% が発売直後に入金され、残り 80% は時間をかけて売れる
                       </div>
                     </div>
                   </PixelWindow>
                   <ul className="release-stats" style={{ marginTop: 8 }}>
                     <li className="revenue">
                       {/* ローンチ広告のボーナスは work.initialRevenue に既に加算済み（二重計上しない） */}
-                      💰 初動売上 {formatYen(work.initialRevenue)}
+                      💰 発売直後の入金 {formatYen(work.initialRevenue)}
                       {bonusRevenue > 0 && (
                         <span className="revenue-bonus"> (+{formatYen(bonusRevenue)})</span>
                       )}
@@ -572,7 +572,7 @@ export const ReleaseScreen = () => {
                             fontVariantNumeric: 'tabular-nums',
                           }}
                         >
-                          <span>売上見込（初動＋販売プール）</span>
+                          <span>売上見込（発売直後＋販売プール）</span>
                           <strong>{formatYen(projectedTotal)}</strong>
                           <span>− 開発費（{scaleDef.name}）</span>
                           <strong style={{ color: '#ff6b6b' }}>-{formatYen(devCost)}</strong>
@@ -613,20 +613,34 @@ export const ReleaseScreen = () => {
                 </div>
                 <div>
                   <div className="ad-block">
-                    {/* ラベルは必ず「初動売上」と明記する。初動は総売上の 20%（INITIAL_SHARE）なので
-                        「売上 +50%」と書くと実効 +10% との詐称になる（オーナー指摘 2026-07-25）。 */}
+                    {/* 「初動」は用語なので、ボタンのすぐ横で必ず言い換える。
+                        ここを「売上 +50%」と書くと実効 +10% との詐称になる（オーナー指摘 2026-07-25）。
+                        逆に「初動売上 +50%」だけだと、初動が何かを知らないプレイヤーには
+                        意味が伝わらない（オーナー指摘 2026-07-28）。 */}
                     {launchAdApplied ? (
                       <p className="ad-applied">
-                        ✅ ローンチ広告キャンペーン適用済（初動売上 ×1.5）
+                        ✅ ローンチ広告 適用済
+                        <span className="ad-note">
+                          発売直後の入金（総売上の20%）が ×1.5 になった
+                          {bonusRevenue > 0 && <> ／ +{formatYen(bonusRevenue)}</>}
+                        </span>
                       </p>
                     ) : (
-                      <button
-                        className="primary-btn ad-btn"
-                        disabled={adRunning !== null}
-                        onClick={runLaunchAd}
-                      >
-                        {adRunning === 'launch' ? '広告再生中…' : '📺 ローンチ広告 初動売上 +50%'}
-                      </button>
+                      <>
+                        <button
+                          className="primary-btn ad-btn"
+                          disabled={adRunning !== null}
+                          onClick={runLaunchAd}
+                        >
+                          {adRunning === 'launch'
+                            ? '広告再生中…'
+                            : '📺 ローンチ広告 発売直後の入金 +50%'}
+                        </button>
+                        <p className="ad-note">
+                          発売直後に入る分（総売上の20%）だけが増える。
+                          残り80%は時間をかけて売れるぶんで、こちらは変わらない
+                        </p>
+                      </>
                     )}
                   </div>
 

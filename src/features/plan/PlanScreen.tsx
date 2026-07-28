@@ -8,8 +8,9 @@ import { jobTitleOf } from '../../core/skills';
 import { investPrice } from '../../core/invest';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
 import { planWeeksAllowance } from '../../data/balance';
-import { ARCHETYPES, GENRE_ARCHETYPE, weightsFor } from '../../data/archetypes';
+import { weightsFor } from '../../data/archetypes';
 import { compatLabel, getCompat } from '../../data/compatibility';
+import { innovationFor } from '../../core/features';
 import { skillTotalsOf } from '../../core/skills';
 import { SKILL_CONFIG } from '../../data/balance';
 import { sumPrBonus } from '../../data/employees';
@@ -560,7 +561,9 @@ export const PlanScreen = () => {
         {/* このジャンルで重要な分野（docs/spec/score-model.md §4）。
             プレイヤーが「手持ちのスキルに合うジャンルを選ぶ」判断をするための表示 */}
         <PixelWindow
-          title={`🎯 ${ARCHETYPES[GENRE_ARCHETYPE[genreId]].label}で重要な分野`}
+          // 「型」（絵物語型 等）は27ジャンルを整理するための内部の分類名。
+          // プレイヤーが選んだのはジャンルなので、ジャンル名で言う
+          title={`🎯 ${GENRE_BY_ID[genreId].name}で重要な分野`}
           variant="standard"
           bodyStyle={{ padding: 8 }}
         >
@@ -583,6 +586,22 @@ export const PlanScreen = () => {
           <p style={{ ...hintStyle, marginTop: 4 }}>
             ◎ が重い。打って伸ばした分野がジャンルに合うほどメタスコアが伸びる
           </p>
+          <p style={{ ...hintStyle, marginTop: 2 }}>
+            同じ分野に2人目を入れても{Math.round(SKILL_CONFIG.secondMemberEfficiency * 100)}
+            %しか足されない（分業のロス）。**分野は散らすほうがスコアは伸びる**
+          </p>
+          {/* 革新性は打鍵では動かず、**ここでしか直せない**（組合せを変える）。
+              だから開発中ではなく企画画面に出す */}
+          {(() => {
+            const innovation = innovationFor(library, genreId, themeId);
+            if (innovation >= 100) return null;
+            return (
+              <p style={{ ...hintStyle, marginTop: 4, color: COLORS.trendHot }}>
+                ⚠ 💡 革新性 {innovation}／100 ── この組合せが続いています。
+                ジャンルかテーマを変えれば 100 に戻ります
+              </p>
+            );
+          })()}
           {/* 分野ごとのスキル合計と内訳（docs/spec/score-model.md §3）。
               同じ分野の2人目以降は効率が落ちるので、その内訳も見せる */}
           {employees.length > 0 && (
@@ -594,17 +613,22 @@ export const PlanScreen = () => {
                   .sort((a, b) => b.v - a.v);
                 if (members.length === 0) return null;
                 const total = skillTotalsOf(employees)[field];
+                // 2人目以降は「元の値 → 実際に効く値」で見せる。
+                // 結果だけ出すと「スキル30 の社員がなぜ 4 なのか」が分からない
                 const detail = members
                   .map((m, i) =>
                     i === 0
                       ? `${m.name} ${Math.round(m.v)}`
-                      : `${m.name} ${Math.round(m.v * SKILL_CONFIG.secondMemberEfficiency)}`,
+                      : `${m.name} ${Math.round(m.v)}→${Math.round(m.v * SKILL_CONFIG.secondMemberEfficiency)}`,
                   )
                   .join(' ＋ ');
                 return (
                   <div key={field} style={{ fontSize: 11, color: COLORS.textDark }}>
                     {SKILL_VISUAL[field].emoji} スキル合計 <strong>{Math.round(total)}</strong>
                     <span style={{ color: COLORS.textSub }}>（{detail}）</span>
+                    {members.length >= 2 && (
+                      <span style={{ color: COLORS.trendHot, marginLeft: 4 }}>⚠ 2人目は分業ロス</span>
+                    )}
                   </div>
                 );
               })}

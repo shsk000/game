@@ -71,7 +71,7 @@ import {
   dateToWeekIndex,
 } from '../../state/types';
 import { sfx } from '../../utils/sfx';
-import { computeDevImpact, progressGain, toCharsPerMin } from './devImpact';
+import { progressGain, toCharsPerMin } from './devImpact';
 import { type TypingView, useTyping } from './useTyping';
 
 /** v0.15.2 フィーバー定数（叩き台 🔧）：正打 60 打で MAX、15 秒間 進捗×2 */
@@ -99,12 +99,13 @@ type LastResult =
   | {
       kind: 'ticket';
       rank: SpeedRank;
-      speedPct: number;
-      /** この1文で伸びた特徴ポイント（旧「品質」の置き換え。実際に効く値） */
-      featureLabel?: string;
-      featureIcon?: string;
+      /** この1文で伸びた特徴ポイント（実際に効く値） */
+      featureId?: FeatureId;
       featureGain?: number;
-      bugPct: number;
+      /** 伸びたあとのその分野の値 */
+      featureNow?: number;
+      /** 4分野の現在値（伸びていない分野も出す） */
+      featureTotals?: Partial<Record<FeatureId, number>>;
       /** この 1 文で実際に進んだ完成度（進捗ゲージに入る値そのもの） */
       progress: number;
       /** v0.20 C：この1文がボス文章の完走だったか（画面シェイクの追加トリガーに使う） */
@@ -449,8 +450,6 @@ export const DevelopScreen = () => {
           addFeaturePoint(field, featGain);
           setFeaturePop({ field, gain: featGain, key: featurePopKeyRef.current++ });
         }
-
-        const impactNow = computeDevImpact({ wpm: wpmRef.current, accuracy: accuracyRef.current });
         const progressNow =
           progressGain(wpmRef.current, false, comboRef.current) *
           (feverActiveRef.current ? 2 : 1) *
@@ -459,11 +458,10 @@ export const DevelopScreen = () => {
         setLastResult({
           kind: 'ticket',
           rank,
-          speedPct: impactNow.speedPct,
-          featureLabel: FEATURE_CHIP[SKILL_TO_FEATURE[field]]?.label,
-          featureIcon: FEATURE_CHIP[SKILL_TO_FEATURE[field]]?.icon,
+          featureId: SKILL_TO_FEATURE[field],
           featureGain: featGain,
-          bugPct: impactNow.bugPct,
+          featureNow: (useGameStore.getState().current?.features?.[SKILL_TO_FEATURE[field]] ?? 0),
+          featureTotals: { ...(useGameStore.getState().current?.features ?? {}) },
           progress: Math.round(progressNow * 10) / 10,
           boss: isBossPhrase,
           ts: Date.now(),
@@ -1992,29 +1990,28 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
         {result.rank}!
       </span>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-        <ResultChip
-          icon="⚡"
-          label="開発速度"
-          value={`${result.speedPct >= 0 ? '+' : ''}${result.speedPct}%`}
-          color="#4db3ff"
-        />
-        {/* 「品質」は実装ステップ3 で廃止（合成値そのものを削除）。
-            いま打鍵が効くのは**その分野の特徴ポイント**なので、それを出す */}
-        {result.featureLabel && (
-          <ResultChip
-            icon={result.featureIcon ?? '✨'}
-            label={result.featureLabel}
-            value={`+${result.featureGain?.toFixed(1) ?? '0'}`}
-            color="#ffd54a"
-          />
-        )}
-        <ResultChip
-          icon="🐛"
-          label="バグリスク"
-          value={`${result.bugPct}%`}
-          color={result.bugPct <= 0 ? '#5fe08a' : '#ff6b6b'}
-        />
-        <ResultChip icon="🏗" label="進捗" value={`+${result.progress}`} color="#d8a5ff" />
+        {/* **実際に効く数値だけを出す。**
+            旧実装は「開発速度 +40%」「バグリスク −5%」を効果の書式で出していたが、
+            どちらもどこにも掛かっていない飾りだった（オーナー指摘 2026-07-28）。
+            いま打鍵が効くのは**その分野の特徴ポイント**だけなので、
+            4分野の現在値を出し、今伸びた分野を光らせる。
+            革新性は企画時に決まって打鍵では動かないので出さない。 */}
+        {DEV_FEATURE_ROWS.map((row) => {
+          const grew = result.featureId === row.id;
+          return (
+            <ResultChip
+              key={row.id}
+              icon={row.icon}
+              label={row.label}
+              value={
+                grew
+                  ? `${Math.round(result.featureNow ?? 0)} (+${result.featureGain?.toFixed(1) ?? '0'})`
+                  : `${Math.round(result.featureTotals?.[row.id] ?? 0)}`
+              }
+              color={grew ? '#ffd54a' : '#6a7686'}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -2578,6 +2575,28 @@ const DebugFlow = ({
   return (
     <PhaseShell label="デバッグ">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* 開発ビルド限定：残バグを一括で 0 にする QA フック。
+            デバッグは 1バグ = 2文なので、バグが多いと発売・売上・解放の検証に
+            届く前に時間を使い切る（docs/qa/bug-hunt.md）。 */}
+        {import.meta.env.DEV && bugCount > 0 && (
+          <button
+            type="button"
+            onClick={() => useGameStore.getState().devClearAllBugs()}
+            title="残バグを 0 にしてテストフェーズを飛ばす（DEVビルドのみ）"
+            style={{
+              alignSelf: 'flex-start',
+              padding: '4px 8px',
+              border: '1px dashed #6a7686',
+              background: '#141b26',
+              color: '#c8d2e0',
+              fontSize: 10,
+              borderRadius: 2,
+              cursor: 'pointer',
+            }}
+          >
+            🛠 [DEV] バグを全部消す（{bugCount} 匹）
+          </button>
+        )}
         {/* 進捗バー「駆除 N/M」＋ バグ抑制（プログラマー育成の効果をここでも見せる） */}
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -3023,14 +3042,16 @@ export const devBox = (): React.CSSProperties => ({
 });
 
 
-/** 打鍵結果チップに出す特徴ポイントの見出し */
-const FEATURE_CHIP: Record<string, { icon: string; label: string }> = {
-  usabilityPt: { icon: '🕹', label: '操作性' },
-  graphicsPt: { icon: '🎨', label: 'グラフィック' },
-  soundPt: { icon: '🎵', label: 'サウンド' },
-  storyPt: { icon: '📖', label: 'ストーリー' },
-  innovationPt: { icon: '💡', label: '革新性' },
-};
+/**
+ * 打鍵結果チップに出す分野（**打鍵で動く4分野だけ**）。
+ * 革新性は企画時に決まって打鍵では動かないので、開発中は出さない。
+ */
+const DEV_FEATURE_ROWS: { id: FeatureId; icon: string; label: string }[] = [
+  { id: 'usabilityPt', icon: '🕹', label: '操作性' },
+  { id: 'graphicsPt', icon: '🎨', label: 'グラフィック' },
+  { id: 'soundPt', icon: '🎵', label: 'サウンド' },
+  { id: 'storyPt', icon: '📖', label: 'ストーリー' },
+];
 
 /** 特徴ポイントの表示メタ（docs/spec/score-model.md §2） */
 const FEATURE_META: Record<FeatureId, { icon: string; label: string; color: string }> = {
@@ -3059,7 +3080,9 @@ const FeaturePointsBox = ({
   return (
     <div style={{ ...devBox(), gap: 3 }}>
       <span style={{ fontSize: 11, color: DEV.sub }}>作品の特徴</span>
-      {FEATURE_IDS.map((id) => {
+      {/* 革新性は企画時に決まって打鍵では動かない。開発中に出しても手の打ちようがないので、
+          企画画面（組合せを選び直せる場所）とリリース画面（結果）だけに出す */}
+      {FEATURE_IDS.filter((id) => id !== 'innovationPt').map((id) => {
         const m = FEATURE_META[id];
         const v = features[id];
         return (
