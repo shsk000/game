@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { ALL_EQUIPMENT, EQUIPMENT_BY_ID } from '../data/equipment';
 import {
   canBuyEquipment,
-  computeEquipCategoryMul,
   countAssigned,
   type EquipLoadout,
   equipmentPrice,
@@ -47,32 +46,6 @@ describe('loadoutCategoryMul', () => {
   });
 });
 
-describe('computeEquipCategoryMul（集約）', () => {
-  it('社員ゼロは全カテゴリ 1.0', () => {
-    expect(computeEquipCategoryMul([])).toEqual({ program: 1, graphics: 1, sound: 1, scenario: 1 });
-  });
-
-  it('全員同じ装備なら、その増分が満額で乗る', () => {
-    const lo: EquipLoadout = { pc: 'pc-desktop' }; // program 1.2
-    const m = computeEquipCategoryMul([lo, lo, lo]);
-    expect(m.program).toBeCloseTo(1.2, 5);
-  });
-
-  it('半分だけ装備すると増分が平均化される（人数非依存の集約）', () => {
-    // 2人中1人だけ program 1.2 → 集約 program = 1 + (0.2 + 0)/2 = 1.1
-    const equipped: EquipLoadout = { pc: 'pc-desktop' };
-    const bare: EquipLoadout = {};
-    const m = computeEquipCategoryMul([equipped, bare]);
-    expect(m.program).toBeCloseTo(1.1, 5);
-    expect(m.graphics).toBe(1);
-  });
-
-  it('渡した byId を使う（依存注入）', () => {
-    const m = computeEquipCategoryMul([{ pc: 'pc-gaming' }], EQUIPMENT_BY_ID);
-    expect(m.program).toBeCloseTo(1.35, 5);
-    expect(m.scenario).toBeCloseTo(1.1, 5);
-  });
-});
 
 describe('equipmentPrice / canBuyEquipment', () => {
   it('価格はテーブルの cost', () => {

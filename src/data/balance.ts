@@ -62,21 +62,6 @@ export const SCORE_TIERS = {
 } as const;
 
 /**
- * メタスコア帯ごとの売上倍率（balance-scenario §5-2、v0.10 仕上げで再調整）。
- *
- * 各規模の baseRevenue に掛けて最終売上を算出する。
- * 「ほとんどのゲームは赤字 or トントン」現実準拠の難易度に合わせて
- * v0.10 初版より hit 以上を 0.5 倍に圧縮（hit ¥2000万 → ¥1000万）。
- *
- * - 致命的失敗（×0.33）：開発費の 1/3 程度 → 確実に赤字
- * - 失敗（×3.33）：開発費の ~3 倍 → ほぼトントン
- * - 普通（×10）：黒字だが控えめ（mini ¥300万 → +¥210万）
- * - ヒット（×33）：mini ¥1000 万 → +¥910 万（明らかに嬉しい山）
- * - 大ヒット（×100）：mini ¥3000 万 → +¥2910 万
- * - 名作（×250）：mini ¥7500 万
- * - 神ゲー帯（×500）：mini ¥1.5 億
- */
-/**
  * ヒット区分の売上倍率（docs/spec/score-model.md §5）。
  *
  * 旧 ×0.33〜×500（レンジ1500倍）は「神ゲー＝1%の稀な当たり」を前提にした数字。
@@ -155,22 +140,6 @@ export const GACHA_RANKS: readonly GachaRank[] = ['C', 'B', 'A', 'S'] as const;
 /** 採用ガチャの種類（v0.22.1 で 2 種に分割）。normal＝安価・S 無し／premium＝高額・S 源 */
 export type GachaKind = 'normal' | 'premium';
 
-/**
- * 採用ガチャの確定テーブル（spec v22 §4。数値は全て叩き台 🔧）。
- *
- * v0.22.1：オーナー指示で **ノーマル / プレミアム** の 2 種に分割。
- * - **normal**：安価（規模連動・現行テーブル）。**S を出さない**（B/A のみ）。天井なし。
- *   序盤の主力採用。A（power 0.4〜0.55）までは出るので普通に戦力になる。
- * - **premium**：高額（mini ¥500 万＝初期資金と同額で**序盤はほぼ引けない**）。S の唯一の入手源。
- *   天井 pityThreshold 連続 S 非排出で次を S 確定。中盤以降に手が届く設計。
- *   → S を序盤から引けなくすることで v16 の早期分布ガード（序盤メタ70+＝0%）を
- *     経済面から自然に守る（premium が高すぎて序盤は S を揃えられない）。
- *
- * 共通：
- * - powerRange: ランク別 basePower 帯。S 上限 0.7 は旧候補上限 0.6 より高いが、charPower は
- *   POWER_CAP × powerBonus 上限 70 で天井固定＝S は「天井に早く着く」だけ。
- * - specialty: ランク別の得意分野構成。A は旧仕様（3-10 ＋ 40% で 1-4）と同じ。
- */
 export const GACHA_CONFIG = {
   normal: {
     // S 無し。S の 5% 分を A に寄せて B70/A30（🔧）
@@ -269,7 +238,15 @@ export const SKILL_CONFIG = {
    */
   spreadPenalty: 0.9,
   /** 2スキル時の配分比（主スキル : 副スキル） 🔧 */
-  spreadRatio: { primary: 0.55, secondary: 0.45 },
+  /**
+   * 2スキル持ちの配分。**主 0.70 / 副 0.30**。
+   *
+   * 0.55/0.45 では2スキル持ちの主スキルが 総合力 × 0.9 × 0.55 ＝ **0.495** しかなく、
+   * 1スキル持ち（1.0）の半分。**排出の50%が主力にならず、AAA が実ガチャのチームでは
+   * どうしても赤字**になっていた（本番経路の実測）。0.70 なら 0.63 で、
+   * 専門特化の優位（1.0 > 0.63）は保ったまま2スキル持ちも主力になれる。
+   */
+  spreadRatio: { primary: 0.7, secondary: 0.3 },
   /** 同じ分野に2人目以降を置いたときの効率（分業のロス）。スキル合計に掛ける 🔧 */
   /**
    * 同じ分野の2人目以降の効率。**0.5 → 0.12**（実機で支配戦略が見つかったため）。
@@ -294,12 +271,7 @@ export const SKILL_CONFIG = {
  * 採用ガチャの排出率（C を含む4種構成）🔧。
  * normal は S を出さない（旧仕様どおり）。C を追加したぶんは B から割いた。
  */
-/**
- * ⚠ **まだ本番では使っていない**（実装ステップ3 から）。
- * 現行のガチャは `GACHA_CONFIG[kind].rates`（C を出さない旧テーブル）を読む。
- * C の天井 40 が効くのはスキルが直接スコアに乗る実装ステップ3 なので、
- * それより前に C を排出すると「C と表示されるが power は旧ロジック」という嘘になる。
- */
+/** 採用ガチャのランク排出率（C を含む4種）。`rollRank4` が読む */
 export const GACHA_RANK_RATES: Record<GachaKind, Record<GachaRank, number>> = {
   normal: { C: 0.35, B: 0.45, A: 0.2, S: 0 },
   premium: { C: 0.1, B: 0.35, A: 0.4, S: 0.15 },
@@ -322,7 +294,6 @@ export const GACHA_RANK_RATES: Record<GachaKind, Record<GachaRank, number>> = {
 /**
  * 特徴ポイント → メタスコア（docs/spec/score-model.md §4）。
  *
- * ⚠ **実装ステップ3 で `computeRelease` から呼ぶまで未使用。**
  */
 export const METASCORE = {
   /**
@@ -342,15 +313,15 @@ export const METASCORE = {
 } as const;
 
 export const FEATURE_SCALE_COEF: Record<Scale, number> = {
-  mini: 1.32,
-  mobile: 0.25,
-  indie: 0.09,
-  hit: 0.048,
+  mini: 1.58,
+  mobile: 0.3,
+  indie: 0.108,
+  hit: 0.058,
   // AAA だけ天井基準（最強構成でようやく100）。
   // 0.035 では入門チーム（A級Lv8）が名作＝粗利¥200億 になり「大作を当てにいく」緊張が消え、
   // 0.03 では逆に入門が普通＝¥50億の赤字で詰みかけた（2人目効率を 0.5→0.12 に下げた影響）。
   // 実測：A級Lv8 でメタ72（ヒット）＝収支トントン、A級Lv10 で大ヒット、S級Lv10 で神ゲー。
-  aaa: 0.034,
+  aaa: 0.041,
 };
 
 /**
@@ -503,21 +474,24 @@ export const SCALE_BALANCE: Record<
   indie: {
     devCost: 50_000_000, // ¥5000 万
     baseRevenue: 300_000_000, // 普通（×1）で ¥3 億
-    unlockSalesRequired: 1_100_000_000, // ¥11 億（16作目前後）
+    unlockSalesRequired: 1_700_000_000, // ¥17 億（16作目前後）
     unlockCost: 15_000_000, // ¥1500 万（v0.18）
     neededWeeks: 20, // 5 ヶ月
   },
   hit: {
     devCost: 1_000_000_000, // ¥10 億
     baseRevenue: 2_000_000_000, // 普通（×1）で ¥20 億
-    unlockSalesRequired: 4_000_000_000, // ¥40 億（24作目前後）
+    unlockSalesRequired: 8_000_000_000, // ¥80 億（24作目前後）
     unlockCost: 150_000_000, // ¥1.5 億（v0.18）
     neededWeeks: 28, // 7 ヶ月
   },
   aaa: {
-    devCost: 10_000_000_000, // ¥100 億
+    // ¥100 億では**話題作のほうが儲かり、AAA を作る理由が消えていた**
+    // （A級Lv10 で 話題作 ¥110億 vs AAA ¥75億。終盤13本が「話題作を回すのが最適」になる）。
+    // ¥60 億にすると規模の順序が正しくなり、「普通（¥50億）では赤字・ヒット以上で黒字」も保てる。
+    devCost: 6_000_000_000, // ¥60 億
     baseRevenue: 5_000_000_000, // 普通（×1）で ¥50 億
-    unlockSalesRequired: 20_000_000_000, // ¥200 億（32作目前後）
+    unlockSalesRequired: 35_000_000_000, // ¥350 億（32作目前後）
     unlockCost: 1_500_000_000, // ¥15 億（v0.18）
     neededWeeks: 36, // 9 ヶ月
   },
@@ -557,19 +531,6 @@ export const INVEST_CONFIG = {
 // 品質計算の難易度補正（balance-scenario §2, §6-3〜§6-5）
 // ============================================================
 
-/**
- * 4 要素品質計算のウェイト。
- *
- * ⚠ 現在の値は charPower 0.60 / genreAffinity 0.15 / typingScore 0.15 / luck 0.10。
- * v0.16 で「勝敗の決定因は会社の育ち（社員能力）／タイピングは体験の入口と手触り」に方針が
- * 確定したため、社員を最大レバーに戻した（game-scenario スキル §0・§10-3）。
- *
- * 旧コメントには「タイピング 15%→37% に引き上げて最大レバー化」と書かれていたが、
- * これは v0.14 時点の方針で、現在は**逆**。数値も一致していなかったので書き換えた。
- *
- *   final = (charPower × 0.60 + genreAffinity × 0.15 + typingScore × 0.15 + luck × 0.10)
- *           × luckMultiplier(0.97〜1.03)
- */
 /**
  * v0.16 改訂（オーナー確定「能力を一番考慮する」）：
  * キャラ能力を最大の支配項（0.60）に。相性とタイピングを両方カンストしても
@@ -673,10 +634,7 @@ export const JUICE_CONFIG = {
  * 各スコアの計算基準値（balance-scenario §6-3〜§6-5）。
  * 「何もしないと base 30」設計。base + 各種ボーナスで 100 まで上がる。
  */
-export const SCORE_BASE = 30;
 
-/** 運の中庸値 */
-export const LUCK_DEFAULT = 50;
 
 /**
  * v0.18：リリース結果アドバイス（core/advice.ts）の「高水準」しきい値 🔧叩き台。

@@ -53,20 +53,6 @@ export const loadoutCategoryMul = (
  *  - チーム全員が良いPCなら program の増分が満額、半分だけなら半分になる（人数に依存しない）。
  *  - 空配列（誰もいない）は全カテゴリ 1.0。
  */
-export const computeEquipCategoryMul = (
-  loadouts: EquipLoadout[],
-  byId: Record<string, EquipmentDef> = EQUIPMENT_BY_ID,
-): CategoryMul => {
-  if (loadouts.length === 0) return ONE_MUL();
-  const acc: CategoryMul = { program: 0, graphics: 0, sound: 0, scenario: 0 };
-  for (const lo of loadouts) {
-    const m = loadoutCategoryMul(lo, byId);
-    for (const cat of CATEGORY_ORDER) acc[cat] += m[cat] - 1;
-  }
-  const out = ONE_MUL();
-  for (const cat of CATEGORY_ORDER) out[cat] = 1 + acc[cat] / loadouts.length;
-  return out;
-};
 
 /** 装備の購入価格（現状はテーブルの cost をそのまま。将来ティア/規模連動を挟む余地）。 */
 export const equipmentPrice = (def: EquipmentDef): number => def.cost;

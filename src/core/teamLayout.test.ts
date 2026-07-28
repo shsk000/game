@@ -5,7 +5,6 @@ import type { DevSkillId, Employee, FeaturePoints } from '../state/types';
 import { DEV_SKILL_IDS, ZERO_FEATURES } from '../state/types';
 import { addFeature, featureGainFor } from './features';
 import { computeMetascore } from './metascore';
-import { mulberry32 } from './ports';
 import { totalPowerFor } from './skills';
 
 /**

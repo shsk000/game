@@ -124,14 +124,12 @@ export const rollRank4 = (kind: GachaKind, rng: Rng = Math.random, pityCount = 0
 };
 
 /**
- * 主スキルの抽選重み。**旧 `ROLE_DICE`（programmer 40% / designer 40% / pr 20%）を
- * そのまま再現する**ように配分してある。
+ * 主スキルの抽選重み。
  *
- * 旧 role は 3種、スキルは 5種。graphics / sound / scenario はどれも旧 designer に
- * 対応するので、この3つで 40% を分け合う。こうすると `roleFromSkills` を通した
- * 職種の分布が旧実装と一致し、**バグ抑制（プログラマーの power 合計）の期待値が変わらない**。
- *
- * 実装ステップ3 で role を廃止したら、均等（各20%）に戻す。
+ * 開発4分野は均等（各22%）。**広報だけ 12% に落としてある**：
+ * 広報は開発の特徴ポイントに一切効かず売上倍率にしか効かないので、
+ * 均等（20%）だと5人に1人が「作品づくりに使えない社員」になり、
+ * 実ガチャで組んだチームが想定スコアに届かなくなる（本番経路の実測で判明）。
  */
 /**
  * ⚠ **前提**：この重み付けが職種分布を再現できるのは、`roleFromSkills` が見る
@@ -142,11 +140,14 @@ export const rollRank4 = (kind: GachaKind, rng: Rng = Math.random, pityCount = 0
  * skills.test.ts に「引いた主スキル＝最大値」を固定するテストがある。
  */
 const PRIMARY_SKILL_WEIGHTS: readonly (readonly [SkillId, number])[] = [
-  ['programming', 0.4],
-  ['graphics', 0.4 / 3],
-  ['sound', 0.4 / 3],
-  ['scenario', 0.4 / 3],
-  ['pr', 0.2],
+  ['programming', 0.22],
+  ['graphics', 0.22],
+  ['sound', 0.22],
+  ['scenario', 0.22],
+  // 広報は**開発の特徴ポイントに効かない**（売上倍率だけ）。20% では
+  // 「引いたのに作品づくりに使えない」が5人に1人になり、実ガチャのチームが
+  // 想定スコアに届かなかった。12% に下げて開発分野を厚くする
+  ['pr', 0.12],
 ] as const;
 
 const pickWeighted = (rng: Rng): SkillId => {

@@ -100,16 +100,9 @@ export type Employee = {
   id: string;
   name: string;
   role: EmployeeRole;
-  /**
-   * v0.22：採用ガチャの排出ランク（表示ラベル専用）。
-   * 能力への影響は basePower / specialties に織り込み済みで、rank 自体が
-   * 品質・売上に加点する経路は作らない（spec v22 §2）。旧セーブの社員は undefined。
-   */
+  /** 採用時に決まるランク（C/B/A/S）。総合力の天井を決める */
   rank?: GachaRank;
-  /**
-   * v0.16：全役割共通の 0..1 正規化スケール（成長込みの現在値）。
-   * 実効果は使用側で ROLE_EFFECT 係数を掛ける（LoC/秒・品質+・売上%）。
-   */
+  /** 互換：総合力 ÷ 100。給与計算だけが使う（スコアはスキル経由） */
   power: number;
   /** v0.16：素質（採用時に決まる 0.2〜0.6）。power = basePower × レベル成長率 */
   basePower: number;
@@ -125,10 +118,7 @@ export type Employee = {
    * 旧セーブは storage の移行で power/role から生成される。
    */
   skills: SkillSet;
-  /**
-   * v0.25：装備（スロット→アイテムID）。未装備スロットは undefined、旧セーブの社員は undefined。
-   * 効果はリリース品質に別枠で加点（EQUIP_QUALITY_BONUS_CAP）。see core/equip.ts。
-   */
+  /** 装備。分野別の倍率で**社員のスキル**に掛かる（core/equip.ts） */
   equipped?: EquipLoadout;
 };
 
@@ -211,7 +201,6 @@ export type Work = {
   pioneer: boolean;
   releasedAt: number;
   createdAt: number;
-  /** 品質の4レバー内訳 */
   breakdown: WorkBreakdown;
   /** v0.10：開発に要したゲーム内週数（カレンダー差分。リリース時に確定） */
   developWeeks?: number;
@@ -264,8 +253,7 @@ export type DevAxes = Record<DevAxis, number>;
  * 特徴ポイント（docs/spec/score-model.md §2）。**どの作品も常に5つとも持つ。**
  * 企画で選ぶものではなく、その作品の出来を表す数値（0〜100）。
  *
- * 実装ステップ2 では**蓄積と表示だけ**で、スコアには接続しない
- * （接続は実装ステップ3。それまで現行のスコア・売上は不変）。
+ * メタスコアはこの5つだけから決まる（docs/spec/scoring.md §2）。
  */
 export const FEATURE_IDS = ['usabilityPt', 'graphicsPt', 'soundPt', 'storyPt', 'innovationPt'] as const;
 export type FeatureId = (typeof FEATURE_IDS)[number];
@@ -316,7 +304,7 @@ export type CurrentProject = {
   phase?: DevPhase;
   /** v0.14：イベントで蓄積する新名称軸。リリース時に既存パイプラインへ合流（spec §5-6） */
   axes?: DevAxes;
-  /** 特徴ポイント5種（実装ステップ2：蓄積のみ・スコア未接続） */
+  /** 特徴ポイント5種（この作品の出来） */
   features?: FeaturePoints;
   /**
    * v0.15 ビルドアップ・タイピング：打った文の属性ごとに伸びる開発パラメータ。
@@ -346,7 +334,6 @@ export type CurrentProject = {
   adBoostActive: boolean;
   /** 市場調査広告で開示された相性 */
   surveyedCompat: number | null;
-  /** 今回開発で選ばれた3つのカテゴリ */
   /** 今回開発に割り当てた従業員 */
   assignedEmployeeIds: string[];
   /** タイピングのパフォーマンス指標 */

@@ -17,7 +17,6 @@ import type { Rng } from './ports';
  *            → 0〜100 にクランプ
  * ```
  *
- * ⚠ **実装ステップ3 で `computeRelease` から呼ぶまで、この式は使われない。**
  */
 
 export type MetascoreInput = {

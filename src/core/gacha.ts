@@ -1,6 +1,5 @@
 import { GACHA_CONFIG, type GachaKind, type GachaRank } from '../data/balance';
 import type { Scale } from '../data/scales';
-import type { Rng } from './ports';
 
 /**
  * v0.22 採用ガチャの純粋ロジック（spec v22 §4・§7）。
@@ -23,16 +22,6 @@ import type { Rng } from './ports';
  * 旧テーブル `GACHA_CONFIG[kind].rates` を読むため C も出るが、新しい正は `GACHA_RANK_RATES`。
  * 参照が消えたら削除する。
  */
-export const rollRank = (kind: GachaKind, rng: Rng = Math.random, pityCount = 0): GachaRank => {
-  const cfg = GACHA_CONFIG[kind];
-  // pityThreshold=0（normal）はピティ無効。premium のみ天井が効く。
-  if (cfg.pityThreshold > 0 && pityCount >= cfg.pityThreshold) return 'S';
-  const r = rng();
-  if (r < cfg.rates.S) return 'S';
-  if (r < cfg.rates.S + cfg.rates.A) return 'A';
-  if (r < cfg.rates.S + cfg.rates.A + cfg.rates.B) return 'B';
-  return 'C';
-};
 
 /**
  * 単発ガチャ価格。種類別テーブルを解放済み最高規模（unlockedScales 末尾＝economy.ts

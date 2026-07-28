@@ -386,7 +386,7 @@ export const ReleaseScreen = () => {
                     }}
                   >
                     <div style={{ fontSize: 18, fontWeight: 700, color: '#a85a28' }}>
-                      🏆 名作認定！（メタ {work.metascore}）
+                      🏆 神ゲー認定！（メタ {work.metascore}）
                     </div>
                   </div>
                 </PixelWindow>

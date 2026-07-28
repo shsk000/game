@@ -435,7 +435,7 @@ describe('無打鍵で発売したときのガード（採用 → 発売の通�
     return out;
   };
 
-  it('1文も打たずに発売すると、ほぼ確実に致命的失敗になる', () => {
+  it('1文も打たずに発売すると、ほぼ確実に致命的失敗になる（革新性ぶんしか入らない）', () => {
     setGameDeps({ rng: mulberry32(101), now: () => 0 });
     let sum = 0;
     let metaSum = 0;
@@ -452,13 +452,45 @@ describe('無打鍵で発売したときのガード（採用 → 発売の通�
       metaSum += w.metascore;
       if (w.metascore <= 29) fatal += 1;
     }
-    // 実装ステップ3：スコアは特徴ポイントで決まる。このガードは**1文も打たずに発売した場合**を
-    // 測っているので、致命的失敗が出るのが正しい（旧モデルは打たなくても品質72が出ていた）。
-    // 実際に打った場合のバランスは progressionSimulation / solvencySimulation で見る。
+    // 実装ステップ3：スコアは特徴ポイントだけで決まる。**社員をどれだけ強くしても、
+    // 打たなければスコアは動かない**ことを確認している（社員差が出ないのが正しい挙動）。
+    // 旧モデルは社員の power がそのままスコアに乗り、打たなくても品質72が出ていた。
+    // 実際に打った場合のバランスは teamLayout / progressionSimulation / solvencySimulation で見る。
     console.log(
       `[序盤・無打鍵] 平均メタ ${(metaSum / N).toFixed(1)} / 平均売上 ¥${Math.round(sum / N).toLocaleString()} / 致命的失敗 ${((fatal / N) * 100).toFixed(1)}%`,
     );
     expect(metaSum / N).toBeLessThan(30);
     expect(fatal / N).toBeGreaterThan(0.9);
+  });
+
+  it('社員をどれだけ強くしても、打たなければスコアは動かない', () => {
+    // 旧モデルの「打たなくても社員が強ければスコアが出る」を潰したことの確認。
+    // ここで社員差が出たら、スコアへの裏口が復活している
+    const run = (skill: number) => {
+      const employees = [
+        {
+          id: 'e0',
+          name: '社員',
+          role: 'programmer' as const,
+          power: skill / 100,
+          basePower: skill / 100,
+          level: 1,
+          exp: 0,
+          wage: 540_000,
+          specialties: [],
+          rank: 'B' as const,
+          skills: { programming: skill },
+        },
+      ] as Employee[];
+      return computeRelease(
+        ctx({
+          employees,
+          current: project({ scale: 'mini', assignedEmployeeIds: ['e0'] }),
+        }),
+        undefined,
+        deps(),
+      ).work.metascore;
+    };
+    expect(run(100)).toBe(run(1));
   });
 });

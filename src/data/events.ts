@@ -50,59 +50,9 @@ export const EVENT_CATEGORY_META: Record<EventCategory, { label: string; icon: s
 
 /** フェーズ別イベント表（spec §5-2）。 */
 export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
-  planning: [
-    {
-      id: 'plan-idea',
-      name: '天才のひらめき',
-      category: 'chance',
-      flavor: '社員が面白いアイデアを出した',
-      mission: 'あいであをかたちにする',
-      missionLabel: 'アイデアを形にする',
-      rate: 0.2,
-      success: { hype: 25 },
-    },
-    {
-      id: 'plan-drift',
-      name: 'コンセプト迷走',
-      category: 'trouble',
-      flavor: '企画の方向性がブレている',
-      mission: 'ほうこうせいをきめなおす',
-      missionLabel: '方向性を決め直す',
-      rate: 0.12,
-      success: { hype: 5 },
-    },
-    {
-      id: 'plan-trend',
-      name: '市場トレンド発見',
-      category: 'market',
-      flavor: '今流行のジャンルを見つけた',
-      mission: 'とれんどをぶんせきする',
-      missionLabel: 'トレンドを分析する',
-      rate: 0.15,
-      // 旧 salesForecast +15 から付け替え（軸削除に伴う。流行を掴んだ＝話題になる、で意味は通る）
-      success: { buzz: 15 },
-    },
-    {
-      id: 'plan-budget',
-      name: '予算見直し',
-      category: 'schedule',
-      flavor: '予算が足りるか検討する',
-      mission: 'よさんをちょうせいする',
-      missionLabel: '予算を調整する',
-      rate: 0.1,
-      success: { costMod: -10 },
-    },
-    {
-      id: 'plan-target',
-      name: 'ターゲット再設定',
-      category: 'market',
-      flavor: '想定ユーザーを見直す',
-      mission: 'そうていそうをきめる',
-      missionLabel: 'ターゲットを決める',
-      rate: 0.1,
-      success: { trust: 10 },
-    },
-  ],
+  // 企画フェーズのイベントは廃止（オーナー決定）。短いフェーズに割り込むと
+  // 何をしている時間なのか分からなくなる。開発フェーズ分だけを残す
+  planning: [],
   development: [
     {
       id: 'dev-bug',

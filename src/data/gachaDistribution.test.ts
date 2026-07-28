@@ -61,14 +61,14 @@ describe('採用ガチャの出力分布（ゴールデン値）', () => {
     },
   );
 
-  it('職種の分布が旧 ROLE_DICE と同じ（programmer 40% / designer 40% / pr 20%）', () => {
-    // スキルは5種だが、graphics / sound / scenario はどれも旧 designer に対応する。
-    // 主スキルの抽選重み（core/skills.ts PRIMARY_SKILL_WEIGHTS）でこの分布を再現している。
-    // ここが崩れると、バグ抑制（プログラマーの power 合計）の期待値が変わる。
+  it('開発4分野が均等で、広報だけ少ない（引いた社員が腐らない）', () => {
+    // 広報は開発の特徴ポイントに効かないので、均等（20%）だと5人に1人が
+    // 作品づくりに使えなくなる。12% に落として開発分野を厚くしてある
     const { roleRate } = measure('normal');
-    expect(roleRate.programmer).toBeCloseTo(0.4, 1);
-    expect(roleRate.designer).toBeCloseTo(0.4, 1);
-    expect(roleRate.pr).toBeCloseTo(0.2, 1);
+    // programmer = programming 主、designer = graphics/sound/scenario 主
+    expect(roleRate.programmer).toBeCloseTo(0.22, 1);
+    expect(roleRate.designer).toBeCloseTo(0.66, 1);
+    expect(roleRate.pr).toBeLessThan(0.18);
   });
 
   it('総合力は power × 100 と一致する（power は総合力から導出している）', () => {
@@ -152,11 +152,14 @@ describe('本番経路（pullGacha）の出力分布', () => {
     },
   );
 
-  it('職種の分布が旧 ROLE_DICE と同じ（programmer 40% / designer 40% / pr 20%）', () => {
-    const { pulled, roles } = measureViaStore('normal', 20_000);
-    expect(roles.programmer / pulled).toBeCloseTo(0.4, 1);
-    expect(roles.designer / pulled).toBeCloseTo(0.4, 1);
-    expect(roles.pr / pulled).toBeCloseTo(0.2, 1);
+  it('開発4分野が均等で、広報だけ少ない（引いた社員が腐らない）', () => {
+    // 広報は開発の特徴ポイントに効かないので、均等（20%）だと5人に1人が
+    // 作品づくりに使えなくなる。12% に落として開発分野を厚くしてある
+    const { roleRate } = measure('normal');
+    // programmer = programming 主、designer = graphics/sound/scenario 主
+    expect(roleRate.programmer).toBeCloseTo(0.22, 1);
+    expect(roleRate.designer).toBeCloseTo(0.66, 1);
+    expect(roleRate.pr).toBeLessThan(0.18);
   });
 });
 

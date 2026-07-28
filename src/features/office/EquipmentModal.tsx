@@ -160,7 +160,7 @@ export const EquipmentModal = ({ open, onClose }: { open: boolean; onClose: () =
             </ul>
           )}
           <p style={{ fontSize: 10, color: '#6b7684', marginTop: 8 }}>
-            ※装備は1個＝1人ぶん。打った作業カテゴリの品質を底上げします（効果は上限付き）。
+            ※装備は1個＝1人ぶん。**社員のスキルに分野別の倍率**が掛かり、特徴ポイントを速く積めます（上限なし）。
           </p>
         </div>
       </div>

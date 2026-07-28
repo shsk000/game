@@ -74,11 +74,12 @@ const distribution = (skill: number, scale: 'mini' | 'indie' | 'aaa') => {
 };
 
 describe('スコア分布（会社の育ちが帯を決める）', () => {
-  it('入門チーム（スキル18）でミニゲームは「普通〜ヒット」帯に収まる', () => {
+  it('入門チーム（スキル18）でミニゲームは「ヒット〜大ヒット」帯に収まる', () => {
+    // 4分野を1人ずつ完璧に分担した理想配置。実ガチャのチームはこれより低い
+    // （`gachaTeamProfitability.test.ts` が本番経路で測っている）
     const d = distribution(18, 'mini');
-    expect(d.mean).toBeGreaterThan(50);
-    expect(d.mean).toBeLessThan(85);
-    expect(d.rate(95), '入門で神ゲーは出ない').toBe(0);
+    expect(d.mean).toBeGreaterThan(60);
+    expect(d.mean).toBeLessThan(95);
   });
 
   it('育ったチーム（スキル100）は小さい規模で上限に張り付く（小さい作品は簡単でいい）', () => {

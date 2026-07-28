@@ -10,7 +10,11 @@ import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
 import { planWeeksAllowance } from '../../data/balance';
 import { ARCHETYPES, GENRE_ARCHETYPE, weightsFor } from '../../data/archetypes';
 import { compatLabel, getCompat } from '../../data/compatibility';
+import { skillTotalsOf } from '../../core/skills';
+import { SKILL_CONFIG } from '../../data/balance';
 import { sumPrBonus } from '../../data/employees';
+import { DEV_SKILL_IDS } from '../../state/types';
+import { SKILL_VISUAL } from '../office/employeeDisplay';
 import { formatSkills } from '../office/employeeDisplay';
 import { sumMonthlySalaries } from '../../data/employees';
 import type { GenreId } from '../../data/genres';
@@ -358,7 +362,8 @@ export const PlanScreen = () => {
             </div>
             {(() => {
               const def = SCALE_BY_ID[scale];
-              const range = estimateRevenueRange(scale);
+              // 予測は「このチームで実際に届く範囲」。固定の段だと AAA を赤字表示していた
+              const range = estimateRevenueRange(scale, employees, genreId, themeId);
               // v0.15.3：予定週は企画・仕上げの猶予込みで案内する
               const totalWeeks = def.neededWeeks + planWeeksAllowance(def.neededWeeks);
               const monthCount = Math.round(totalWeeks / 4);
@@ -578,6 +583,33 @@ export const PlanScreen = () => {
           <p style={{ ...hintStyle, marginTop: 4 }}>
             ◎ が重い。打って伸ばした分野がジャンルに合うほどメタスコアが伸びる
           </p>
+          {/* 分野ごとのスキル合計と内訳（docs/spec/score-model.md §3）。
+              同じ分野の2人目以降は効率が落ちるので、その内訳も見せる */}
+          {employees.length > 0 && (
+            <div style={{ marginTop: 5, borderTop: `1px solid ${COLORS.borderHard}`, paddingTop: 4 }}>
+              {DEV_SKILL_IDS.map((field) => {
+                const members = employees
+                  .map((e) => ({ name: e.name, v: e.skills?.[field] ?? 0 }))
+                  .filter((m) => m.v > 0)
+                  .sort((a, b) => b.v - a.v);
+                if (members.length === 0) return null;
+                const total = skillTotalsOf(employees)[field];
+                const detail = members
+                  .map((m, i) =>
+                    i === 0
+                      ? `${m.name} ${Math.round(m.v)}`
+                      : `${m.name} ${Math.round(m.v * SKILL_CONFIG.secondMemberEfficiency)}`,
+                  )
+                  .join(' ＋ ');
+                return (
+                  <div key={field} style={{ fontSize: 11, color: COLORS.textDark }}>
+                    {SKILL_VISUAL[field].emoji} スキル合計 <strong>{Math.round(total)}</strong>
+                    <span style={{ color: COLORS.textSub }}>（{detail}）</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </PixelWindow>
 
         {/* 企画プレビュー */}
@@ -637,7 +669,7 @@ export const PlanScreen = () => {
                     width: 'fit-content',
                   }}
                 >
-                  🌱 新規開拓 +30%
+                  🌱 新規開拓 +5%
                 </span>
               )}
               {surveyedCompat !== null ? (
