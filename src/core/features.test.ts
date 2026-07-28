@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FEATURE_SCALE_COEF } from '../data/balance';
+import { FEATURE_SCALE_COEF, SKILL_CONFIG } from '../data/balance';
 import type { Employee, Work } from '../state/types';
 import { ZERO_FEATURES } from '../state/types';
 import {
@@ -72,7 +72,8 @@ describe('featureGainFor（1文あたりの加算量）', () => {
     expect(featureGainFor('graphics', team, 'mini', 1)).toBeCloseTo(FEATURE_SCALE_COEF.mini * 50, 1);
   });
 
-  it('同じ分野の2人目は半減（1分野に寄せるのが支配戦略にならない）', () => {
+  it('同じ分野の2人目は効率が落ちる（1分野に寄せるのが支配戦略にならない）', () => {
+    const e = SKILL_CONFIG.secondMemberEfficiency;
     const one = featureGainFor('graphics', [emp({ graphics: 100 })], 'mini', 1);
     const two = featureGainFor(
       'graphics',
@@ -80,7 +81,9 @@ describe('featureGainFor（1文あたりの加算量）', () => {
       'mini',
       1,
     );
-    expect(two).toBeCloseTo(one * 1.5, 1);
+    expect(two).toBeCloseTo(one * (1 + e), 1);
+    // 2人目を入れても倍にはならない（＝集中が支配戦略にならない）
+    expect(two).toBeLessThan(one * 2);
   });
 
   it('誰も持っていない分野は 0（打っても伸びない）', () => {

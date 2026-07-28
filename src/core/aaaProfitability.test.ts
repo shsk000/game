@@ -65,11 +65,18 @@ describe('AAA 帯の採算（終盤が「作るほど損」にならない）', 
     expect(r.profit, '大きな赤字にはならない').toBeGreaterThan(-1_000_000_000);
   });
 
-  it('育てるほど大きく儲かる（Lv10 で粗利が跳ねる）', () => {
+  it('育てるほどヒット区分が上がり、粗利が跳ねる', () => {
     const entry = runAaa('A', 8, 6);
     const grown = runAaa('A', 10, 6);
+    const best = runAaa('S', 10, 6);
+    // 入門＝ヒット（トントン）→ 育てて大ヒット → 最強で神ゲー、と区分が上がっていく
     expect(grown.metascore).toBeGreaterThan(entry.metascore);
-    expect(grown.profit).toBeGreaterThan(entry.profit + 10_000_000_000);
+    expect(best.metascore).toBeGreaterThan(grown.metascore);
+    // 粗利は区分が上がるたびに増える
+    expect(grown.profit).toBeGreaterThan(entry.profit);
+    expect(best.profit).toBeGreaterThan(grown.profit);
+    // 最強まで育てれば開発費（¥100億）を大きく上回る
+    expect(best.profit).toBeGreaterThan(10_000_000_000);
   });
 
   it('最強構成（S級Lv10）で神ゲーに届く', () => {

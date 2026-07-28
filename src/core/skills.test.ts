@@ -132,16 +132,20 @@ describe('growSkills（レベルアップ）', () => {
 });
 
 describe('skillTotalsOf（チームの分野別スキル合計）', () => {
-  it('同じ分野の2人目以降は効率が半分（分業のロス）', () => {
+  it('同じ分野の2人目以降は効率が落ちる（分業のロス）', () => {
+    const e = SKILL_CONFIG.secondMemberEfficiency;
     const totals = skillTotalsOf([emp({ graphics: 100 }), emp({ graphics: 100 })]);
-    expect(totals.graphics).toBe(150); // 100 + 100×0.5
+    expect(totals.graphics).toBeCloseTo(100 + 100 * e, 5);
+    // 2人目は必ず何かを足す（同じ職種を引いても腐らない）が、満額にはならない
+    expect(e).toBeGreaterThan(0);
+    expect(e).toBeLessThan(1);
   });
 
   it('高い順に1人目が満額なので、順序を入れ替えても結果が変わらない', () => {
     const a = skillTotalsOf([emp({ sound: 40 }), emp({ sound: 90 })]);
     const b = skillTotalsOf([emp({ sound: 90 }), emp({ sound: 40 })]);
     expect(a.sound).toBe(b.sound);
-    expect(a.sound).toBe(110); // 90 + 40×0.5
+    expect(a.sound).toBeCloseTo(90 + 40 * SKILL_CONFIG.secondMemberEfficiency, 5);
   });
 
   it('誰も持っていない分野は 0（その分野の文は回ってこない）', () => {
