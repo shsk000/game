@@ -2305,3 +2305,41 @@ body,
   line-height: 12px;
   color: #8a96a8;
 }
+
+/* 売上の計算式（リリース画面）。docs/spec/scoring.md §3 の式をそのまま見せる */
+.sales-formula {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.sales-formula-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  /* PixelWindow(standard) は淡色パネル。--muted/--text は暗色背景用なので使わない
+     （濃淡が反転して読めなくなる。lessons: 濃色背景に黒字を置かない の逆パターン） */
+  color: #2a3550;
+}
+.sales-formula-row > span:last-child {
+  color: #0f1830;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.sales-formula-total {
+  border-top: 1px dashed #8a93a8;
+  margin-top: 3px;
+  padding-top: 4px;
+  font-size: 13px;
+  color: #0f1830;
+  font-weight: 800;
+}
+.sales-formula-total > span:last-child {
+  color: #0a6b2e;
+}
+.sales-formula-note {
+  margin-top: 3px;
+  font-size: 10px;
+  color: #4a5570;
+}

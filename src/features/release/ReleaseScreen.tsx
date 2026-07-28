@@ -15,6 +15,7 @@ import { formatRoi, formatWeeks, formatYen } from '../../utils/format';
 import { scoreFlavor } from '../../utils/metascore';
 import { computeProfit } from '../../utils/profit';
 import { normalizedWeightsFor, weightsFor } from '../../data/archetypes';
+import { SCORE_TIER_LABEL, type ScoreTier } from '../../data/balance';
 import type { FeatureId } from '../../state/types';
 import { sfx } from '../../utils/sfx';
 
@@ -457,7 +458,70 @@ export const ReleaseScreen = () => {
                 }}
               >
                 <div>
-                  <ul className="release-stats">
+                  {/* 売上がどう決まったか（docs/spec/scoring.md §3）。
+                      「この数値がどこから来たか」を全部見せる。効かない項は出さない */}
+                  <PixelWindow title="🧮 売上の計算" variant="standard" bodyStyle={{ padding: 8 }}>
+                    <div className="sales-formula">
+                      <div className="sales-formula-row">
+                        <span>基準売上（{SCALE_BY_ID[work.scale].name}）</span>
+                        <span>{formatYen(bd.baseRevenue ?? 0)}</span>
+                      </div>
+                      <div className="sales-formula-row">
+                        <span>
+                          × ヒット区分{' '}
+                          {bd.tier ? SCORE_TIER_LABEL[bd.tier as ScoreTier] : ''}（メタ
+                          {work.metascore}）
+                        </span>
+                        <span>×{bd.tierMul ?? 1}</span>
+                      </div>
+                      {(bd.prBonus ?? 0) > 0 && (
+                        <div className="sales-formula-row">
+                          <span>× 📣 広報スキル</span>
+                          <span>+{Math.round((bd.prBonus ?? 0) * 100)}%</span>
+                        </div>
+                      )}
+                      {(bd.fanBonus ?? 0) > 0 && (
+                        <div className="sales-formula-row">
+                          <span>× 👥 ファン{' '}
+                            {Math.round((bd.fanBonus ?? 0) * 400 * ((bd.fanBonus ?? 0) * 400)).toLocaleString()}
+                            人</span>
+                          <span>+{Math.round((bd.fanBonus ?? 0) * 100)}%</span>
+                        </div>
+                      )}
+                      {(bd.pioneerBonus ?? 0) > 0 && (
+                        <div className="sales-formula-row">
+                          <span>× 🆕 初めての組合せ</span>
+                          <span>+{Math.round((bd.pioneerBonus ?? 0) * 100)}%</span>
+                        </div>
+                      )}
+                      {(bd.trendMul ?? 1) !== 1 && (
+                        <div className="sales-formula-row">
+                          <span>× 📈 トレンド合致</span>
+                          <span>×{bd.trendMul}</span>
+                        </div>
+                      )}
+                      {(bd.marketingMul ?? 1) !== 1 && (
+                        <div className="sales-formula-row">
+                          <span>× 📺 マーケティング広告</span>
+                          <span>×{bd.marketingMul}</span>
+                        </div>
+                      )}
+                      {(bd.axisSalesMul ?? 1) !== 1 && (
+                        <div className="sales-formula-row">
+                          <span>× 🔥 話題性 − 炎上リスク</span>
+                          <span>×{(bd.axisSalesMul ?? 1).toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="sales-formula-row sales-formula-total">
+                        <span>= 総売上</span>
+                        <span>{formatYen(work.initialRevenue + work.salesPool)}</span>
+                      </div>
+                      <div className="sales-formula-note">
+                        総売上の 20% が初動で即入金、残り 80% は時間をかけて売れる
+                      </div>
+                    </div>
+                  </PixelWindow>
+                  <ul className="release-stats" style={{ marginTop: 8 }}>
                     <li className="revenue">
                       {/* ローンチ広告のボーナスは work.initialRevenue に既に加算済み（二重計上しない） */}
                       💰 初動売上 {formatYen(work.initialRevenue)}

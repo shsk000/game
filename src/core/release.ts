@@ -1,4 +1,4 @@
-import { scoreTierFor } from '../data/balance';
+import { SCALE_BALANCE, salesMultiplierForScore, scoreTierFor } from '../data/balance';
 import { getCompat } from '../data/compatibility';
 import { sumPrBonus } from '../data/employees';
 import type { GenreId } from '../data/genres';
@@ -209,6 +209,15 @@ export const computeRelease = (
     compatBonus: meta.compatBonus,
     trendBonus: meta.trendBonus,
     criticVariance: meta.criticVariance,
+    // 売上の内訳（画面で式そのものを見せる。docs/spec/scoring.md §3）
+    baseRevenue: SCALE_BALANCE[cur.scale].baseRevenue,
+    tierMul: salesMultiplierForScore(meta.metascore),
+    tier: scoreTierFor(meta.metascore),
+    prBonus,
+    fanBonus: Math.sqrt(Math.max(0, ctx.fans)) / 400,
+    pioneerBonus,
+    axisSalesMul,
+    marketingMul,
     trendMul,
     pioneer,
   };

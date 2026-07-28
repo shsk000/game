@@ -160,6 +160,23 @@ export type WorkBreakdown = {
   trendBonus?: number;
   /** 評価家のブレ（±5） */
   criticVariance?: number;
+  // --- 売上の内訳（docs/spec/scoring.md §3。画面で式そのものを見せる） ---
+  /** 基準売上（規模。普通=×1 のときの額） */
+  baseRevenue?: number;
+  /** ヒット区分の倍率（×0.25〜×10） */
+  tierMul?: number;
+  /** ヒット区分のキー（表示名の引き当て用） */
+  tier?: string;
+  /** 広報スキルによる上乗せ（比率） */
+  prBonus?: number;
+  /** ファン数による上乗せ（比率） */
+  fanBonus?: number;
+  /** 初組合せボーナス（比率） */
+  pioneerBonus?: number;
+  /** 市場系軸（話題性 − 炎上リスク）の倍率 */
+  axisSalesMul?: number;
+  /** マーケティング広告の倍率 */
+  marketingMul?: number;
   /** 売上側の倍率（スコアには効かない） */
   trendMul?: number;
   pioneer?: boolean;

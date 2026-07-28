@@ -74,21 +74,29 @@ export const criticVarianceFor = (rng: Rng): number => {
 export const computeMetascore = (input: MetascoreInput, rng: Rng): MetascoreBreakdown => {
   const weights = normalizedWeightsFor(input.genreId);
   const raw = FEATURE_IDS.map((id) => input.features[id] * weights[id]);
-  const base = Math.round(raw.reduce((a, b) => a + b, 0) * 10) / 10;
 
-  // 内訳は**合計が base に一致する**ように出す（表示と計算が食い違わないため）。
-  // 単純に各項を丸めると誤差が積もり、内訳を足しても本体と合わなくなる。
+  // **画面に出す値をそのまま計算に使う。**
+  //
+  // 内訳（小数1桁に丸めた各項）の合計を base とし、丸めで生じた差は
+  // 最大の項に寄せる。こうすると「内訳を足したら必ず本体になる」が
+  // 浮動小数の誤差なしで成り立つ。
+  // 単純に各項を丸めるだけだと合計が 100.1 になり（実測）、
+  // 逆に先に合計を丸めると境界（.5）でメタスコアが1点ずれる。
+  const rounded = raw.map((v) => Math.round(v * 10) / 10);
+  const exact = Math.round(raw.reduce((a, b) => a + b, 0) * 10) / 10;
+  const drift = Math.round((exact - rounded.reduce((a, b) => a + b, 0)) * 10) / 10;
+  if (drift !== 0) {
+    let maxIdx = 0;
+    for (let i = 1; i < rounded.length; i++) if (rounded[i] > rounded[maxIdx]) maxIdx = i;
+    rounded[maxIdx] = Math.round((rounded[maxIdx] + drift) * 10) / 10;
+  }
   const contributions: Record<string, number> = {};
-  let acc = 0;
   FEATURE_IDS.forEach((id, i) => {
-    if (i === FEATURE_IDS.length - 1) {
-      contributions[id] = Math.round((base - acc) * 10) / 10;
-      return;
-    }
-    const v = Math.round(raw[i] * 10) / 10;
-    contributions[id] = v;
-    acc = Math.round((acc + v) * 10) / 10;
+    contributions[id] = rounded[i];
   });
+  // base は**丸めた内訳の合計そのもの**にする（exact ではなく）。
+  // exact を使うと浮動小数の誤差が残り、画面の内訳を足した値と 0.0001 ずれる。
+  const base = Math.round(rounded.reduce((a, b) => a + b, 0) * 10) / 10;
 
   const compatBonus = compatBonusFor(input.compat);
   const trendBonus = trendBonusFor(input.genreId, input.themeId, input.trend);
