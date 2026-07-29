@@ -115,25 +115,18 @@ describe('②集中は均等より早く終わる（早く安く回せる）', (
   });
 });
 
-describe('③同じカバー分野数なら、人数が多いほうが強い（少人数への逃げ道を塞ぐ）', () => {
+describe('③同じ分野に人を足しても強くならない（寄せる意味がない）', () => {
   it.each(CASES.map((c) => [c.label, c] as const))('%s', (_l, c) => {
+    // 担当制：その分野は**いちばん強い1人**で決まる。同じ強さの2人目は控え。
+    // 「◎の2分野に寄せる」に旨みが無いことを、ここで直接固定する
     const conc = play('concentrated', c.skill, c.scale); // ◎2分野 × 2人ずつ＝4人
     const duo = play('duo', c.skill, c.scale); // ◎2分野 × 1人ずつ＝2人
-    // 特徴ポイントが上限100 に張り付いている帯では、人を足しても上がらないのは仕様
-    // （「育ったチームで小さい規模を作れば早期に100に届く」＝小さい作品は簡単でいい）。
-    // 少人数の時点で既に上限に届いているなら、この条件は原理的に成立しない
-    const cappedFields = (['programming', 'graphics'] as const).filter(
-      (f) => duo.features[f === 'programming' ? 'usabilityPt' : 'graphicsPt'] >= 100,
-    );
-    if (cappedFields.length > 0) return;
-    expect(conc.metascore, `集中${conc.metascore} vs 少人数${duo.metascore}`).toBeGreaterThan(
-      duo.metascore,
-    );
+    expect(conc.metascore, `集中${conc.metascore} vs 少人数${duo.metascore}`).toBe(duo.metascore);
   });
 });
 
-describe('④同じ職種を2人引いても腐らない（§10-4 メタ進行）', () => {
-  it.each(SCALES.map((s) => [s, s] as const))('%s：2人目がメタスコアを押し上げる', (_l, scale) => {
+describe('④まだ担当がいない分野を埋める社員が強い（§10-4 メタ進行）', () => {
+  it.each(SCALES.map((s) => [s, s] as const))('%s：空いている分野を埋めると点が上がる', (_l, scale) => {
     const e = ENTRY_TEAM[scale];
     const skill = totalPowerFor(e.rank, e.level);
     const perField = Math.max(1, Math.round((SCALE_BY_ID[scale].neededWeeks * 3) / 4));
@@ -150,9 +143,11 @@ describe('④同じ職種を2人引いても腐らない（§10-4 メタ進行�
       ).metascore;
     };
 
-    const four = DEV_SKILL_IDS.map((f, i) => emp(`e${i}`, f, skill));
-    const five = [...four, emp('extra', 'programming', skill)];
-    expect(build(five), '5人目（プログラミング2人目）で上がる').toBeGreaterThan(build(four));
+    const three = DEV_SKILL_IDS.slice(0, 3).map((f, i) => emp(`e${i}`, f, skill));
+    const four = [...three, emp('extra', DEV_SKILL_IDS[3], skill)];
+    const dup = [...three, emp('dup', DEV_SKILL_IDS[0], skill)];
+    expect(build(four), '空いている分野を埋めると上がる').toBeGreaterThan(build(three));
+    expect(build(dup), '埋まっている分野に足しても上がらない').toBe(build(three));
   });
 });
 

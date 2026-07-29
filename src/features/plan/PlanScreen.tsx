@@ -11,8 +11,7 @@ import { planWeeksAllowance } from '../../data/balance';
 import { weightsFor } from '../../data/archetypes';
 import { compatLabel, getCompat } from '../../data/compatibility';
 import { innovationFor } from '../../core/features';
-import { skillTotalsOf } from '../../core/skills';
-import { SKILL_CONFIG } from '../../data/balance';
+import { leadForField } from '../../core/skills';
 import { sumPrBonus } from '../../data/employees';
 import { DEV_SKILL_IDS } from '../../state/types';
 import { SKILL_VISUAL } from '../office/employeeDisplay';
@@ -586,10 +585,41 @@ export const PlanScreen = () => {
           <p style={{ ...hintStyle, marginTop: 4 }}>
             ◎ が重い。打って伸ばした分野がジャンルに合うほどメタスコアが伸びる
           </p>
-          <p style={{ ...hintStyle, marginTop: 2 }}>
-            同じ分野に2人目を入れても{Math.round(SKILL_CONFIG.secondMemberEfficiency * 100)}
-            %しか足されない（分業のロス）。**分野は散らすほうがスコアは伸びる**
-          </p>
+          {/* 革新性は打鍵では動かず、**ここでしか直せない**（組合せを変える）。
+              だから開発中ではなく企画画面に出す */}
+          {(() => {
+            const innovation = innovationFor(library, genreId, themeId);
+            if (innovation >= 100) return null;
+            return (
+              <p style={{ ...hintStyle, marginTop: 4, color: COLORS.trendHot }}>
+                ⚠ 💡 革新性 {innovation}／100 ── この組合せが続いています。
+                ジャンルかテーマを変えれば 100 に戻ります
+              </p>
+            );
+          })()}
+          {/* 分野ごとの担当者（docs/spec/score-model.md §3）。
+              **その分野でいちばん強い1人が担当**なので、注釈なしで読める。
+              担当がいない分野は「担当なし」＝そこを埋める社員を採るべきだと一目で分かる */}
+          {employees.length > 0 && (
+            <div style={{ marginTop: 5, borderTop: `1px solid ${COLORS.borderHard}`, paddingTop: 4 }}>
+              {DEV_SKILL_IDS.map((field) => {
+                const lead = leadForField(employees, field);
+                return (
+                  <div key={field} style={{ fontSize: 11, color: COLORS.textDark }}>
+                    {SKILL_VISUAL[field].emoji}{' '}
+                    {lead ? (
+                      <>
+                        担当：{lead.name}{' '}
+                        <strong>{Math.round(lead.skills?.[field] ?? 0)}</strong>
+                      </>
+                    ) : (
+                      <span style={{ color: COLORS.trendHot }}>担当なし</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {/* 革新性は打鍵では動かず、**ここでしか直せない**（組合せを変える）。
               だから開発中ではなく企画画面に出す */}
           {(() => {
@@ -607,27 +637,16 @@ export const PlanScreen = () => {
           {employees.length > 0 && (
             <div style={{ marginTop: 5, borderTop: `1px solid ${COLORS.borderHard}`, paddingTop: 4 }}>
               {DEV_SKILL_IDS.map((field) => {
-                const members = employees
-                  .map((e) => ({ name: e.name, v: e.skills?.[field] ?? 0 }))
-                  .filter((m) => m.v > 0)
-                  .sort((a, b) => b.v - a.v);
-                if (members.length === 0) return null;
-                const total = skillTotalsOf(employees)[field];
-                // 2人目以降は「元の値 → 実際に効く値」で見せる。
-                // 結果だけ出すと「スキル30 の社員がなぜ 4 なのか」が分からない
-                const detail = members
-                  .map((m, i) =>
-                    i === 0
-                      ? `${m.name} ${Math.round(m.v)}`
-                      : `${m.name} ${Math.round(m.v)}→${Math.round(m.v * SKILL_CONFIG.secondMemberEfficiency)}`,
-                  )
-                  .join(' ＋ ');
+                const lead = leadForField(employees, field);
                 return (
                   <div key={field} style={{ fontSize: 11, color: COLORS.textDark }}>
-                    {SKILL_VISUAL[field].emoji} スキル合計 <strong>{Math.round(total)}</strong>
-                    <span style={{ color: COLORS.textSub }}>（{detail}）</span>
-                    {members.length >= 2 && (
-                      <span style={{ color: COLORS.trendHot, marginLeft: 4 }}>⚠ 2人目は分業ロス</span>
+                    {SKILL_VISUAL[field].emoji}{' '}
+                    {lead ? (
+                      <>
+                        担当：{lead.name} <strong>{Math.round(lead.skills?.[field] ?? 0)}</strong>
+                      </>
+                    ) : (
+                      <span style={{ color: COLORS.trendHot }}>担当なし</span>
                     )}
                   </div>
                 );

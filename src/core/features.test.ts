@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FEATURE_SCALE_COEF, SKILL_CONFIG } from '../data/balance';
+import { FEATURE_SCALE_COEF } from '../data/balance';
 import type { Employee, Work } from '../state/types';
 import { ZERO_FEATURES } from '../state/types';
 import {
@@ -72,8 +72,7 @@ describe('featureGainFor（1文あたりの加算量）', () => {
     expect(featureGainFor('graphics', team, 'mini', 1)).toBeCloseTo(FEATURE_SCALE_COEF.mini * 50, 1);
   });
 
-  it('同じ分野の2人目は効率が落ちる（1分野に寄せるのが支配戦略にならない）', () => {
-    const e = SKILL_CONFIG.secondMemberEfficiency;
+  it('その分野の担当1人で決まる（2人目を足しても増えない＝寄せる意味がない）', () => {
     const one = featureGainFor('graphics', [emp({ graphics: 100 })], 'mini', 1);
     const two = featureGainFor(
       'graphics',
@@ -81,9 +80,11 @@ describe('featureGainFor（1文あたりの加算量）', () => {
       'mini',
       1,
     );
-    expect(two).toBeCloseTo(one * (1 + e), 1);
-    // 2人目を入れても倍にはならない（＝集中が支配戦略にならない）
-    expect(two).toBeLessThan(one * 2);
+    expect(two).toBe(one);
+    // より強い人を入れれば伸びる（育成・採用に意味がある）
+    expect(
+      featureGainFor('graphics', [emp({ graphics: 100 }), emp({ graphics: 50 })], 'mini', 1),
+    ).toBe(one);
   });
 
   it('誰も持っていない分野は 0（打っても伸びない）', () => {

@@ -622,7 +622,6 @@ export const OfficeScreen = () => {
             candidate={candidate}
             funds={funds}
             isFull={employees.length >= MAX_EMPLOYEES}
-            roster={employees}
             onHire={() => hireCandidate()}
             onDismiss={() => dismissCandidate()}
           />

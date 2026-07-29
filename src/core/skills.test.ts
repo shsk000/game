@@ -12,13 +12,14 @@ import {
   rollRank4,
   rollSkills,
   scaleSkills,
+  leadForField,
   skillTotalsOf,
   totalPowerFor,
   totalPowerOf,
 } from './skills';
 
-const emp = (skills: Employee['skills']): Employee =>
-  ({ id: 'e', name: 'x', role: 'programmer', power: 0, basePower: 0, level: 1, exp: 0, wage: 0, specialties: [], skills }) as Employee;
+const emp = (skills: Employee['skills'], id = 'e'): Employee =>
+  ({ id, name: 'x', role: 'programmer', power: 0, basePower: 0, level: 1, exp: 0, wage: 0, specialties: [], skills }) as Employee;
 
 describe('totalPowerFor（ランク×レベル → 総合力）', () => {
   it('Lv1 はランクによらずほぼ同じ（15〜28）', () => {
@@ -132,20 +133,26 @@ describe('growSkills（レベルアップ）', () => {
 });
 
 describe('skillTotalsOf（チームの分野別スキル合計）', () => {
-  it('同じ分野の2人目以降は効率が落ちる（分業のロス）', () => {
-    const e = SKILL_CONFIG.secondMemberEfficiency;
-    const totals = skillTotalsOf([emp({ graphics: 100 }), emp({ graphics: 100 })]);
-    expect(totals.graphics).toBeCloseTo(100 + 100 * e, 5);
-    // 2人目は必ず何かを足す（同じ職種を引いても腐らない）が、満額にはならない
-    expect(e).toBeGreaterThan(0);
-    expect(e).toBeLessThan(1);
+  it('その分野の担当（いちばん強い1人）で決まる。2人目以降は控え', () => {
+    // 「合計だが2人目は効率が落ちる」方式は、画面に3か所も注釈を足さないと
+    // 伝わらなかったので廃止した（オーナー指摘 2026-07-29）。
+    // 担当制なら注釈ゼロで伝わり、均等と集中の差はむしろ広がる
+    expect(skillTotalsOf([emp({ graphics: 100 }), emp({ graphics: 100 })]).graphics).toBe(100);
+    expect(skillTotalsOf([emp({ graphics: 40 }), emp({ graphics: 90 })]).graphics).toBe(90);
+  });
+
+  it('担当は入れ替わる（控えを育てて先発を追い越せる）', () => {
+    const before = leadForField([emp({ graphics: 60 }, 'a'), emp({ graphics: 30 }, 'b')], 'graphics');
+    const after = leadForField([emp({ graphics: 60 }, 'a'), emp({ graphics: 80 }, 'b')], 'graphics');
+    expect(before?.id).toBe('a');
+    expect(after?.id).toBe('b');
   });
 
   it('高い順に1人目が満額なので、順序を入れ替えても結果が変わらない', () => {
     const a = skillTotalsOf([emp({ sound: 40 }), emp({ sound: 90 })]);
     const b = skillTotalsOf([emp({ sound: 90 }), emp({ sound: 40 })]);
     expect(a.sound).toBe(b.sound);
-    expect(a.sound).toBeCloseTo(90 + 40 * SKILL_CONFIG.secondMemberEfficiency, 5);
+    expect(a.sound).toBe(90); // 担当＝いちばん強い1人
   });
 
   it('誰も持っていない分野は 0（その分野の文は回ってこない）', () => {

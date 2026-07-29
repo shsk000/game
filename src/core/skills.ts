@@ -245,33 +245,41 @@ export const skillsAtCap = (skills: SkillSet, rank: GachaRank): SkillSet => {
 };
 
 /**
- * チームの分野別スキル合計。
- * **同じ分野の2人目以降は効率が半分**（分業のロス）。
- * これが無いと「◎の2分野に人を寄せる」が支配戦略になり、他の職種を引く価値が消える。
+ * 分野ごとの担当者（その分野でいちばんスキルが高い1人）。
+ *
+ * **各分野の出来は、担当1人で決まる。2人目以降は控え。**
+ * サッカーやバンドと同じで、ポジションには1人が入る——説明が1行で済む。
+ *
+ * 以前は「合計だが2人目以降は効率が落ちる（×0.12）」だった。数字としては
+ * 「均等に散らす > ◎に寄せる」を作れていたが、**画面に3か所も注釈を足さないと
+ * 伝わらなかった**（`絵 二郎 30→4` / `⚠ 2人目は分業ロス` / `2人目は12%しか足されない`）。
+ * 担当制なら注釈ゼロで、しかも均等と集中の差は 6.6点 → 12.6点 と強くなる。
+ *
+ * 合計ではなく最大値なので、**規模・レベル・装備が変わっても関係が崩れない**
+ * （旧方式の 0.12 は上下から挟まれた連立解で、調整のたびに窓が閉じないか
+ * 確かめる必要があった）。
  */
+export const leadForField = (employees: Employee[], field: DevSkillId): Employee | null => {
+  let best: Employee | null = null;
+  for (const e of employees) {
+    const v = e.skills?.[field] ?? 0;
+    if (v > 0 && (best === null ? 0 : (best.skills?.[field] ?? 0)) < v) best = e;
+  }
+  return best;
+};
+
+/** 分野ごとの実効スキル（＝担当者のスキル値） */
 export const skillTotalsOf = (employees: Employee[]): Record<DevSkillId, number> => {
   const out = {} as Record<DevSkillId, number>;
   for (const field of DEV_SKILL_IDS) {
-    const vals = employees
-      .map((e) => e.skills?.[field] ?? 0)
-      .filter((v) => v > 0)
-      .sort((a, b) => b - a);
-    out[field] = vals.reduce(
-      (sum, v, i) => sum + v * (i === 0 ? 1 : SKILL_CONFIG.secondMemberEfficiency),
-      0,
-    );
+    out[field] = leadForField(employees, field)?.skills?.[field] ?? 0;
   }
   return out;
 };
 
-/** 広報スキルの合計（売上ボーナスの素）。2人目以降の減衰は開発分野と同じ扱い */
+/** 広報スキル（売上ボーナスの素）。開発分野と同じく**担当1人**で決まる */
 export const prSkillTotalOf = (employees: Employee[]): number => {
-  const vals = employees
-    .map((e) => e.skills?.pr ?? 0)
-    .filter((v) => v > 0)
-    .sort((a, b) => b - a);
-  return vals.reduce(
-    (sum, v, i) => sum + v * (i === 0 ? 1 : SKILL_CONFIG.secondMemberEfficiency),
-    0,
-  );
+  let best = 0;
+  for (const e of employees) best = Math.max(best, e.skills?.pr ?? 0);
+  return best;
 };

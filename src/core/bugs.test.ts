@@ -43,9 +43,12 @@ describe('bugSuppression（エンジニアの質がバグを抑える）', () =>
 
   it('プログラミングスキル合計に比例し、上限で頭打ち', () => {
     expect(bugSuppression([programmer(50)])).toBeCloseTo(50 / BUG_CONFIG.suppressSkillCap);
-    // 2人目以降は効率が落ちるので、上限に届くには人数が要る
-    const many = Array.from({ length: 12 }, (_, i) => programmer(100, `p${i}`));
-    expect(bugSuppression(many)).toBe(BUG_CONFIG.maxSuppression);
+    // 担当制：バグ抑制も**いちばん強いプログラマー1人**で決まる。
+    // 上限（suppressSkillCap=200）にはスキル100 でも届かない＝天井は遠い
+    expect(bugSuppression([programmer(100), programmer(100, 'p2')])).toBe(
+      bugSuppression([programmer(100)]),
+    );
+    expect(bugSuppression([programmer(100)])).toBeLessThan(BUG_CONFIG.maxSuppression);
   });
 });
 
