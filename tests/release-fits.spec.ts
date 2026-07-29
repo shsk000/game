@@ -3,18 +3,19 @@ import { expect, type Page, test } from '@playwright/test';
 const BASE = 'http://localhost:5173';
 
 /**
- * リリース画面が 1280×720 に収まるかのガード。
+ * **リリース画面から必ず次へ進めることのガード。**
  *
- * **これは見た目の粗ではなく進行不能バグ。** リリース画面は `overflow: hidden` なので
- * （スクロール禁止・`docs/CLAUDE.md` の UI 規約）、中身が縦にあふれると
- * 「💰 売上を見る ▶」がクリップされて**押せなくなり、そこから先に進めない**。
+ * この画面は内容量が**プレイの結果で変わる**：売上の計算は補正が乗るほど行が増え
+ * （広報・ファン・初組合せ・トレンド・マーケ広告・話題性で最大6行）、
+ * 打ち上げの評価も最大5件、実績と昇格のバッジも出たり出なかったりする。
  *
- * 実際に起きた事故（オーナー報告 2026-07-29）：
- * メタ99 で神ゲー認定の枠（58px）が積み増しになり、ボタンが top 691 / bottom 730 ＝
- * ビューポート 720 の外へ出た。`.release-screen` は scrollHeight 690 / clientHeight 612。
+ * 以前は `overflow: hidden` だったため、あふれた瞬間にボタンがクリップされて
+ * **そこから先に進めなくなっていた**（オーナー報告 2026-07-29。実測でメタ99の神ゲーで
+ * ボタンが top 691 ＝ ビューポート 720 の外。その後、売上ステップでも 36px あふれた）。
  *
- * 神ゲーは一番背が高くなる組合せ（認定バッジ＋ゴースト更新＋実績＋昇格が全部乗る）なので、
- * ここを固定しておけば通常のリリースは自動的に収まる。
+ * オーナー判断でこの画面だけスクロールを許した。よってここで守るのは
+ * **「収まっているか」ではなく「押せるか」**。縦にあふれてもスクロールで到達できればよい。
+ * 横方向のあふれだけは許さない（横スクロールは操作を壊す）。
  */
 
 async function openWithFreshSave(page: Page) {
@@ -69,7 +70,7 @@ async function releaseMasterpiece(page: Page): Promise<number> {
   throw new Error('神ゲーが40回引いても出なかった（メタスコアの分布が壊れている可能性）');
 }
 
-test('神ゲーのリリース画面が 1280×720 に収まり「売上を見る」が押せる', async ({ page }) => {
+test('神ゲーのリリース画面から最後まで進める', async ({ page }) => {
   await openWithFreshSave(page);
   const meta = await releaseMasterpiece(page);
   expect(meta).toBeGreaterThanOrEqual(95);
@@ -78,39 +79,87 @@ test('神ゲーのリリース画面が 1280×720 に収まり「売上を見る
   const btn = page.locator('button', { hasText: '売上を見る' });
   await expect(btn).toBeVisible({ timeout: 15_000 });
 
-  const box = await btn.boundingBox();
-  expect(box, 'ボタンの座標が取れる').not.toBeNull();
-  const viewport = page.viewportSize();
-  expect(
-    box!.y + box!.height,
-    `「売上を見る」の下端 ${Math.round(box!.y + box!.height)}px が画面（${viewport!.height}px）の外に出ている`,
-  ).toBeLessThanOrEqual(viewport!.height);
-
-  // overflow:hidden でクリップされていないこと（あふれ＝押せない予備軍）
-  const overflow = await page.evaluate(() => {
+  // 縦にあふれてもよい（スクロールで届く）。**横**にあふれるのは許さない
+  const horizontal = await page.evaluate(() => {
     const el = document.querySelector('.release-screen');
-    return el ? el.scrollHeight - el.clientHeight : -1;
+    return el ? el.scrollWidth - el.clientWidth : -1;
   });
-  expect(overflow, `.release-screen が ${overflow}px あふれている`).toBeLessThanOrEqual(0);
+  expect(horizontal, `.release-screen が横に ${horizontal}px あふれている`).toBeLessThanOrEqual(0);
 
-  // クリックして実際に次へ進めることまで見る（座標が画面内でも overlay で塞がれていないか）
+  // 実際に押して次へ進めること（Playwright は必要ならスクロールしてから押す＝実プレイと同じ）
   await btn.click();
   await page.waitForTimeout(600);
   await expect(page.locator('text=利益計算').first(), '売上ステップに進めた').toBeVisible();
 
-  // 売上ステップ（内訳＋利益計算＋次の一手）も同じ枠に収まっていること。
-  // ここも overflow:hidden なので、あふれると次のボタンが押せなくなる
-  const salesOverflow = await page.evaluate(() => {
-    const el = document.querySelector('.release-screen');
-    return el ? el.scrollHeight - el.clientHeight : -1;
-  });
-  expect(salesOverflow, `売上ステップで ${salesOverflow}px あふれている`).toBeLessThanOrEqual(0);
-
-  const nextBtn = page.locator('button', { hasText: '新しいゲームを作る' }).first();
+  // 売上ステップ（内訳＋利益計算＋打ち上げ＋次の一手）からオフィスへ抜けられること。
+  // **ここが押せないと詰む**ので、あふれの有無ではなく到達できるかを見る
+  const nextBtn = page.locator('button', { hasText: '次へ（オフィス）' }).first();
   await expect(nextBtn).toBeVisible();
-  const nextBox = await nextBtn.boundingBox();
-  expect(
-    nextBox!.y + nextBox!.height,
-    `「新しいゲームを作る」の下端 ${Math.round(nextBox!.y + nextBox!.height)}px が画面外`,
-  ).toBeLessThanOrEqual(viewport!.height);
+  await nextBtn.click();
+  await page.waitForTimeout(700);
+  const screen = await page.evaluate(
+    () => (window as unknown as { __gs: () => { screen: string } }).__gs().screen,
+  );
+  expect(screen, 'リリース画面から先に進めた').toBe('office');
+});
+
+test('売上の補正が全部乗ってもリリース画面から抜けられる', async ({ page }) => {
+  // 補正が乗るほど「売上の計算」の行が増える。実測で 36px あふれた構成
+  // （AAA・神ゲー・広報・ファン25万・初組合せ・トレンド合致・マーケ広告・話題性・長いタイトル）
+  await openWithFreshSave(page);
+  await page.evaluate(() => {
+    type Emp = Record<string, unknown>;
+    const mk = (id: string, name: string, f: string, g: number): Emp => ({
+      id, name, role: 'designer', power: 0.5, basePower: 0.5, level: 1, exp: 0,
+      wage: 600000, specialties: [], rank: 'S', skills: { [f]: g },
+    });
+    const raw = localStorage.getItem('typing-factory:v7');
+    const base = raw ? JSON.parse(raw) : {};
+    localStorage.setItem('typing-factory:v7', JSON.stringify({
+      ...base, version: 7, funds: 50_000_000_000, screen: 'office', fans: 250_000,
+      unlockedScales: ['mini', 'mobile', 'indie', 'hit', 'aaa'],
+      trend: { genreId: 'puzzle', themeId: 'sushi', expiresAt: 9_999_999_999_999 },
+      employees: [
+        mk('a', '組 太郎', 'programming', 60), mk('b', '絵 花子', 'graphics', 60),
+        mk('c', '音 次郎', 'sound', 60), mk('d', '物 三郎', 'scenario', 60),
+        mk('e', '広 四郎', 'pr', 80),
+      ],
+    }));
+  });
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(1200);
+  await page.evaluate(() => {
+    type Store = {
+      screen: string;
+      goTo: (s: string) => void;
+      startProject: (g: string, t: string, sc: string, title?: string) => void;
+      advancePhase: () => void;
+      addFeaturePoint: (f: string, n: number) => void;
+      applyAxisDelta: (d: Record<string, number>) => void;
+      releaseWork: (o?: { marketingAd?: boolean }) => unknown;
+    };
+    const gs = (window as unknown as { __gs: () => Store }).__gs;
+    gs().goTo('office');
+    gs().startProject('puzzle', 'sushi', 'aaa', 'とてつもなく長いタイトルをつけた場合に何が起きるかを確かめるための検証用の作品名 完全版 リマスター');
+    gs().advancePhase();
+    for (const f of ['programming', 'graphics', 'sound', 'scenario']) gs().addFeaturePoint(f, 200);
+    gs().applyAxisDelta({ buzz: 60, trust: 20 });
+    for (let k = 0; k < 4 && gs().screen === 'develop'; k++) gs().advancePhase();
+    gs().releaseWork({ marketingAd: true });
+  });
+
+  const salesBtn = page.locator('button', { hasText: '売上を見る' });
+  await expect(salesBtn).toBeVisible({ timeout: 15_000 });
+  await salesBtn.click();
+  await page.waitForTimeout(700);
+
+  const nextBtn = page.locator('button', { hasText: '次へ（オフィス）' }).first();
+  await expect(nextBtn).toBeVisible();
+  await nextBtn.click();
+  await page.waitForTimeout(700);
+  const screen = await page.evaluate(
+    () => (window as unknown as { __gs: () => { screen: string } }).__gs().screen,
+  );
+  expect(screen, '補正が全部乗った状態でも抜けられる').toBe('office');
 });
