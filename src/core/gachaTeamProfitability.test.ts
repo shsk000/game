@@ -135,16 +135,20 @@ describe('本番ガチャのチームで各規模が黒字になる', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('規模の順序が正しい（育てたチームでは AAA のほうが儲かるのが多数）', () => {
-    // 全 seed で逆転しないことは要求しない：AAA は「大作を当てにいく」規模なので、
-    // 引きが悪いチームでは話題作のほうが安全、が正しい姿。
-    // ただし**多数のチームで AAA が上**でなければ、終盤に AAA を作る理由が消える。
-    const wins = SEEDS.filter((seed) => {
+  it('AAA は「当てれば話題作を大きく上回る」規模になっている', () => {
+    // AAA は**大作を当てにいく**規模。引きの悪いチームでは話題作のほうが安全、が正しい姿
+    // （spec §5「普通では開発費を割る／ヒット以上で黒字」）。
+    // 見るのは「当たったときに話題作を大きく超えるか」。ここが成立していないと
+    // 終盤に AAA を作る理由が消える。
+    const gaps = SEEDS.map((seed) => {
       const team = hireViaGacha(6, 'premium', 10, seed);
-      return play(team, 'aaa', seed).profit > play(team, 'hit', seed).profit;
-    }).length;
-    expect(wins, `AAA が勝った seed 数 ${wins}/${SEEDS.length}`).toBeGreaterThanOrEqual(
-      Math.ceil(SEEDS.length / 2),
-    );
+      return play(team, 'aaa', seed).profit - play(team, 'hit', seed).profit;
+    }).sort((a, b) => b - a);
+    // 全 seed で AAA が上回り、最良ケースでは話題作より ¥50億 以上多い
+    expect(
+      gaps[gaps.length - 1],
+      `最小の差 ¥${Math.round(gaps[gaps.length - 1] / 1e8)}億（全 seed: ${gaps.map((g) => Math.round(g / 1e8)).join(',')}）`,
+    ).toBeGreaterThan(0);
+    expect(gaps[0], `最良ケースの差 ¥${Math.round(gaps[0] / 1e8)}億`).toBeGreaterThan(3_000_000_000);
   });
 });

@@ -189,8 +189,17 @@ export const DevelopScreen = () => {
   // 特徴ポイントの加算ポップ（「🎨 +2.7」）
   const [featurePop, setFeaturePop] = useState<{ field: DevSkillId; gain: number; key: number } | null>(null);
   const featurePopKeyRef = useRef(0);
-  // チームがカバーしている分野の文だけが回ってくる（score-model §3）
-  const coveredCats = useMemo(() => coveredCategoriesOf(assignedEmployees), [assignedEmployees]);
+  // チームがカバーしている分野の文だけが回ってくる（score-model §3）。
+  // さらに**上限100 に届いた分野は飛ばす**：届いた分野を打っても1ポイントも増えず、
+  // その文が丸ごと無駄になる（強いプログラマーがいると1文で操作性が100 に届く）。
+  // 全分野が上限なら通常のローテーションに戻す（もう伸びしろが無いので順番は何でもよい）。
+  const coveredCats = useMemo(() => {
+    const all = coveredCategoriesOf(assignedEmployees);
+    const feats = current?.features;
+    if (!feats) return all;
+    const growable = all.filter((c) => (feats[SKILL_TO_FEATURE[TICKET_TO_SKILL[c]]] ?? 0) < 100);
+    return growable.length > 0 ? growable : all;
+  }, [assignedEmployees, current?.features]);
   const currentTicket = useMemo(
     () => getTicketAt(genreId, ticketIndex, coveredCats),
     [genreId, ticketIndex, coveredCats],
@@ -1189,7 +1198,10 @@ const DevelopCenter = ({
         flexDirection: 'column',
       }}
     >
-      {/* ヘッダー：フェーズ名 ＋ PHASE ドット（＋発動中はフィーバーバッジ） */}
+      {/* ヘッダー：フェーズ名 ＋ 完成度（＋発動中のバッジ）。
+          バッジ（FEVER／ラストスパート／たまりやすい／ノーミス継続）は最大4つ同時に出るので、
+          **折り返して2行になると下のレイアウトが全部ずれる**（オーナー報告 2026-07-29）。
+          高さを固定し、入り切らないバッジは隠す（完成度は必ず見えるよう右端に固定）。 */}
       <div
         style={{
           display: 'flex',
@@ -1198,13 +1210,34 @@ const DevelopCenter = ({
           gap: 12,
           padding: '8px 12px',
           borderBottom: `2px solid ${DEV.panelBorder}`,
+          height: 40,
+          boxSizing: 'border-box',
+          overflow: 'hidden',
         }}
       >
-        <span style={{ color: DEV.green, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}>
+        <span
+          style={{
+            color: DEV.green,
+            fontWeight: 700,
+            fontSize: 16,
+            letterSpacing: '0.06em',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+        >
           {'</> '}
           {phaseLabel}フェーズ
         </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            minWidth: 0,
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+          }}
+        >
           {feverActive && (
             <span
               className="dev-fever-text"
@@ -1235,7 +1268,16 @@ const DevelopCenter = ({
               と同じ「6」を使っていて紛らわしく、実際は現フェーズ内の完成度を6分割しただけの別物
               だった（オーナーFB「完成までの進捗があることを理解してなかった」の一因と判断）。
               パーセンテージを主役に出し、ドットは補助の目盛りとして残す。 */}
-          <span style={{ fontSize: 11, color: DEV.sub, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span
+            style={{
+              fontSize: 11,
+              color: DEV.sub,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              flexShrink: 0,
+            }}
+          >
             <span
               style={{
                 fontSize: 15,
@@ -1989,25 +2031,29 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
       <span style={{ fontSize: 14, fontWeight: 700, color: RANK_COLOR[result.rank] }}>
         {result.rank}!
       </span>
+      {/* **実際に効く数値だけを出す。**
+          旧実装は「開発速度 +40%」「バグリスク −5%」を効果の書式で出していたが、
+          どちらもどこにも掛かっていない飾りだった（オーナー指摘 2026-07-28）。
+          いま打鍵が効くのは**その分野の特徴ポイント**だけなので、
+          4分野の現在値を出し、今伸びた分野を光らせる。
+          革新性は企画時に決まって打鍵では動かないので出さない。
+
+          増分は**値の下の行**に置く。値と同じ行に入れると、伸びた分野だけ
+          `49 (+48.8)` と長くなって 1fr の枠からはみ出し、隣の列とラベルがずれる
+          （オーナー報告 2026-07-29）。 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-        {/* **実際に効く数値だけを出す。**
-            旧実装は「開発速度 +40%」「バグリスク −5%」を効果の書式で出していたが、
-            どちらもどこにも掛かっていない飾りだった（オーナー指摘 2026-07-28）。
-            いま打鍵が効くのは**その分野の特徴ポイント**だけなので、
-            4分野の現在値を出し、今伸びた分野を光らせる。
-            革新性は企画時に決まって打鍵では動かないので出さない。 */}
         {DEV_FEATURE_ROWS.map((row) => {
           const grew = result.featureId === row.id;
+          const now = grew
+            ? Math.round(result.featureNow ?? 0)
+            : Math.round(result.featureTotals?.[row.id] ?? 0);
           return (
             <ResultChip
               key={row.id}
               icon={row.icon}
               label={row.label}
-              value={
-                grew
-                  ? `${Math.round(result.featureNow ?? 0)} (+${result.featureGain?.toFixed(1) ?? '0'})`
-                  : `${Math.round(result.featureTotals?.[row.id] ?? 0)}`
-              }
+              value={`${now}`}
+              delta={grew ? `+${result.featureGain?.toFixed(1) ?? '0'}` : undefined}
               color={grew ? '#ffd54a' : '#6a7686'}
             />
           );
@@ -2021,19 +2067,43 @@ const ResultChip = ({
   icon,
   label,
   value,
+  delta,
   color,
 }: {
   icon: string;
   label: string;
   value: string;
+  /** 今回の増分。値の下に別行で出す（横に足すと枠からはみ出して隣とずれる） */
+  delta?: string;
   color: string;
 }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-    <span style={{ fontSize: 9, color: DEV.sub, whiteSpace: 'nowrap' }}>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, overflow: 'hidden' }}>
+    <span
+      style={{
+        fontSize: 9,
+        color: DEV.sub,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }}
+    >
       {icon} {label}
     </span>
     <span style={{ fontSize: 15, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
       {value}
+    </span>
+    {/* 増分の行は常に確保する（出たり消えたりで高さが変わると下がガタつく） */}
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 700,
+        color,
+        minHeight: 13,
+        opacity: delta ? 1 : 0,
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      {delta ?? '　'}
     </span>
   </div>
 );

@@ -47,11 +47,11 @@ export const PlanMeetingBoard = ({
   const tx = panelW / 2 - k * FOCUS_CX;
   const ty = PANEL_H / 2 - k * FOCUS_CY;
 
-  // 5スポットぶんを社員で埋める（少なければ巡回して満席に見せる）。
-  const cast =
-    employees.length > 0
-      ? WHITEBOARD_MEETING_SPOTS.map((_, i) => employees[i % employees.length])
-      : [];
+  // **実際に雇っている人数だけを立たせる。**
+  // 旧実装は5スポットを社員の使い回しで埋めて「満席に見せて」いたので、
+  // 3人しかいないのに6人いるように見えていた（オーナー報告 2026-07-29）。
+  // 会社の実態と画面が食い違うと、何人雇っているのか画面から判断できない。
+  const cast = employees.slice(0, WHITEBOARD_MEETING_SPOTS.length);
 
   return (
     <div

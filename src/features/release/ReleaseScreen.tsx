@@ -430,6 +430,13 @@ export const ReleaseScreen = () => {
                 <li>
                   相性 {compatLabel(compat)} ({compat.toFixed(2)}x) ／ 👥
                   ファン +{work.fansGained}
+                  {(bd.fanFromHype ?? 0) > 0 && (
+                    <span style={{ fontSize: 11, opacity: 0.8 }}>
+                      {' '}
+                      （評価 {bd.fanBase} ＋ 企画の期待度 {bd.fanFromHype}
+                      {(bd.fanFromBuzz ?? 0) !== 0 && <> ＋ 話題 {bd.fanFromBuzz}</>}）
+                    </span>
+                  )}
                 </li>
                 <li>
                   ⏱ {work.developSec.toFixed(1)}秒

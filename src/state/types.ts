@@ -167,6 +167,13 @@ export type WorkBreakdown = {
   axisSalesMul?: number;
   /** マーケティング広告の倍率 */
   marketingMul?: number;
+  // --- ファン増加の内訳 ---
+  /** メタスコアと広報から出る基礎ぶん */
+  fanBase?: number;
+  /** 企画フェーズの打鍵で積んだ期待度ぶん */
+  fanFromHype?: number;
+  /** 話題性・信頼度・炎上リスクの合計ぶん */
+  fanFromBuzz?: number;
   /** 売上側の倍率（スコアには効かない） */
   trendMul?: number;
   pioneer?: boolean;

@@ -182,8 +182,12 @@ export const computeRelease = (
   const salesPool = totalRevenue - initialRevenue;
   const decayPerSec = decayRateFor(meta.metascore);
   // v0.14：期待/話題/信頼でファン上乗せ、炎上リスクで減（spec §5-6）。
-  const axisFans = Math.round(axes.hype + axes.buzz * 0.5 + axes.trust - effectiveReputationRisk);
-  const gainedFans = Math.max(0, fanDelta(meta.metascore, prBonus) + axisFans);
+  // ファン増加の内訳（画面に出す。企画フェーズで積んだ期待度がどこに効いたかを見せる）
+  const fanBase = fanDelta(meta.metascore, prBonus);
+  const fanFromHype = Math.round(axes.hype);
+  const fanFromBuzz = Math.round(axes.buzz * 0.5 + axes.trust - effectiveReputationRisk);
+  const axisFans = fanFromHype + fanFromBuzz;
+  const gainedFans = Math.max(0, fanBase + axisFans);
   const newFans = Math.max(0, ctx.fans + gainedFans);
   const developSec = cur.finishedAt !== null ? (cur.finishedAt - cur.startedAt) / 1000 : 0;
   const prevGhost = ctx.ghosts[cur.scale];
@@ -218,6 +222,9 @@ export const computeRelease = (
     pioneerBonus,
     axisSalesMul,
     marketingMul,
+    fanBase,
+    fanFromHype,
+    fanFromBuzz,
     trendMul,
     pioneer,
   };

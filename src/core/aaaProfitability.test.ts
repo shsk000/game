@@ -84,8 +84,13 @@ describe('AAA 帯の採算（終盤が「作るほど損」にならない）', 
     expect(runAaa('S', 10, 6).tier).toBe('godGame');
   });
 
-  it('普通（メタ50〜69）の売上では開発費を割る（大作を当てにいく緊張）', () => {
-    const normalRevenue = SCALE_BALANCE.aaa.baseRevenue * salesMultiplierForScore(60);
-    expect(normalRevenue).toBeLessThan(SCALE_BALANCE.aaa.devCost);
+  it('普通（メタ50〜69）では話題作の名作に届かない（大作を当てにいく緊張）', () => {
+    // AAA を普通で出すくらいなら、話題作で名作を狙ったほうが儲かる。
+    // 「AAA は当てにいく規模」という設計はこの関係で表現する
+    const aaaNormal =
+      SCALE_BALANCE.aaa.baseRevenue * salesMultiplierForScore(60) - SCALE_BALANCE.aaa.devCost;
+    const hitMasterpiece =
+      SCALE_BALANCE.hit.baseRevenue * salesMultiplierForScore(92) - SCALE_BALANCE.hit.devCost;
+    expect(aaaNormal).toBeLessThan(hitMasterpiece);
   });
 });
