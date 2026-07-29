@@ -102,10 +102,6 @@ type LastResult =
       /** この1文で伸びた特徴ポイント（実際に効く値） */
       featureId?: FeatureId;
       featureGain?: number;
-      /** 伸びたあとのその分野の値 */
-      featureNow?: number;
-      /** 4分野の現在値（伸びていない分野も出す） */
-      featureTotals?: Partial<Record<FeatureId, number>>;
       /** この 1 文で実際に進んだ完成度（進捗ゲージに入る値そのもの） */
       progress: number;
       /** v0.20 C：この1文がボス文章の完走だったか（画面シェイクの追加トリガーに使う） */
@@ -469,8 +465,6 @@ export const DevelopScreen = () => {
           rank,
           featureId: SKILL_TO_FEATURE[field],
           featureGain: featGain,
-          featureNow: (useGameStore.getState().current?.features?.[SKILL_TO_FEATURE[field]] ?? 0),
-          featureTotals: { ...(useGameStore.getState().current?.features ?? {}) },
           progress: Math.round(progressNow * 10) / 10,
           boss: isBossPhrase,
           ts: Date.now(),
@@ -526,24 +520,32 @@ export const DevelopScreen = () => {
           ticketPhraseCountRef.current = nextCount;
           setTicketPhraseCount(nextCount);
         }
-        // covered を渡さないと、表示中のチケット分野（＝加点先）と実際に打つ文の
-        // プールがズレる（2人チームで「🎨 グラフィック作業」なのにプログラムの文が出る）
-        const newCategory = getTicketAt(genreId, ticketIndexRef.current, coveredCats).category;
-        // v0.20 C：クランチタイム中は稀にボス文章（プール2文連結の長文）を出す
-        // レア文章とは独立抽選だが、両方当たった場合はボスを優先（バッジ・報酬の二重表示を避ける）
-        const nextIsBoss = crunchActive && rollBoss();
-        setTicketPhrase(
-          nextIsBoss
-            ? pickBossPhrase(newCategory, undefined, current?.scale)
-            : pickPhrase(newCategory, undefined, current?.scale),
-        );
-        setIsBossPhrase(nextIsBoss);
-        setIsRarePhrase(nextIsBoss ? false : rollRare());
-        // v0.20 G：ボス出現時にランダムな1体を選び、出現バナーを一度だけ流す
-        if (nextIsBoss) {
-          setBossSprite(BOSS_SPRITES[Math.floor(Math.random() * BOSS_SPRITES.length)]);
-          setBossAppearKey((k) => k + 1);
-          sfx.crunch();
+        // **いま打ち切った文で開発が終わるなら、次の文を用意しない。**
+        // 用意すると「⚔ ボスが現れた！」のバナーが完成の瞬間に流れ、
+        // 打つ相手がいないのに戦闘が始まったように見える（オーナー報告 2026-07-29）。
+        const stateNow = useGameStore.getState();
+        const willFinishWork =
+          (stateNow.current?.doneLoC ?? 0) + 1 >= (stateNow.current?.workTarget ?? 1);
+        if (!willFinishWork) {
+          // covered を渡さないと、表示中のチケット分野（＝加点先）と実際に打つ文の
+          // プールがズレる（2人チームで「🎨 グラフィック作業」なのにプログラムの文が出る）
+          const newCategory = getTicketAt(genreId, ticketIndexRef.current, coveredCats).category;
+          // v0.20 C：クランチタイム中は稀にボス文章（プール2文連結の長文）を出す
+          // レア文章とは独立抽選だが、両方当たった場合はボスを優先（バッジ・報酬の二重表示を避ける）
+          const nextIsBoss = crunchActive && rollBoss();
+          setTicketPhrase(
+            nextIsBoss
+              ? pickBossPhrase(newCategory, undefined, current?.scale)
+              : pickPhrase(newCategory, undefined, current?.scale),
+          );
+          setIsBossPhrase(nextIsBoss);
+          setIsRarePhrase(nextIsBoss ? false : rollRare());
+          // v0.20 G：ボス出現時にランダムな1体を選び、出現バナーを一度だけ流す
+          if (nextIsBoss) {
+            setBossSprite(BOSS_SPRITES[Math.floor(Math.random() * BOSS_SPRITES.length)]);
+            setBossAppearKey((k) => k + 1);
+            sfx.crunch();
+          }
         }
 
         // 進捗は**打ち切った文の数**で数える（docs/spec/score-model.md §3）。
@@ -2034,31 +2036,21 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
       {/* **実際に効く数値だけを出す。**
           旧実装は「開発速度 +40%」「バグリスク −5%」を効果の書式で出していたが、
           どちらもどこにも掛かっていない飾りだった（オーナー指摘 2026-07-28）。
-          いま打鍵が効くのは**その分野の特徴ポイント**だけなので、
-          4分野の現在値を出し、今伸びた分野を光らせる。
-          革新性は企画時に決まって打鍵では動かないので出さない。
+          いま打鍵が効くのは**その分野の特徴ポイント**だけ。
 
-          増分は**値の下の行**に置く。値と同じ行に入れると、伸びた分野だけ
-          `49 (+48.8)` と長くなって 1fr の枠からはみ出し、隣の列とラベルがずれる
-          （オーナー報告 2026-07-29）。 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-        {DEV_FEATURE_ROWS.map((row) => {
-          const grew = result.featureId === row.id;
-          const now = grew
-            ? Math.round(result.featureNow ?? 0)
-            : Math.round(result.featureTotals?.[row.id] ?? 0);
-          return (
-            <ResultChip
-              key={row.id}
-              icon={row.icon}
-              label={row.label}
-              value={`${now}`}
-              delta={grew ? `+${result.featureGain?.toFixed(1) ?? '0'}` : undefined}
-              color={grew ? '#ffd54a' : '#6a7686'}
-            />
-          );
-        })}
-      </div>
+          ここは**この1打で伸びた分野だけ**を出す。4分野の現在値は左の「作品の特徴」
+          （ゲージ付き）が常時出しているので、ここにも並べると同じ数字が画面に二度出る
+          （オーナー報告 2026-07-29）。役割を分ける：左＝いまの到達値／ここ＝いまの成果。
+          革新性は企画時に決まって打鍵では動かないので出さない。 */}
+      {(() => {
+        const row = DEV_FEATURE_ROWS.find((r) => r.id === result.featureId);
+        if (!row) return null;
+        return (
+          <span style={{ fontSize: 12, color: '#ffd54a', fontWeight: 700 }}>
+            {row.icon} {row.label} +{result.featureGain?.toFixed(1) ?? '0'}
+          </span>
+        );
+      })()}
     </div>
   );
 };

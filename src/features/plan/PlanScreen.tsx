@@ -587,6 +587,8 @@ export const PlanScreen = () => {
           </p>
           {/* 革新性は打鍵では動かず、**ここでしか直せない**（組合せを変える）。
               だから開発中ではなく企画画面に出す */}
+          {/* 革新性は打鍵では動かず、**ここでしか直せない**（組合せを変える）。
+              だから開発中ではなく企画画面に出す */}
           {(() => {
             const innovation = innovationFor(library, genreId, themeId);
             if (innovation >= 100) return null;
@@ -600,40 +602,6 @@ export const PlanScreen = () => {
           {/* 分野ごとの担当者（docs/spec/score-model.md §3）。
               **その分野でいちばん強い1人が担当**なので、注釈なしで読める。
               担当がいない分野は「担当なし」＝そこを埋める社員を採るべきだと一目で分かる */}
-          {employees.length > 0 && (
-            <div style={{ marginTop: 5, borderTop: `1px solid ${COLORS.borderHard}`, paddingTop: 4 }}>
-              {DEV_SKILL_IDS.map((field) => {
-                const lead = leadForField(employees, field);
-                return (
-                  <div key={field} style={{ fontSize: 11, color: COLORS.textDark }}>
-                    {SKILL_VISUAL[field].emoji}{' '}
-                    {lead ? (
-                      <>
-                        担当：{lead.name}{' '}
-                        <strong>{Math.round(lead.skills?.[field] ?? 0)}</strong>
-                      </>
-                    ) : (
-                      <span style={{ color: COLORS.trendHot }}>担当なし</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {/* 革新性は打鍵では動かず、**ここでしか直せない**（組合せを変える）。
-              だから開発中ではなく企画画面に出す */}
-          {(() => {
-            const innovation = innovationFor(library, genreId, themeId);
-            if (innovation >= 100) return null;
-            return (
-              <p style={{ ...hintStyle, marginTop: 4, color: COLORS.trendHot }}>
-                ⚠ 💡 革新性 {innovation}／100 ── この組合せが続いています。
-                ジャンルかテーマを変えれば 100 に戻ります
-              </p>
-            );
-          })()}
-          {/* 分野ごとのスキル合計と内訳（docs/spec/score-model.md §3）。
-              同じ分野の2人目以降は効率が落ちるので、その内訳も見せる */}
           {employees.length > 0 && (
             <div style={{ marginTop: 5, borderTop: `1px solid ${COLORS.borderHard}`, paddingTop: 4 }}>
               {DEV_SKILL_IDS.map((field) => {
