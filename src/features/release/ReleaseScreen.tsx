@@ -372,25 +372,11 @@ export const ReleaseScreen = () => {
 
           {isDone && resultStep === 'score' && (
             <>
-              {work.isMasterpiece && (
-                <PixelWindow variant="emphasis" style={{ marginBottom: 8 }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 4,
-                      padding: 6,
-                      background: '#24395c',
-                      border: '3px solid #0a1422',
-                    }}
-                  >
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#a85a28' }}>
-                      🏆 神ゲー認定！（メタ {work.metascore}）
-                    </div>
-                  </div>
-                </PixelWindow>
-              )}
+              {/* 神ゲーは**1行のバッジ**で出す。メタスコアは真上の金枠（`.meta-score.masterpiece`）
+                  にもう出ているので、「（メタ 99）」を枠付きで再掲すると同じ数字が2回並ぶ。
+                  さらにこの枠（58px）が縦を押し出し、下の「💰 売上を見る ▶」が画面外に出て
+                  **先に進めなくなっていた**（オーナー報告 2026-07-29。実測 top 691 / 1280×720）。 */}
+              {work.isMasterpiece && <div className="masterpiece-badge-pill">🏆 神ゲー認定！</div>}
               <div className="meta-flavor">『{scoreFlavor(work.metascore)}』</div>
               {work.ghostBeaten && <div className="ghost-update-badge">🏁 ゴースト記録更新！</div>}
               {newAchievements.length > 0 && (

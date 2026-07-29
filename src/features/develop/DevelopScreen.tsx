@@ -566,6 +566,14 @@ export const DevelopScreen = () => {
       const done = s.current?.doneLoC ?? 0;
       const target = s.current?.workTarget ?? 1;
       if (done >= target && (s.current?.phase ?? 'development') === 'development') {
+        // 開発が終わったら**ボス／レアの状態を必ず落とす**。
+        // 出現バナーの表示条件は `bossAppearKey > 0 && isBossPhrase` なので、
+        // 最後の1文がボスだった場合 isBossPhrase が true のまま残り、
+        // フェーズ遷移でこの要素が張り替わったときにアニメが再生される
+        // ＝「開発が終わったのにボスが現れた」になる（オーナー報告 2026-07-29）。
+        setIsBossPhrase(false);
+        setIsRarePhrase(false);
+        setBossAppearKey(0);
         advancePhase();
       }
     },
