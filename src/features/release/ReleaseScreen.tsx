@@ -332,7 +332,7 @@ export const ReleaseScreen = () => {
                 <div className="breakdown-row">
                   <span className="breakdown-emoji">🧩</span>
                   <span className="breakdown-label">
-                    相性 {compatLabel(compat)}（{compat.toFixed(2)}x）
+                    相性 {compatLabel(compat)}
                   </span>
                   <span className="breakdown-value">
                     {(bd.compatBonus ?? 0) > 0 ? '+' : ''}
@@ -412,7 +412,7 @@ export const ReleaseScreen = () => {
               )}
               <ul className="release-stats">
                 <li>
-                  相性 {compatLabel(compat)} ({compat.toFixed(2)}x) ／ 👥
+                  相性 {compatLabel(compat)} ／ 👥
                   ファン +{work.fansGained}
                   {(bd.fanFromHype ?? 0) > 0 && (
                     <span style={{ fontSize: 11, opacity: 0.8 }}>

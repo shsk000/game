@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mulberry32 } from '../core/ports';
-import { BUG_CONFIG, GACHA_CONFIG } from '../data/balance';
+import { BUG_CONFIG, GACHA_CONFIG, INVEST_CONFIG } from '../data/balance';
+import { GENRES } from '../data/genres';
+import { investPriceFor } from '../core/invest';
 import { SCALE_BY_ID } from '../data/scales';
 import { setGameDeps, useGameStore } from './gameStore';
 import { resetStore } from './testing';
@@ -145,9 +147,8 @@ describe('buyGenre / buyTheme（投資：未解放ジャンル・テーマの先
     expect(useGameStore.getState().unlockedGenres).not.toContain('racing'); // stage2=初期未解放
     expect(useGameStore.getState().buyGenre('racing')).toBe(true);
     const s = useGameStore.getState();
-    expect(s.funds).toBe(1_000_000 - 300_000); // stage2 基礎額 ¥30万 × 1.8^0
+    expect(s.funds).toBe(1_000_000 - 300_000); // stage2 基礎額 ¥30万 × 公比^0
     expect(s.unlockedGenres).toContain('racing');
-    expect(s.investPurchaseCount).toBe(1);
   });
 
   it('ロック済みテーマを購入すると price 分 funds が減り解放される', () => {
@@ -157,7 +158,6 @@ describe('buyGenre / buyTheme（投資：未解放ジャンル・テーマの先
     const s = useGameStore.getState();
     expect(s.funds).toBe(1_000_000 - 300_000);
     expect(s.unlockedThemes).toContain('animal');
-    expect(s.investPurchaseCount).toBe(1);
   });
 
   it('資金不足なら購入不可（false・状態不変）', () => {
@@ -166,7 +166,6 @@ describe('buyGenre / buyTheme（投資：未解放ジャンル・テーマの先
     const s = useGameStore.getState();
     expect(s.funds).toBe(100_000);
     expect(s.unlockedGenres).not.toContain('racing');
-    expect(s.investPurchaseCount).toBe(0);
   });
 
   it('初期解放済み（stage1）は購入不可（false・二重課金しない）', () => {
@@ -176,13 +175,27 @@ describe('buyGenre / buyTheme（投資：未解放ジャンル・テーマの先
     expect(useGameStore.getState().funds).toBe(10_000_000);
   });
 
-  it('連続購入で価格が逓増する（×priceGrowth^purchaseCount）', () => {
+  it('連続購入で価格が逓増する（同じ stage の中だけで上がる）', () => {
     resetStore({ funds: 5_000_000 });
-    expect(useGameStore.getState().buyGenre('racing')).toBe(true); // ¥30万（count 0）
-    expect(useGameStore.getState().buyTheme('animal')).toBe(true); // ¥30万 ×1.8 = ¥54万（count 1）
+    const growth = INVEST_CONFIG.priceGrowth;
+    expect(useGameStore.getState().buyGenre('racing')).toBe(true); // stage2 の1個目 ¥30万
+    expect(useGameStore.getState().buyTheme('animal')).toBe(true); // stage2 の2個目 ¥30万×公比
     const s = useGameStore.getState();
-    expect(s.investPurchaseCount).toBe(2);
-    expect(s.funds).toBe(5_000_000 - 300_000 - 540_000);
+    expect(s.funds).toBe(5_000_000 - 300_000 - Math.round((300_000 * growth) / 10_000) * 10_000);
+  });
+
+  it('安い stage を買っても高い stage の値段は上がらない（探索を罰しない）', () => {
+    // 旧実装はジャンル・テーマ通しの1つのカウンタで、**探索のために安いテーマを買うほど
+    // 人気ジャンルが遠のいた**。相性を探す遊びと真正面から衝突していた
+    resetStore({ funds: 500_000_000 });
+    const stage4Genre = GENRES.find((g) => g.unlockStage === 4)!;
+    const priceBefore = investPriceFor(4, [], []);
+    // stage2 を5個買う
+    const stage2 = [...GENRES.filter((g) => g.unlockStage === 2)].slice(0, 5);
+    for (const g of stage2) expect(useGameStore.getState().buyGenre(g.id)).toBe(true);
+    const st = useGameStore.getState();
+    const priceAfter = investPriceFor(4, st.unlockedGenres, st.unlockedThemes);
+    expect(priceAfter, `${stage4Genre.id} の値段が変わっていない`).toBe(priceBefore);
   });
 });
 

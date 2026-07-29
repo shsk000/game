@@ -40,10 +40,13 @@ export type MetascoreBreakdown = {
   metascore: number;
 };
 
-/** 相性（0.7〜2.0）→ 相性補正（−8〜+8） */
+/**
+ * 相性（0.70〜1.60）→ メタスコアの加点（−3.6〜+8.0）。
+ * 上振れは厚く、下振れは浅い非対称写像（理由は `METASCORE.compat` のコメント）。
+ */
 export const compatBonusFor = (compat: number): number => {
-  const { center, span, max } = METASCORE.compat;
-  const raw = ((compat - center) / span) * max;
+  const { center, upSlope, downSlope, max } = METASCORE.compat;
+  const raw = compat >= center ? (compat - center) * upSlope : (compat - center) * downSlope;
   return Math.round(Math.max(-max, Math.min(max, raw)) * 10) / 10;
 };
 

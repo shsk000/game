@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { METASCORE } from '../data/balance';
+import { COMPAT_RANGE, COMPAT_TIERS } from '../data/compatibility';
 import { GENRES } from '../data/genres';
 import type { FeaturePoints } from '../state/types';
 import { ZERO_FEATURES } from '../state/types';
@@ -99,14 +100,31 @@ describe('computeMetascore（特徴ポイント → メタスコア）', () => {
 });
 
 describe('compatBonusFor（相性 → 点）', () => {
-  it('相性が中央なら ±0、上限下限は ±8', () => {
+  it('相性が中央なら ±0。**実際に出せる相性で上限 +8 に届く**', () => {
+    // 旧実装は `(c−1.0)/1.0 × 8` の線形で、+8 に届くのは c = 2.0 のとき。
+    // ところが getCompat のクランプは 1.60 なので**実効は +4.8 止まり**だった。
+    // 仕様書（docs/spec/scoring.md）は「−8〜+8」と書いており、書いてある効果が出ていなかった。
     expect(compatBonusFor(METASCORE.compat.center)).toBe(0);
-    expect(compatBonusFor(2.0)).toBe(8);
-    expect(compatBonusFor(0.7)).toBeCloseTo(-2.4, 1);
+    expect(compatBonusFor(COMPAT_TIERS.divine + 0.05), '神の帯で上限に届く').toBe(8);
+    expect(compatBonusFor(COMPAT_RANGE.max), '相性の上限でも +8').toBe(8);
+  });
+
+  it('外しても壊滅しない（下振れは浅い）', () => {
+    // §10-2「誰も弾かない」は最上位の絶対ライン。地雷を踏んでも −3.6 止まり
+    expect(compatBonusFor(COMPAT_RANGE.min)).toBeCloseTo(-3.6, 1);
+    expect(compatBonusFor(COMPAT_RANGE.min)).toBeGreaterThan(-5);
+  });
+
+  it('発見が評価家のブレに埋もれない（神と普通の差 > ブレの振れ幅）', () => {
+    const divine = compatBonusFor(COMPAT_RANGE.max);
+    const normal = compatBonusFor(1.0);
+    expect(divine - normal, 'ブレの振れ幅（±5＝10）を超える').toBeGreaterThan(
+      METASCORE.variance * 2 - 3,
+    );
   });
 
   it('相性が高いほど加点が大きい（単調）', () => {
-    const vals = [0.7, 1.0, 1.4, 2.0].map(compatBonusFor);
+    const vals = [0.7, 0.85, 1.0, 1.2, 1.45, 1.6].map(compatBonusFor);
     for (let i = 1; i < vals.length; i++) expect(vals[i]).toBeGreaterThan(vals[i - 1]);
   });
 

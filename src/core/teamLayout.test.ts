@@ -16,11 +16,11 @@ import { totalPowerFor } from './skills';
  *
  * 原因は「1分野あたりの文数は固定」なので集中しても打つ量は増えないのに、
  * スキル合計だけ増えて ◎ の分野が上限100 に張り付き、△ の分野を捨てられたこと。
- * `SKILL_CONFIG.secondMemberEfficiency` を 0.5 → 0.12 に下げて解いた。
  *
- * **この定数には上下両方から制約がある**（片方だけ見て動かすと別の支配戦略が生まれる）：
- * - 上げすぎ → 「◎に人を寄せる」が勝つ
- * - 下げすぎ → 「◎の2分野に1人ずつ、2人だけ雇う」が勝つ（人件費も開発期間も半分）
+ * **いまは担当制**で解いている：その分野の出来は**いちばん強い1人**で決まり、
+ * 2人目以降は控え。合計ではなく最大値なので、規模・レベル・装備が変わっても関係が崩れない
+ * （旧 `secondMemberEfficiency: 0.12` は上下から挟まれた連立解で、調整のたびに
+ * 窓が閉じないか確かめる必要があった。しかも画面に注釈を3つ足さないと伝わらなかった）。
  */
 
 /** メタスコアの差として意味を持つ最小幅。丸めや装備で簡単に反転しない余裕を取る */
@@ -167,5 +167,39 @@ describe('プレイヤーが選ぶ理由が数字で言える', () => {
       const conc = play('concentrated', skill, 'mobile');
       expect(even.metascore, rank).toBeGreaterThan(conc.metascore);
     }
+  });
+});
+
+describe('⑤控えを育てて先発を追い越すと、担当が入れ替わって点も上がる', () => {
+  // **控えに存在意義を持たせる根拠そのもの**。
+  // 「その分野は一番強い1人」なので、控えは腐っているように見える。
+  // 育てて先発を追い越した瞬間に担当になり、作品の点が上がることを固定する。
+  //
+  // 実機でも確認済み（企画画面・1280×720）：
+  //   絵 花子50 / 絵 二郎30 → `🎨 担当：絵 花子 50`
+  //   絵 花子50 / 絵 二郎90 → `🎨 担当：絵 二郎 90`
+  //
+  // 規模が小さいと特徴ポイントが上限100に張り付いて差が消えるので、
+  // ここは**上限に張り付かない規模**（話題作・AAA）で測る。
+  it.each([['hit'], ['aaa']] as const)('%s：控えが先発を超えると点が上がる', (scale) => {
+    const perField = Math.max(1, Math.round((SCALE_BY_ID[scale].neededWeeks * 3) / 4));
+    const build = (team: Employee[]) => {
+      let f: FeaturePoints = { ...ZERO_FEATURES, innovationPt: 100 };
+      for (const field of DEV_SKILL_IDS) {
+        const gain = featureGainFor(field, team, scale, 1.01);
+        for (let n = 0; n < perField; n++) f = addFeature(f, field, gain);
+      }
+      return computeMetascore(
+        { features: f, genreId: 'puzzle', themeId: 'sushi', compat: 1.0, trend: null },
+        () => 0.5,
+      ).metascore;
+    };
+    // 4分野を1人ずつ埋めた基本形に、グラフィックの控えを1人足す
+    const base = DEV_SKILL_IDS.map((f, i) => emp(`e${i}`, f, 40));
+    const withWeakSub = [...base, emp('sub', 'graphics', 20)];
+    const withStrongSub = [...base, emp('sub', 'graphics', 90)];
+
+    expect(build(withWeakSub), '弱い控えは点を動かさない').toBe(build(base));
+    expect(build(withStrongSub), '先発を超えた控えは点を上げる').toBeGreaterThan(build(base));
   });
 });

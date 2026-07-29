@@ -81,7 +81,6 @@ export type Persisted = {
   candidate: Candidate | null;
   gachaPity: number;
   /** v0.21 投資：先行購入した累計回数（価格の逓増カーブ計算に使う。旧セーブは 0 に既定） */
-  investPurchaseCount: number;
   /**
    * v0.25 装備：購入済み装備の個数マップ（itemId→個数・実体方式で1個=1社員ぶん）。
    * version は 7 のまま（加算的変更・旧セーブは defaults マージで {}）。
@@ -132,7 +131,6 @@ export const defaults = (): Persisted => ({
   currentDate: { ...INITIAL_GAME_DATE },
   candidate: null,
   gachaPity: 0,
-  investPurchaseCount: 0,
   ownedItems: {},
   muted: false,
   volume: 1,

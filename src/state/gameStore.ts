@@ -13,7 +13,7 @@ import { gachaPrice, nextPityCount } from '../core/gacha';
 import { addFeature, coveredFieldsOf, initialFeatures } from '../core/features';
 import { rollRank4 } from '../core/skills';
 import type { LevelUp } from '../core/growth';
-import { investPrice } from '../core/invest';
+import { investPriceFor } from '../core/invest';
 import { type Deps, defaultDeps } from '../core/ports';
 import { evaluateAchievements } from '../core/progression';
 import {
@@ -267,7 +267,6 @@ export type GameState = {
   lastLevelUps: LevelUp[];
   offlineReport: OfflineReport | null;
   /** v0.21 投資：先行購入した累計回数（価格の逓増カーブに使う） */
-  investPurchaseCount: number;
   /** v0.10：ゲーム内日付（週単位） */
   currentDate: GameDate;
   /** v0.10：直近に発生した月初固定費（UI 表示用。発生していなければ null） */
@@ -323,7 +322,6 @@ export const useGameStore = create<GameState>()(
     lastReleased: null,
     lastLevelUps: [],
     offlineReport: null,
-    investPurchaseCount: pureDefaults.investPurchaseCount,
     currentDate: pureDefaults.currentDate ?? INITIAL_GAME_DATE,
     lastFixedCost: null,
     gameOver: false,
@@ -768,19 +766,18 @@ export const useGameStore = create<GameState>()(
       return true;
     },
 
-    // v0.21 投資：未解放ジャンル/テーマを資金で先行購入する。unlockedGenres/Themes は
-    // セーブされる単調増加の union（解放済みが消えない蓄積配列）なので、そこへ追加するだけで
-    // 永続化され、以後は自動解放分と同一扱いになる（computeStageUnlocks は無改修）。
-    // 価格は investPurchaseCount による逓増カーブ。購入のたびにカウントを +1 する。
+    // 未解放ジャンル/テーマを資金で先行購入する。**これが stage2 以上の唯一の解放経路**
+    // （発売時の自動解放は v0.29 で廃止。`core/release.ts`）。
+    // unlockedGenres/Themes はセーブされる単調増加の union なので、そこへ追加するだけで永続化される。
+    // 価格は「その stage でこれまでに買った数」で決まる（解放リストから導出。状態を持たない）。
     buyGenre: (id) => {
       const s = get();
       if (s.unlockedGenres.includes(id)) return false;
-      const price = investPrice(GENRE_BY_ID[id].unlockStage, s.investPurchaseCount);
+      const price = investPriceFor(GENRE_BY_ID[id].unlockStage, s.unlockedGenres, s.unlockedThemes);
       if (price === null || s.funds < price) return false;
       set({
         funds: s.funds - price,
         unlockedGenres: [...s.unlockedGenres, id],
-        investPurchaseCount: s.investPurchaseCount + 1,
       });
       return true;
     },
@@ -788,12 +785,11 @@ export const useGameStore = create<GameState>()(
     buyTheme: (id) => {
       const s = get();
       if (s.unlockedThemes.includes(id)) return false;
-      const price = investPrice(THEME_BY_ID[id].unlockStage, s.investPurchaseCount);
+      const price = investPriceFor(THEME_BY_ID[id].unlockStage, s.unlockedGenres, s.unlockedThemes);
       if (price === null || s.funds < price) return false;
       set({
         funds: s.funds - price,
         unlockedThemes: [...s.unlockedThemes, id],
-        investPurchaseCount: s.investPurchaseCount + 1,
       });
       return true;
     },
@@ -888,7 +884,6 @@ export const useGameStore = create<GameState>()(
         lastReleased: null,
         lastLevelUps: [],
         offlineReport: null,
-        investPurchaseCount: d.investPurchaseCount,
         currentDate: d.currentDate,
         lastFixedCost: null,
         gameOver: false,

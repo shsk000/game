@@ -31,6 +31,15 @@ export type StageUnlock = {
  *
  * 「累計売上だけ」「ヒット作だけ」のどちらでも解放できる二段構え。
  */
+/**
+ * ⚠ **現行のゲーム進行では使われていない。**
+ * stage2 以上の解放は購入（`buyGenre` / `buyTheme`）が唯一の経路で、
+ * 発売時の自動解放は v0.29 で廃止した（`core/release.ts`）。
+ *
+ * 唯一の呼び出し元は **v6→v7 のセーブ移行**（`utils/storage.ts`）。
+ * v6 は自動解放があった時代のセーブなので、そこで解放済みだったものを
+ * 引き継ぐために必要。新規プレイでは呼ばれない。
+ */
 export const computeStageUnlocks = (
   currentGenres: GenreId[],
   currentThemes: ThemeId[],

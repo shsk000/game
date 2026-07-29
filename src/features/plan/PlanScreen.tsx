@@ -6,11 +6,12 @@ import { PixelButton, PixelModal, PixelWindow } from '../../components/ui';
 import { bugSuppression } from '../../core/bugs';
 import { monthsOfRunway } from '../../core/economy';
 import { jobTitleOf } from '../../core/skills';
-import { investPrice } from '../../core/invest';
+import { investPriceFor } from '../../core/invest';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
 import { planWeeksAllowance } from '../../data/balance';
 import { weightsFor } from '../../data/archetypes';
 import { compatLabel, getCompat } from '../../data/compatibility';
+import { compatBonusFor } from '../../core/metascore';
 import { innovationFor } from '../../core/features';
 import { leadForField } from '../../core/skills';
 import { sumPrBonus } from '../../data/employees';
@@ -134,7 +135,8 @@ const LockedShop = ({
   kind,
   locked,
   funds,
-  purchaseCount,
+  unlockedGenres,
+  unlockedThemes,
   open,
   onToggle,
   onRequest,
@@ -142,8 +144,9 @@ const LockedShop = ({
   kind: 'genre' | 'theme';
   locked: LockedItem[];
   funds: number;
-  /** これまでの先行購入数（価格の逓増カーブに使う。買うほど全項目が高くなる） */
-  purchaseCount: number;
+  /** 価格はここから導出する（その stage でこれまでに買った数＝解放済みの数） */
+  unlockedGenres: GenreId[];
+  unlockedThemes: ThemeId[];
   open: boolean;
   onToggle: () => void;
   /** クリック時：即購入せず、確認対象を親へ渡す（親が確認モーダルを開く） */
@@ -162,7 +165,7 @@ const LockedShop = ({
       </PixelButton>
       {open &&
         locked.map((it) => {
-          const price = investPrice(it.unlockStage, purchaseCount);
+          const price = investPriceFor(it.unlockStage, unlockedGenres, unlockedThemes);
           if (price === null) return null;
           const affordable = funds >= price;
           return (
@@ -189,7 +192,6 @@ export const PlanScreen = () => {
   const unlockedThemes = useGameStore((s) => s.unlockedThemes);
   const buyGenre = useGameStore((s) => s.buyGenre);
   const buyTheme = useGameStore((s) => s.buyTheme);
-  const investPurchaseCount = useGameStore((s) => s.investPurchaseCount);
   const funds = useGameStore((s) => s.funds);
   const employees = useGameStore((s) => s.employees);
   const library = useGameStore((s) => s.library);
@@ -304,7 +306,8 @@ export const PlanScreen = () => {
               kind="genre"
               locked={GENRES.filter((g) => !unlockedGenres.includes(g.id))}
               funds={funds}
-              purchaseCount={investPurchaseCount}
+              unlockedGenres={unlockedGenres}
+              unlockedThemes={unlockedThemes}
               open={genreShopOpen}
               onToggle={() => setGenreShopOpen((v) => !v)}
               onRequest={setPendingPurchase}
@@ -335,7 +338,8 @@ export const PlanScreen = () => {
               kind="theme"
               locked={THEMES.filter((t) => !unlockedThemes.includes(t.id))}
               funds={funds}
-              purchaseCount={investPurchaseCount}
+              unlockedGenres={unlockedGenres}
+              unlockedThemes={unlockedThemes}
               open={themeShopOpen}
               onToggle={() => setThemeShopOpen((v) => !v)}
               onRequest={setPendingPurchase}
@@ -710,7 +714,11 @@ export const PlanScreen = () => {
                     fontWeight: 700,
                   }}
                 >
-                  相性: {compatLabel(surveyedCompat)} ({surveyedCompat.toFixed(2)}x)
+                  {/* 相性は倍率ではなく**メタスコアへの加点**。`1.20x` と書くと
+                      売上が1.2倍になると読めるが、実際は点が +3 されるだけ（オーナー指摘系の詐称） */}
+                  相性: {compatLabel(surveyedCompat)}（メタスコア{' '}
+                  {compatBonusFor(surveyedCompat) >= 0 ? '+' : ''}
+                  {compatBonusFor(surveyedCompat)} 点）
                 </p>
               ) : (
                 <PixelButton
