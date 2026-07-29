@@ -148,3 +148,23 @@ export const estimateRevenueRange = (
     high: Math.round(at(METASCORE.variance)),
   };
 };
+
+/**
+ * ランウェイ（資金が固定費で何ヶ月もつか）の表示。
+ * 「あと 1.6 ヶ月」のように**小数第1位まで**出す。切り上げると危険な状態が安全に見え、
+ * 切り捨てると 0.9 ヶ月が「0 ヶ月」になって手遅れに読める。
+ */
+export const formatRunway = (months: number | null): string => {
+  if (months === null || !Number.isFinite(months)) return 'ずっともつ';
+  if (months >= 120) return 'あと 10 年以上';
+  if (months < 0.1) return '今月で尽きる';
+  return `あと ${months.toFixed(1)} ヶ月`;
+};
+
+/** ランウェイの色。1ヶ月未満は赤、3ヶ月未満は橙、それ以外は通常色 */
+export const runwayColor = (months: number | null): string => {
+  if (months === null) return '#222a35';
+  if (months < 1) return '#cc2f2f';
+  if (months < 3) return '#b26a10';
+  return '#222a35';
+};

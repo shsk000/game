@@ -9,6 +9,7 @@ import {
   PixelWindow,
   SegGauge,
 } from '../../components/ui';
+import { monthsOfRunway } from '../../core/economy';
 import { gachaPrice, pityThreshold } from '../../core/gacha';
 import { nextGoals } from '../../core/goals';
 import { nextExpFor } from '../../core/growth';
@@ -20,7 +21,7 @@ import { MAX_EMPLOYEES, NATIVE_H, NATIVE_W } from '../../data/officeLayout';
 import { nextLockedScale, SCALE_BY_ID, SCALES } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
 import { useGameStore } from '../../state/gameStore';
-import { formatYen } from '../../utils/format';
+import { formatRunway, formatYen, runwayColor } from '../../utils/format';
 import { EquipmentModal } from './EquipmentModal';
 import { jobTitleOf, primarySkillOf } from '../../core/skills';
 import { formatSkills, RANK_VISUAL, SKILL_VISUAL } from './employeeDisplay';
@@ -112,6 +113,7 @@ export const OfficeScreen = () => {
   const monthlyRent = currentScaleDef.monthlyRent;
   const monthlyInterest = Math.round(debt * DEBT_CONFIG.monthlyInterestRate);
   const monthlyTotal = monthlySalaries + monthlyRent + monthlyInterest;
+  const runway = monthsOfRunway({ funds, debt, employees, unlockedScales: unlocked });
   const borrowingLimit = computeBorrowingLimit(monthlySalaries + monthlyRent);
   const borrowingAvailable = Math.max(0, borrowingLimit - debt);
 
@@ -462,6 +464,17 @@ export const OfficeScreen = () => {
                 {monthlyInterest > 0 && ` + 利息 ${formatYen(monthlyInterest)}`}）
               </span>
             </li>
+            {/* ランウェイ＝いまの資金が何ヶ月もつか。
+                採用はスコアを上げるが月々の出費も増やす。その落差がどこにも出ておらず、
+                序盤の破産が「理不尽」に見えていた（社員0人なら16ヶ月／4分野埋めると1.6ヶ月） */}
+            <li>
+              このままだと{' '}
+              <strong style={{ color: runwayColor(runway.months) }}>{formatRunway(runway.months)}</strong>
+              <span style={{ marginLeft: 6, color: '#6b7684' }}>
+                （資金 {formatYen(funds)} ÷ 固定費 {formatYen(monthlyTotal)}/月。
+                作品が売れるぶんは数えていない）
+              </span>
+            </li>
             <li>
               借金{' '}
               <strong style={{ color: debt > 0 ? '#cc2f2f' : '#222a35' }}>{formatYen(debt)}</strong>
@@ -620,6 +633,7 @@ export const OfficeScreen = () => {
           <GachaReveal
             key={candidate.id}
             candidate={candidate}
+            economy={{ funds, debt, employees, unlockedScales: unlocked }}
             funds={funds}
             isFull={employees.length >= MAX_EMPLOYEES}
             onHire={() => hireCandidate()}

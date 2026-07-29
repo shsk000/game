@@ -52,6 +52,31 @@ export const computeMonthlyTick = (
 };
 
 /**
+ * ランウェイ＝いまの資金が、いまの月固定費で**何ヶ月もつか**。
+ *
+ * 採用はスコアを上げるが、同時に毎月の出費を増やす。
+ * この落差がどこにも表示されていないのが「序盤の破産が理不尽に感じる」の本体だった：
+ * 社員0人・賃料¥30万だけなら16ヶ月もつのに、4分野を埋めると1.6ヶ月に落ちる。
+ * 見えていれば「1人だけ採る」「先にミニを数本回す」という選択ができる。
+ *
+ * `employeesOverride` を渡すと「この人を採ったら」の試算になる（採用画面の比較用）。
+ * 収入（販売プールの取り崩し）は数えない。**手を止めても減り続ける分**だけを見る指標。
+ */
+export const monthsOfRunway = (
+  ctx: EconomyCtx,
+  employeesOverride?: Employee[],
+): { monthly: number; months: number | null } => {
+  const employees = employeesOverride ?? ctx.employees;
+  const salaries = sumMonthlySalaries(employees);
+  const rent = currentRent(ctx.unlockedScales);
+  const interest = Math.round(ctx.debt * DEBT_CONFIG.monthlyInterestRate);
+  const monthly = salaries + rent + interest;
+  // 固定費0（ありえないが防御）は「尽きない」＝null
+  if (monthly <= 0) return { monthly, months: null };
+  return { monthly, months: Math.max(0, ctx.funds) / monthly };
+};
+
+/**
  * 借入（v0.10 §6-7）。上限 = 月固定費（給与+賃料）× 12 ヶ月。
  * 成立しないときは null を返す（store 側は false を返すだけ）。
  */

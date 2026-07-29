@@ -4,6 +4,7 @@ import { JacketView } from '../../components/JacketView';
 import { Tutorial } from '../../components/Tutorial';
 import { PixelButton, PixelModal, PixelWindow } from '../../components/ui';
 import { bugSuppression } from '../../core/bugs';
+import { monthsOfRunway } from '../../core/economy';
 import { jobTitleOf } from '../../core/skills';
 import { investPrice } from '../../core/invest';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
@@ -26,7 +27,7 @@ import { THEME_BY_ID, THEMES } from '../../data/themes';
 import { generateTitle } from '../../data/titleGenerator';
 import { trendLabel } from '../../data/trend';
 import { useGameStore } from '../../state/gameStore';
-import { estimateRevenueRange, formatWeeks, formatYen } from '../../utils/format';
+import { estimateRevenueRange, formatRunway, formatWeeks, formatYen, runwayColor } from '../../utils/format';
 import { computeProfit } from '../../utils/profit';
 
 /**
@@ -198,6 +199,9 @@ export const PlanScreen = () => {
   const newlyAchieved = useGameStore((s) => s.newlyAchieved);
   const clearNewlyAchieved = useGameStore((s) => s.clearNewlyAchieved);
   const tutorialDone = useGameStore((s) => s.tutorialDone);
+  const debt = useGameStore((s) => s.debt);
+  // ランウェイ＝いまの資金が固定費で何ヶ月もつか（規模を選ぶ前に耐えられる期間が読める）
+  const runway = monthsOfRunway({ funds, debt, employees, unlockedScales: unlocked });
 
   const firstGenre = (unlockedGenres[0] ?? GENRES[0].id) as GenreId;
   const firstTheme = (unlockedThemes[0] ?? THEMES[0].id) as ThemeId;
@@ -423,6 +427,14 @@ export const PlanScreen = () => {
                     sub={`給与 ${formatYen(salaries)} + 賃料 ${formatYen(def.monthlyRent)}`}
                     accent={COLORS.warn}
                   />
+                  {/* 資金が何ヶ月もつか。規模を選ぶ前に「その期間ぶん耐えられるか」が読める。
+                      予想開発期間より短ければ、その規模は最後まで作りきれない */}
+                  <EstimateBox
+                    label="資金がもつ期間"
+                    value={formatRunway(runway.months)}
+                    sub={`資金 ${formatYen(funds)} ÷ 固定費`}
+                    accent={runwayColor(runway.months) === '#222a35' ? COLORS.pioneer : runwayColor(runway.months)}
+                  />
                   <EstimateBox
                     label="予想利益（中央値）"
                     value={formatYen(profitMid.profit)}
@@ -603,7 +615,11 @@ export const PlanScreen = () => {
           })()}
           {/* 分野ごとの担当者（docs/spec/score-model.md §3）。
               **その分野でいちばん強い1人が担当**なので、注釈なしで読める。
-              担当がいない分野は「担当なし」＝そこを埋める社員を採るべきだと一目で分かる */}
+
+              担当がいない分野は**事実だけ**を書く（「この分野は0点」）。
+              以前は警告色で出していたが、**促したとおりに4分野ぶん雇うと破産する**
+              （初期資金¥500万に対し4人で月固定費¥318万＝ランウェイ1.6ヶ月）。
+              画面が守れない約束をしていた。採用の判断材料はランウェイ表示のほうで出す。 */}
           {employees.length > 0 && (
             <div style={{ marginTop: 5, borderTop: `1px solid ${COLORS.borderHard}`, paddingTop: 4 }}>
               {DEV_SKILL_IDS.map((field) => {
@@ -616,7 +632,7 @@ export const PlanScreen = () => {
                         担当：{lead.name} <strong>{Math.round(lead.skills?.[field] ?? 0)}</strong>
                       </>
                     ) : (
-                      <span style={{ color: COLORS.trendHot }}>担当なし</span>
+                      <span style={{ opacity: 0.65 }}>担当なし（この分野は 0 点）</span>
                     )}
                   </div>
                 );
