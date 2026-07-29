@@ -78,9 +78,6 @@ import { type TypingView, useTyping } from './useTyping';
 const FEVER_MAX = 60;
 const FEVER_DURATION_MS = 15000;
 
-/** 開発全体の PHASE ドット総数（演出。overall progressPct に連動） */
-const TOTAL_PHASE_DOTS = 6;
-
 /** チケットカードの固定高さ（内容の長短で入力欄が上下しないように） */
 const TICKET_CARD_HEIGHT = 76;
 
@@ -651,21 +648,11 @@ export const DevelopScreen = () => {
   const charsPerMin = toCharsPerMin(wpm);
   const accuracyPct = Math.round(accuracy * 1000) / 10;
   const progressPct = Math.max(0, Math.min(100, (current.doneLoC / workTarget) * 100));
-  const litPhaseDots = Math.max(
-    1,
-    Math.min(TOTAL_PHASE_DOTS, Math.ceil((progressPct / 100) * TOTAL_PHASE_DOTS)),
-  );
-
   // 企画の進捗（企画書完成度）：完了チケット＋現在チケット内のフレーズ消化
   const planProgressPct = Math.min(
     100,
     ((planIndex + planPhraseCount / PHRASES_PER_PLAN_TICKET) / PLAN_CATEGORY_ORDER.length) * 100,
   );
-  const planLitDots = Math.max(
-    1,
-    Math.min(TOTAL_PHASE_DOTS, Math.ceil((planProgressPct / 100) * TOTAL_PHASE_DOTS)),
-  );
-
   // 予定週 = 開発ぶん（neededWeeks）＋企画・仕上げの猶予（v0.15.3）
   const plannedWeeks = Math.max(1, scaleDef.neededWeeks + planWeeksAllowance(scaleDef.neededWeeks));
   const elapsedWeeks = current.startDate
@@ -797,11 +784,11 @@ export const DevelopScreen = () => {
             currentCategory={isDevelopment ? currentTicket.category : null}
           />
           <div style={{ ...devBox(), gap: 6 }}>
+            {/* ラベルは1つ。「企画全体の進捗」と「企画書完成度」を並べていたが同じものを
+                言い換えているだけだった（オーナー報告 2026-07-29）。
+                進捗の数字はこのパネルだけに出す（中央ヘッダーにも同じ%を出していた） */}
             <span style={{ fontSize: 11, color: DEV.sub }}>
-              {isPlanning ? '企画全体の進捗' : '開発全体の進捗'}
-            </span>
-            <span style={{ fontSize: 10, color: DEV.sub }}>
-              {isPlanning ? '企画書完成度' : '全体完成度'}
+              {isPlanning ? '企画書の完成度' : '開発の完成度'}
             </span>
             <span
               style={{
@@ -837,8 +824,6 @@ export const DevelopScreen = () => {
           {isDevelopment ? (
             <DevelopCenter
               phaseLabel={phaseMeta.label}
-              litPhaseDots={litPhaseDots}
-              progressPct={progressPct}
               ticket={currentTicket}
               ticketProgressPct={Math.min(
                 100,
@@ -872,8 +857,6 @@ export const DevelopScreen = () => {
             />
           ) : isPlanning ? (
             <PlanningCenter
-              litPhaseDots={planLitDots}
-              progressPct={planProgressPct}
               ticket={currentPlanTicket}
               ticketProgressPct={Math.min(
                 100,
@@ -1128,8 +1111,6 @@ const KanaActionLine = ({
 /** 中央：開発フェーズ本体 */
 const DevelopCenter = ({
   phaseLabel,
-  litPhaseDots,
-  progressPct,
   ticket,
   ticketProgressPct,
   activeEvent,
@@ -1155,9 +1136,7 @@ const DevelopCenter = ({
   feverActive,
 }: {
   phaseLabel: string;
-  litPhaseDots: number;
   /** v0.20 D：開発全体の完成度%（左サイドバーと同じ値。ヘッダーに主役として表示する） */
-  progressPct: number;
   ticket: ReturnType<typeof getTicketAt>;
   ticketProgressPct: number;
   activeEvent: DevEvent | null;
@@ -1278,42 +1257,6 @@ const DevelopCenter = ({
               と同じ「6」を使っていて紛らわしく、実際は現フェーズ内の完成度を6分割しただけの別物
               だった（オーナーFB「完成までの進捗があることを理解してなかった」の一因と判断）。
               パーセンテージを主役に出し、ドットは補助の目盛りとして残す。 */}
-          <span
-            style={{
-              fontSize: 11,
-              color: DEV.sub,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              flexShrink: 0,
-            }}
-          >
-            <span
-              style={{
-                fontSize: 15,
-                fontWeight: 700,
-                color: DEV.greenBright,
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              開発 {Math.floor(progressPct)}%
-            </span>
-            <span style={{ display: 'inline-flex', gap: 3, verticalAlign: 'middle' }}>
-              {Array.from({ length: 6 }, (_, i) => (
-                <span
-                  key={i}
-                  style={{
-                    width: 7,
-                    height: 7,
-                    display: 'inline-block',
-                    borderRadius: 0,
-                    background: i < litPhaseDots ? DEV.green : '#1e2a14',
-                    border: '1px solid #05080c',
-                  }}
-                />
-              ))}
-            </span>
-          </span>
         </div>
       </div>
 
@@ -2120,8 +2063,6 @@ const PLAN = {
 
 /** 中央：企画フェーズ本体（v0.15.3 企画チケット UI） */
 const PlanningCenter = ({
-  litPhaseDots,
-  progressPct,
   ticket,
   ticketProgressPct,
   activeEvent,
@@ -2136,9 +2077,7 @@ const PlanningCenter = ({
   planEmote,
   lastResult,
 }: {
-  litPhaseDots: number;
   /** v0.20 D：企画書完成度%（左サイドバーと同じ値。ヘッダーに主役として表示する） */
-  progressPct: number;
   ticket: ReturnType<typeof getPlanTicketAt>;
   ticketProgressPct: number;
   activeEvent: DevEvent | null;
@@ -2183,34 +2122,6 @@ const PlanningCenter = ({
           style={{ color: PLAN.accent, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}
         >
           💡 企画フェーズ
-        </span>
-        {/* v0.20 D：「PHASE X/6」表記は左サイドバーの6段階フェーズ進行リストと紛らわしいため撤去し、
-            パーセンテージを主役に出す（DevelopCenter と同じ方針） */}
-        <span style={{ fontSize: 11, color: DEV.sub, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span
-            style={{
-              fontSize: 15,
-              fontWeight: 700,
-              color: PLAN.accent,
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            企画書 {Math.floor(progressPct)}%
-          </span>
-          <span style={{ display: 'inline-flex', gap: 3, verticalAlign: 'middle' }}>
-            {Array.from({ length: 6 }, (_, i) => (
-              <span
-                key={i}
-                style={{
-                  width: 7,
-                  height: 7,
-                  display: 'inline-block',
-                  background: i < litPhaseDots ? PLAN.accent : '#2a2414',
-                  border: '1px solid #05080c',
-                }}
-              />
-            ))}
-          </span>
         </span>
       </div>
 
