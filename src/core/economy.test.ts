@@ -22,7 +22,7 @@ const programmer = (power: number): Employee => {
     level: 1,
     exp: 0,
     wage: 0,
-    specialties: [],
+    specialties: [], skills: {},
   };
   return { ...base, wage: employeeMonthlyWage(base) };
 };
@@ -135,7 +135,6 @@ describe('computeOfflineEarnings', () => {
     genreId: 'puzzle',
     themeId: 'sushi',
     scale: 'mini',
-    quality: 50,
     metascore: 50,
     isMasterpiece: false,
     developSec: 1,

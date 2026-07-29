@@ -843,7 +843,7 @@ upper body visible (head, shoulders, torso, arms), legs hidden behind desk,
 ### プロジェクト内
 - [src/components/OfficeView.tsx](/home/shsk/git/game/src/components/OfficeView.tsx) — 配置コンポーネント
 - [public/sprites/office/](/home/shsk/git/game/public/sprites/office/) — 素材置き場
-- [docs/v09/spec.md](/home/shsk/git/game/docs/v09/spec.md) — ゲーム仕様書
+- [docs/spec/](/home/shsk/git/game/docs/spec/) — ゲーム仕様書
 
 ### 並列スキル
 - `pixelart-prompting` — PixelLab MCP の汎用テクニック（プロンプト・サイズ規約・コスト管理）

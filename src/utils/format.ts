@@ -9,6 +9,15 @@
  * 段階的に置き換える。global.css は触らない方針（spec §6 / オーダー指示）。
  */
 
+import { normalizedWeightsFor } from '../data/archetypes';
+import { METASCORE, SCALE_BALANCE, salesMultiplierForScore } from '../data/balance';
+import type { GenreId } from '../data/genres';
+import type { ThemeId } from '../data/themes';
+import { addFeature, featureGainFor } from '../core/features';
+import type { Employee, FeaturePoints } from '../state/types';
+import { DEV_SKILL_IDS, FEATURE_IDS, ZERO_FEATURES } from '../state/types';
+import type { Scale } from '../data/scales';
+
 const TRILLION = 1_000_000_000_000;
 const HUNDRED_MILLION = 100_000_000;
 const TEN_THOUSAND = 10_000;
@@ -92,16 +101,70 @@ export const formatRoi = (profit: number, invest: number): string => {
 };
 
 /**
- * 予想売上レンジ：規模の `baseUnit` を中央値とした low / mid / high の 3 点。
- * メタスコア帯（平凡 / ヒット / 大ヒット）の感覚に近い倍率を使う。
- *   low  = baseUnit × 0.5（平凡）
- *   mid  = baseUnit × 1.0（平均）
- *   high = baseUnit × 5.0（大ヒット相当）
+ * 予想売上レンジ：**実際の売上式と同じ数列**から算出する（企画画面の規模選択で表示）。
+ *
+ *   実売上 = SCALE_BALANCE[scale].baseRevenue × salesMultiplierForScore(メタスコア) × 各種補正
+ *
+ * 旧実装は `scales.ts` の `baseUnit` という**実式と接点のない別系列**を使っていたため、
+ * インディー以上では「予測の中央値」が「実際の最悪帯（致命的失敗 ×0.33）」すら下回り、
+ * 企画画面の予想利益が常に大赤字を表示していた（例：インディーの予測中央値 ¥800 万に対し、
+ * 実際の普通帯は ¥3 億）。オーナー指摘 2026-07-25 で是正。
+ *
+ * **段の取り方は「このチームで実際に届く範囲」から出す。**
+ * 固定の段（旧実装は mid = 失敗帯 ×0.6）だと新モデルでは 10〜16 倍ずれ、
+ * AAA を「−¥70億の赤字」と表示していた（実際は最強構成で +¥200〜400億）。
+ * チームのスキルから素直に打ち切ったときの特徴ポイントを求め、
+ * 評価家のブレ（±5）の幅をそのまま low / mid / high にする。
+ *
+ * ソフト補正（広報・ファン・トレンド・マーケ広告・軸補正）は掛けない＝**素の下限**を見せる。
  */
 export const estimateRevenueRange = (
-  baseUnit: number,
-): { low: number; mid: number; high: number } => ({
-  low: Math.round(baseUnit * 0.5),
-  mid: Math.round(baseUnit * 1.0),
-  high: Math.round(baseUnit * 5.0),
-});
+  scale: Scale,
+  employees: Employee[] = [],
+  genreId: GenreId = 'action',
+  themeId: ThemeId = 'ninja',
+): { low: number; mid: number; high: number } => {
+  const base = SCALE_BALANCE[scale].baseRevenue;
+
+  // 社員がいなければ「打てる分野が無い」＝革新性ぶんだけ。予測は最低帯になる
+  const perField = Math.max(1, Math.round((SCALE_BALANCE[scale].neededWeeks * 3) / 4));
+  let features: FeaturePoints = { ...ZERO_FEATURES, innovationPt: 100 };
+  for (const field of DEV_SKILL_IDS) {
+    const gain = featureGainFor(field, employees, scale, 1.01);
+    if (gain <= 0) continue;
+    for (let n = 0; n < perField; n++) features = addFeature(features, field, gain);
+  }
+
+  // 相性とトレンドは掛けず、評価家のブレ（±5）だけで幅を出す
+  const weights = normalizedWeightsFor(genreId);
+  const baseScore = FEATURE_IDS.reduce((sum, id) => sum + features[id] * weights[id], 0);
+  const clamp = (v: number) => Math.max(0, Math.min(100, Math.round(v)));
+  const at = (delta: number) => base * salesMultiplierForScore(clamp(baseScore + delta));
+  void themeId;
+
+  return {
+    low: Math.round(at(-METASCORE.variance)),
+    mid: Math.round(at(0)),
+    high: Math.round(at(METASCORE.variance)),
+  };
+};
+
+/**
+ * ランウェイ（資金が固定費で何ヶ月もつか）の表示。
+ * 「あと 1.6 ヶ月」のように**小数第1位まで**出す。切り上げると危険な状態が安全に見え、
+ * 切り捨てると 0.9 ヶ月が「0 ヶ月」になって手遅れに読める。
+ */
+export const formatRunway = (months: number | null): string => {
+  if (months === null || !Number.isFinite(months)) return 'ずっともつ';
+  if (months >= 120) return 'あと 10 年以上';
+  if (months < 0.1) return '今月で尽きる';
+  return `あと ${months.toFixed(1)} ヶ月`;
+};
+
+/** ランウェイの色。1ヶ月未満は赤、3ヶ月未満は橙、それ以外は通常色 */
+export const runwayColor = (months: number | null): string => {
+  if (months === null) return '#222a35';
+  if (months < 1) return '#cc2f2f';
+  if (months < 3) return '#b26a10';
+  return '#222a35';
+};

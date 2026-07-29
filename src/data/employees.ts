@@ -1,9 +1,15 @@
-import { rollRank } from '../core/gacha';
 import type { Deps, Rng } from '../core/ports';
 import { defaultDeps } from '../core/ports';
-import type { Candidate, Employee, EmployeeRole, EmployeeSpecialty } from '../state/types';
-import { computeMonthlyWage, GACHA_CONFIG, type GachaRank, ROLE_EFFECT } from './balance';
-import type { CategoryId } from './categories';
+import {
+  primarySkillOf,
+  rollRank4,
+  prSkillTotalOf,
+  rollSkills,
+  totalPowerFor,
+  totalPowerOf,
+} from '../core/skills';
+import type { Candidate, Employee, EmployeeRole, SkillId } from '../state/types';
+import { computeMonthlyWage, GACHA_CONFIG, type GachaRank, PR_SALES_BONUS_PER_SKILL } from './balance';
 
 const SURNAMES = [
   '佐藤',
@@ -62,8 +68,6 @@ const pick = <T>(arr: T[], rng: Rng): T => arr[Math.floor(rng() * arr.length)];
 
 const randomName = (rng: Rng) => `${pick(SURNAMES, rng)} ${pick(GIVEN, rng)}`;
 
-const ROLE_DICE: EmployeeRole[] = ['programmer', 'programmer', 'designer', 'designer', 'pr'];
-
 /**
  * v0.16：power は全役割共通の 0..1 正規化スケール（balance.ts ROLE_EFFECT で換算）。
  * v0.22：一様な「見習い帯」（旧 0.2〜0.6）をガチャランク別の帯に置換。
@@ -95,40 +99,11 @@ export const employeeMonthlyWage = (e: Employee): number => wageFor(e.role, e.po
 export const sumMonthlySalaries = (employees: Employee[]): number =>
   employees.reduce((sum, e) => sum + employeeMonthlyWage(e), 0);
 
-const ALL_CATEGORY_IDS: CategoryId[] = [
-  'graphics',
-  'sound',
-  'story',
-  'gameplay',
-  'presentation',
-  'innovation',
-];
-
-const PRIMARY_CATEGORIES_BY_ROLE: Record<EmployeeRole, CategoryId[]> = {
-  programmer: ['gameplay', 'innovation'],
-  designer: ['graphics', 'sound'],
-  pr: ['story', 'presentation'],
-};
 
 /**
  * v0.22：ランク別の specialty 構成（GACHA_CONFIG.specialty）。
  * B は主 1 つのみ / A は旧仕様どおり（主 3-10 ＋ 40% で副 1-4）/ S は 2 つ確定。
  */
-const rollSpecialties = (role: EmployeeRole, rank: GachaRank, rng: Rng): EmployeeSpecialty[] => {
-  const cfg = GACHA_CONFIG.specialty[rank];
-  const result: EmployeeSpecialty[] = [];
-  const primaryPool = PRIMARY_CATEGORIES_BY_ROLE[role];
-  const primary = pick(primaryPool, rng);
-  const primaryBonus = Math.round(cfg.primaryMin + rng() * (cfg.primaryMax - cfg.primaryMin));
-  result.push({ categoryId: primary, bonus: primaryBonus });
-  if (cfg.secondChance > 0 && rng() < cfg.secondChance) {
-    const otherPool = ALL_CATEGORY_IDS.filter((c) => c !== primary);
-    const second = pick(otherPool, rng);
-    const secondBonus = Math.round(cfg.secondMin + rng() * (cfg.secondMax - cfg.secondMin));
-    result.push({ categoryId: second, bonus: secondBonus });
-  }
-  return result;
-};
 
 let counter = 0;
 
@@ -139,11 +114,15 @@ let counter = 0;
  */
 export const newCandidate = (
   deps: Deps = defaultDeps,
-  rank: GachaRank = rollRank('normal', deps.rng),
+  rank: GachaRank = rollRank4('normal', deps.rng),
 ): Candidate => {
   const { rng, now } = deps;
-  const role = pick(ROLE_DICE, rng);
-  const power = rollPowerForRank(rank, rng);
+  // 実装ステップ3：**スキルが真**。ランクの天井（RANK_TOTAL_POWER）から総合力を決め、
+  // 分散ペナルティ（2スキルは ×0.9）も効かせる。
+  const skills = rollSkills(totalPowerFor(rank, 1, rng()), rng);
+  const role = roleFromSkills(skills);
+  // 互換：給与計算がまだ power を使う。総合力 ÷ 100 で導出する（同じスケールになった）
+  const power = Math.round((totalPowerOf(skills) / 100) * 1000) / 1000;
   counter += 1;
   return {
     id: `c-${now()}-${counter}`,
@@ -155,44 +134,34 @@ export const newCandidate = (
     level: 1,
     exp: 0,
     wage: wageFor(role, power),
-    specialties: rollSpecialties(role, rank, rng),
+    specialties: [],
+    skills,
   };
 };
 
-/** プログラマーの自動開発速度合計（LoC/秒）。v0.16：正規化 power × 係数 */
-export const sumProgrammerSpeed = (employees: Employee[]): number =>
-  employees
-    .filter((e) => e.role === 'programmer')
-    .reduce((a, b) => a + b.power * ROLE_EFFECT.programmerLocPerSec, 0);
+/** 主スキル → 旧 role（表示・旧経路の分岐用）。実装ステップ3 で role ごと削除する */
+export const roleFromSkills = (skills: Employee['skills']): EmployeeRole => {
+  const p: SkillId | null = primarySkillOf(skills);
+  if (p === 'pr') return 'pr';
+  if (p === 'graphics' || p === 'sound' || p === 'scenario') return 'designer';
+  return 'programmer';
+};
 
-/** デザイナーの品質基礎ボーナス合計。v0.16：正規化 power × 係数 */
-export const sumDesignerBonus = (employees: Employee[]): number =>
-  employees
-    .filter((e) => e.role === 'designer')
-    .reduce((a, b) => a + b.power * ROLE_EFFECT.designerQualityBonus, 0);
+/**
+ * プログラマーの power 合計（正規化 0..1 スケールのまま）。
+ * 用途はバグ抑制（core/bugs.ts）。旧 sumProgrammerSpeed（LoC/秒）は自動開発機能の削除に伴い廃止。
+ */
 
-/** 広報の売上ボーナス合計（比率）。v0.16：正規化 power × 係数 */
+/**
+ * 広報の売上ボーナス（比率）。
+ *
+ * 実装ステップ3：役職 `pr` の `power` 合計 → **広報スキルの合計**に付け替えた
+ * （同分野の2人目以降は半減。`prSkillTotalOf`）。
+ * スキル100 の広報1人で +20%、2人目は +10% 上乗せ。
+ */
 export const sumPrBonus = (employees: Employee[]): number =>
-  employees
-    .filter((e) => e.role === 'pr')
-    .reduce((a, b) => a + b.power * ROLE_EFFECT.prSalesBonus, 0);
+  Math.round((prSkillTotalOf(employees) / 100) * PR_SALES_BONUS_PER_SKILL * 1000) / 1000;
 
 /**
  * 割当従業員のうち、選択カテゴリにマッチする specialty.bonus の総和。
  */
-export const sumEmployeeCategoryBonus = (
-  employees: Employee[],
-  selectedIds: string[],
-  categoryIds: CategoryId[],
-): number => {
-  const selectedSet = new Set(selectedIds);
-  const categorySet = new Set(categoryIds);
-  let total = 0;
-  for (const emp of employees) {
-    if (!selectedSet.has(emp.id)) continue;
-    for (const sp of emp.specialties ?? []) {
-      if (categorySet.has(sp.categoryId)) total += sp.bonus;
-    }
-  }
-  return total;
-};

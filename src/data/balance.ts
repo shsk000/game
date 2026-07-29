@@ -4,8 +4,8 @@
  * ⭐ **バランス調整はこのファイルだけ触れば完結する** ように設計した。
  * 詳しい説明と「ここを触ると何が起きるか」は BALANCE_README.md を参照。
  *
- * 各定数の決定根拠と議論履歴は docs/v10/notes/balance-design.md にある。
- * 数値を変えたら balance-design.md の §11 変更履歴に追記すること。
+ * 各定数の決定根拠と議論履歴は v0.10（資料は削除済み） にある。
+ * 数値を変えたら balance-scenario.md の §11 変更履歴に追記すること。
  */
 
 import type { Scale } from './scales';
@@ -17,7 +17,7 @@ import type { Scale } from './scales';
 /**
  * リアル時間 ↔ ゲーム内 1 週の変換レート（ms）。
  *
- * 設計：開発中は速く、アイドル中は遅く（balance-design §6-2）。
+ * 設計：開発中は速く、アイドル中は遅く（balance-scenario §6-2）。
  * - typingActive: 開発画面でタイピング中（リアル 7.5 秒 = ゲーム内 1 週）
  * - idle: オフィス画面等のアイドル中（リアル 30 秒 = ゲーム内 1 週）
  */
@@ -37,7 +37,7 @@ export const TIME_RATE_MS_PER_WEEK = {
 export const INITIAL_FUNDS = 5_000_000; // ¥500 万
 
 // ============================================================
-// スコア帯（balance-design §2）
+// スコア帯（balance-scenario §2）
 // ============================================================
 
 /**
@@ -48,8 +48,8 @@ export const INITIAL_FUNDS = 5_000_000; // ¥500 万
  * - 「ほとんどのゲームは赤字」現実準拠
  * - 神ゲー（95+）は 1%、出会えると喜びピーク
  *
- * この分布は computeQualityV10 + 補正の結果として実現される。
- * 実機での分布が想定とずれる場合、metascore.ts の難易度補正と各スコアの正規化を見直す。
+ * この分布は「特徴ポイント → メタスコア」（core/metascore.ts）の結果として実現される。
+ * 実機での分布が想定とずれる場合は FEATURE_SCALE_COEF と重み（data/archetypes.ts）を見直す。
  */
 export const SCORE_TIERS = {
   catastrophic: { min: 0, max: 29, expectedRate: 0.2 },
@@ -62,40 +62,52 @@ export const SCORE_TIERS = {
 } as const;
 
 /**
- * メタスコア帯ごとの売上倍率（balance-design §5-2、v0.10 仕上げで再調整）。
+ * ヒット区分の売上倍率（docs/spec/score-model.md §5）。
  *
- * 各規模の baseRevenue に掛けて最終売上を算出する。
- * 「ほとんどのゲームは赤字 or トントン」現実準拠の難易度に合わせて
- * v0.10 初版より hit 以上を 0.5 倍に圧縮（hit ¥2000万 → ¥1000万）。
+ * 旧 ×0.33〜×500（レンジ1500倍）は「神ゲー＝1%の稀な当たり」を前提にした数字。
+ * 新モデルでは終盤に名作・神ゲーが常態になるため、そのままだと1作で兆が出る（実測）。
+ * **1作の売上は現実に近づけ、上限は数百億とする（オーナー確定）。**
  *
- * - 致命的失敗（×0.33）：開発費の 1/3 程度 → 確実に赤字
- * - 失敗（×3.33）：開発費の ~3 倍 → ほぼトントン
- * - 普通（×10）：黒字だが控えめ（mini ¥300万 → +¥210万）
- * - ヒット（×33）：mini ¥1000 万 → +¥910 万（明らかに嬉しい山）
- * - 大ヒット（×100）：mini ¥3000 万 → +¥2910 万
- * - 名作（×250）：mini ¥7500 万
- * - 神ゲー帯（×500）：mini ¥1.5 億
+ * 隣接区分の比率は 1.7〜2.4倍。「区分をまたぐと売上が約2倍」の跳ね感は維持する。
+ * **基準売上 ＝ 普通（×1）のときの売上**に再定義した（旧は普通=×10 換算で分かりにくかった）。
  */
 export const SALES_MULTIPLIER_BY_SCORE = {
-  catastrophic: 0.333,
-  failure: 3.333,
-  normal: 10,
-  hit: 33,
-  bigHit: 100,
-  masterpiece: 250,
-  godGame: 500,
+  catastrophic: 0.25,
+  failure: 0.6,
+  normal: 1,
+  hit: 2,
+  bigHit: 3.5,
+  masterpiece: 6,
+  godGame: 10,
 } as const;
 
-/** スコア帯ごとの売上倍率を引くヘルパー */
-export const salesMultiplierForScore = (metascore: number): number => {
-  if (metascore <= 29) return SALES_MULTIPLIER_BY_SCORE.catastrophic;
-  if (metascore <= 49) return SALES_MULTIPLIER_BY_SCORE.failure;
-  if (metascore <= 69) return SALES_MULTIPLIER_BY_SCORE.normal;
-  if (metascore <= 79) return SALES_MULTIPLIER_BY_SCORE.hit;
-  if (metascore <= 89) return SALES_MULTIPLIER_BY_SCORE.bigHit;
-  if (metascore <= 94) return SALES_MULTIPLIER_BY_SCORE.masterpiece;
-  return SALES_MULTIPLIER_BY_SCORE.godGame;
+/** ヒット区分の表示名（リリース画面・図鑑で共用） */
+export const SCORE_TIER_LABEL = {
+  catastrophic: '致命的失敗',
+  failure: '失敗',
+  normal: '普通',
+  hit: 'ヒット',
+  bigHit: '大ヒット',
+  masterpiece: '名作',
+  godGame: '神ゲー',
+} as const;
+
+export type ScoreTier = keyof typeof SALES_MULTIPLIER_BY_SCORE;
+
+/** メタスコア → ヒット区分 */
+export const scoreTierFor = (metascore: number): ScoreTier => {
+  if (metascore <= 29) return 'catastrophic';
+  if (metascore <= 49) return 'failure';
+  if (metascore <= 69) return 'normal';
+  if (metascore <= 79) return 'hit';
+  if (metascore <= 89) return 'bigHit';
+  if (metascore <= 94) return 'masterpiece';
+  return 'godGame';
 };
+
+/** スコア帯ごとの売上倍率を引くヘルパー */
+export const salesMultiplierForScore = (metascore: number): number =>
+  SALES_MULTIPLIER_BY_SCORE[scoreTierFor(metascore)];
 
 // ============================================================
 // v0.16：power 正規化と役割換算（spec v16 §1-3）
@@ -106,44 +118,33 @@ export const salesMultiplierForScore = (metascore: number): number => {
  * 役割ごとの実効果は使用側でこの係数を掛けて換算する。
  * 旧スケール（プログラマー0.3〜1.2 / デザイナー2〜10 / 広報5〜20）は v5→v6 セーブ移行で換算。
  */
-export const ROLE_EFFECT = {
-  /** プログラマー：自動開発速度 LoC/秒 = power × この値 */
-  programmerLocPerSec: 1.2,
-  /** デザイナー：品質基礎+ = power × この値 */
-  designerQualityBonus: 10,
-  /** 広報：売上ボーナス（比率）= power × この値（例 power 0.5 → +10%） */
-  prSalesBonus: 0.2,
-} as const;
+/**
+ * 広報スキル100 あたりの売上ボーナス（docs/spec/score-model.md §1）。
+ * 実装ステップ3：旧 `ROLE_EFFECT.prSalesBonus`（役職 pr の power × 0.2）から付け替えた。
+ */
+export const PR_SALES_BONUS_PER_SKILL = 0.2;
 
 // ============================================================
 // v0.22：採用ガチャ（spec v22 §4。旧 CANDIDATE_POWER_RANGE 0.2〜0.6 をランク帯に置換）
 // ============================================================
 
-export type GachaRank = 'B' | 'A' | 'S';
+/**
+ * 採用ガチャの排出ランク。**C を追加して4種**（docs/spec/score-model.md §1）。
+ * ランクは「どこまで伸びるか（天井）」を表す表示ラベルで、育っても変わらない。
+ */
+export type GachaRank = 'C' | 'B' | 'A' | 'S';
+
+/** ランクの弱い順（排出率テーブルの走査・UI 並び順に使う） */
+export const GACHA_RANKS: readonly GachaRank[] = ['C', 'B', 'A', 'S'] as const;
 
 /** 採用ガチャの種類（v0.22.1 で 2 種に分割）。normal＝安価・S 無し／premium＝高額・S 源 */
 export type GachaKind = 'normal' | 'premium';
 
-/**
- * 採用ガチャの確定テーブル（spec v22 §4。数値は全て叩き台 🔧）。
- *
- * v0.22.1：オーナー指示で **ノーマル / プレミアム** の 2 種に分割。
- * - **normal**：安価（規模連動・現行テーブル）。**S を出さない**（B/A のみ）。天井なし。
- *   序盤の主力採用。A（power 0.4〜0.55）までは出るので普通に戦力になる。
- * - **premium**：高額（mini ¥500 万＝初期資金と同額で**序盤はほぼ引けない**）。S の唯一の入手源。
- *   天井 pityThreshold 連続 S 非排出で次を S 確定。中盤以降に手が届く設計。
- *   → S を序盤から引けなくすることで v16 の早期分布ガード（序盤メタ70+＝0%）を
- *     経済面から自然に守る（premium が高すぎて序盤は S を揃えられない）。
- *
- * 共通：
- * - powerRange: ランク別 basePower 帯。S 上限 0.7 は旧候補上限 0.6 より高いが、charPower は
- *   POWER_CAP × powerBonus 上限 70 で天井固定＝S は「天井に早く着く」だけ。
- * - specialty: ランク別の得意分野構成。A は旧仕様（3-10 ＋ 40% で 1-4）と同じ。
- */
 export const GACHA_CONFIG = {
   normal: {
     // S 無し。S の 5% 分を A に寄せて B70/A30（🔧）
-    rates: { B: 0.7, A: 0.3, S: 0 },
+    // C は排出しない（実装ステップ3 で GACHA_RANK_RATES に切り替えるまで）
+    rates: { C: 0, B: 0.7, A: 0.3, S: 0 },
     priceByScale: {
       mini: 50_000, // ¥5 万
       mobile: 500_000, // ¥50 万
@@ -155,8 +156,9 @@ export const GACHA_CONFIG = {
     pityThreshold: 0,
   },
   premium: {
-    // A/S に寄せた高級枠。B も残してガチャの緊張を維持（🔧）
-    rates: { B: 0.4, A: 0.45, S: 0.15 },
+    // 実装ステップ1で C を追加（GACHA_RANK_RATES が新しい正）。ここは旧経路の互換用
+    // C は排出しない（実装ステップ3 で GACHA_RANK_RATES に切り替えるまで）
+    rates: { C: 0, B: 0.4, A: 0.45, S: 0.15 },
     priceByScale: {
       mini: 6_000_000, // ¥600 万（初期資金 ¥500 万を上回る＝序盤は 1 発も引けない）
       mobile: 30_000_000, // ¥3000 万
@@ -168,11 +170,13 @@ export const GACHA_CONFIG = {
     pityThreshold: 10,
   },
   powerRange: {
+    C: { min: 0.15, max: 0.25 },
     B: { min: 0.2, max: 0.4 },
     A: { min: 0.4, max: 0.55 },
     S: { min: 0.55, max: 0.7 },
   },
   specialty: {
+    C: { primaryMin: 2, primaryMax: 5, secondChance: 0, secondMin: 0, secondMax: 0 },
     B: { primaryMin: 3, primaryMax: 7, secondChance: 0, secondMin: 0, secondMax: 0 },
     A: { primaryMin: 3, primaryMax: 10, secondChance: 0.4, secondMin: 1, secondMax: 4 },
     S: { primaryMin: 6, primaryMax: 10, secondChance: 1, secondMin: 3, secondMax: 6 },
@@ -202,8 +206,141 @@ export const GACHA_CONFIG = {
 };
 
 // ============================================================
+// スキル・ランク（docs/spec/score-model.md §1。実装ステップ1）
+// ============================================================
+
+/**
+ * ランクごとの総合力（＝スキル値の合計）。
+ *
+ * **Lv1 はランクによらずほぼ同じ（15〜28）で、Lv10 で 40/60/80/100 に開く。**
+ * ランクは「どこまで伸びるか（天井）」、レベルは「今どこまで伸びたか」を表す。
+ * 採用した瞬間は差が分からないので、ガチャの価値は「育てたときの到達点」になる。
+ *
+ * 数値は 🔧（通しシミュレーションで検証済み：序盤に破産せず終盤で兆が出ない）。
+ */
+export const RANK_TOTAL_POWER: Record<GachaRank, { lv1Min: number; lv1Max: number; lv10: number }> =
+  {
+    C: { lv1Min: 15, lv1Max: 20, lv10: 40 },
+    B: { lv1Min: 16, lv1Max: 22, lv10: 60 },
+    A: { lv1Min: 18, lv1Max: 25, lv10: 80 },
+    S: { lv1Min: 20, lv1Max: 28, lv10: 100 },
+  };
+
+/**
+ * スキル関連の確定値（docs/spec/score-model.md §1）。
+ */
+export const SKILL_CONFIG = {
+  /** 2つ目のスキルを持つ確率（ランクとは無関係） 🔧 */
+  twoSkillChance: 0.5,
+  /**
+   * 2スキル時の分散ペナルティ。総合力にこれを掛けてから2分野へ配分する。
+   * **専門特化のほうが総合力が高くなる**（分けると目減りする） 🔧
+   */
+  spreadPenalty: 0.9,
+  /** 2スキル時の配分比（主スキル : 副スキル） 🔧 */
+  /**
+   * 2スキル持ちの配分。**主 0.70 / 副 0.30**。
+   *
+   * 0.55/0.45 では2スキル持ちの主スキルが 総合力 × 0.9 × 0.55 ＝ **0.495** しかなく、
+   * 1スキル持ち（1.0）の半分。**排出の50%が主力にならず、AAA が実ガチャのチームでは
+   * どうしても赤字**になっていた（本番経路の実測）。0.70 なら 0.63 で、
+   * 専門特化の優位（1.0 > 0.63）は保ったまま2スキル持ちも主力になれる。
+   */
+  spreadRatio: { primary: 0.7, secondary: 0.3 },
+  /** 同じ分野に2人目以降を置いたときの効率（分業のロス）。スキル合計に掛ける 🔧 */
+} as const;
+
+/**
+ * 採用ガチャの排出率（C を含む4種構成）🔧。
+ * normal は S を出さない（旧仕様どおり）。C を追加したぶんは B から割いた。
+ */
+/** 採用ガチャのランク排出率（C を含む4種）。`rollRank4` が読む */
+export const GACHA_RANK_RATES: Record<GachaKind, Record<GachaRank, number>> = {
+  normal: { C: 0.35, B: 0.45, A: 0.2, S: 0 },
+  premium: { C: 0.1, B: 0.35, A: 0.4, S: 0.15 },
+};
+
+// ============================================================
 // v0.16：社員成長（spec v16 §1。Lv10 = 数十作品規模＝終盤・オーナー確定）
 // ============================================================
+
+/**
+ * 特徴ポイントのゲーム規模係数（docs/spec/score-model.md §3）🔧
+ *
+ * 規模ごとに「入門チーム」（その規模を解放した直後の想定チーム）を基準に決めてある。
+ * 全規模を最強構成で基準化すると、序盤のスキル値では特徴ポイントが17程度しか出ず、
+ * どう頑張ってもミニゲームで黒字に届かない破産ウォールになる（実測）。
+ *
+ * 🔧 **入門チーム前提はまだ検証していない。** 実測の解放時レベルは Lv3/5/7/8
+ * （経験値の規模連動を入れたあと）。係数の校正は実装ステップ3 の通しシミュレーションで行う。
+ */
+/**
+ * 特徴ポイント → メタスコア（docs/spec/score-model.md §4）。
+ *
+ */
+export const METASCORE = {
+  /**
+   * 相性 → メタスコアの加点。**上振れと下振れで傾きを変える非対称写像**。
+   *
+   * ```
+   * c ≧ 1.0 : +(c − 1.0) × upSlope   上限 +8.0（c = 1.50 で到達）
+   * c ＜ 1.0 : −(1.0 − c) × downSlope 下限 −3.6（c = 0.70）
+   * ```
+   *
+   * ## なぜ非対称か
+   * - **当てると伸びる**：神（+8）はトレンド合致（+10）に匹敵し、評価家のブレ（±5）に埋もれない
+   * - **外しても壊滅しない**：地雷でも −3.6 止まり。§10-2「誰も弾かない」は最上位の絶対ライン
+   *
+   * ## なぜ直したか（2026-07-29）
+   * 旧実装は `(c − 1.0) / 1.0 × 8` の線形で、上限 8 に届くのは c = 2.0 のとき。
+   * ところが `getCompat` のクランプは 1.60 なので **実効は −2.4〜+4.8**。
+   * `docs/spec/scoring.md` は「−8〜+8」と書いており、同じファイルの下の方で
+   * 「実際は −2.4〜+4.8」と自白していた。**書いてある効果が出ていない**＝
+   * この版が潰している「ローンチ広告 売上+50%（実効+10%）」と同じ構造の詐称。
+   *
+   * 効きが評価家のブレ（振れ幅10）より小さいと、神の組合せを見つけても運に埋もれる。
+   * 相性は 📺市場調査（リワード広告）で調べられる唯一のレバーなので、
+   * ここが弱いと広告を見る動機そのものが消える。
+   */
+  compat: { center: 1.0, upSlope: 16, downSlope: 12, max: 8 },
+  /** トレンド合致（ジャンルとテーマの両方／片方） */
+  trend: { both: 10, one: 5 },
+  /**
+   * 評価家のブレ（±5）。同じ作りでも毎回ぶれるのが中毒の肝（game-design §5）。
+   * ヒット区分をまたぐほどの幅は持たせない。
+   */
+  variance: 5,
+} as const;
+
+export const FEATURE_SCALE_COEF: Record<Scale, number> = {
+  mini: 1.32,
+  mobile: 0.25,
+  indie: 0.09,
+  hit: 0.048,
+  // AAA だけ天井基準（最強構成でようやく100）。
+  // 0.035 では入門チーム（A級Lv8）が名作＝粗利¥200億 になり「大作を当てにいく」緊張が消え、
+  // 0.03 では逆に入門が普通＝¥50億の赤字で詰みかけた（2人目効率を 0.5→0.12 に下げた影響）。
+  // 実測：A級Lv8 でメタ72（ヒット）＝収支トントン、A級Lv10 で大ヒット、S級Lv10 で神ゲー。
+  aaa: 0.04,
+};
+
+/**
+ * 打鍵倍率（docs/spec/score-model.md §3）。合計 0.95〜1.05。
+ *
+ * **ヒット区分を腕で越えさせないための幅**。上位の区分は幅が狭い
+ * （ヒット10点／大ヒット10点／名作5点／神ゲー6点）ため、倍率が 1.07 を超えると区分をまたぐ。
+ * 実測では ×1.32 で3区分＝売上15倍差が動いていた（game-scenario §10-3 に反する）。
+ */
+export const TYPING_MULTIPLIER = {
+  speed: { good: 0.97, great: 1.0, perfect: 1.03 },
+  /** コンボ帯（高い方から先に判定） */
+  combo: [
+    { minCombo: 100, mul: 1.02 },
+    { minCombo: 30, mul: 1.01 },
+    { minCombo: 10, mul: 1.0 },
+    { minCombo: 0, mul: 0.98 },
+  ],
+} as const;
 
 export const GROWTH = {
   /** レベル上限 */
@@ -216,6 +353,23 @@ export const GROWTH = {
     { minMeta: 70, bonus: 15 },
     { minMeta: 50, bonus: 5 },
   ],
+  /**
+   * **ゲーム規模ごとの exp 倍率**（docs/spec/score-model.md §1）。
+   *
+   * 定額だと解放ペースに育成が追いつかない。解放は累計売上ゲートで、売上も閾値も
+   * 規模ごとに ×10 で伸びるため各規模は数本で次を解放するのに、必要 exp は lv^1.5 で
+   * 急増するため。実測では 話題作の解放時に Lv4（想定 A級Lv7〜8）まで開いていた。
+   *
+   * 「大きい作品を作るほど学ぶ」を入れて追いつかせる。副作用として
+   * **上位規模で失敗しても経験値は入る**ので、「失敗続きで育て直しに戻れない」死の螺旋にならない。
+   */
+  expScaleMultiplier: {
+    mini: 1,
+    mobile: 3,
+    indie: 6,
+    hit: 12,
+    aaa: 24,
+  },
   /** 次のレベルに必要な exp = expCurveBase × lv^expCurveExp */
   expCurveBase: 20,
   expCurveExp: 1.5,
@@ -224,7 +378,7 @@ export const GROWTH = {
 } as const;
 
 // ============================================================
-// 月給テーブル（balance-design §6-1、v0.16 で正規化 power に追従）
+// 月給テーブル（balance-scenario §6-1、v0.16 で正規化 power に追従）
 // ============================================================
 
 /**
@@ -247,7 +401,7 @@ export const computeMonthlyWage = (power: number, level = 1): number =>
   (Math.max(1, level) - 1) * MONTHLY_WAGE_FORMULA.perLevel;
 
 // ============================================================
-// 賃料（balance-design §6-2、一律固定）
+// 賃料（balance-scenario §6-2、一律固定）
 // ============================================================
 
 /**
@@ -257,7 +411,7 @@ export const computeMonthlyWage = (power: number, level = 1): number =>
 export const MONTHLY_RENT = 300_000; // ¥30 万
 
 // ============================================================
-// 借金（balance-design §6-7）
+// 借金（balance-scenario §6-7）
 // ============================================================
 
 /**
@@ -277,7 +431,7 @@ export const computeBorrowingLimit = (monthlyTotalFixedCost: number): number =>
   monthlyTotalFixedCost * DEBT_CONFIG.borrowingLimitMonths;
 
 // ============================================================
-// 規模別バランス（balance-design §5-1）
+// 規模別バランス（balance-scenario §5-1）
 // ============================================================
 
 /**
@@ -301,52 +455,60 @@ export const SCALE_BALANCE: Record<
 > = {
   mini: {
     devCost: 300_000, // ¥30 万
-    baseRevenue: 300_000, // normal で ×16.67 = ¥500 万
+    baseRevenue: 3_000_000, // 普通（×1）で ¥300 万
     unlockSalesRequired: 0,
     unlockCost: 0,
-    neededWeeks: 8, // 2 ヶ月 = リアル 60 秒
+    // 実装ステップ2：8週 → 4週（docs/spec/score-model.md §3。序盤の破産ウォール対策）。
+    // 総文数 24 → 12。開発は打鍵で終わるので、固定費が3ヶ月ぶん→1ヶ月ぶんに減る
+    neededWeeks: 4,
   },
   mobile: {
     devCost: 3_000_000, // ¥300 万
-    baseRevenue: 3_000_000, // normal で ¥5000 万
+    baseRevenue: 30_000_000, // 普通（×1）で ¥3000 万
     // v0.18：新分布に整合（旧値 ¥3000万 は初手メタ95時代の設定。8〜12作目で到達する水準に）
-    unlockSalesRequired: 30_000_000, // ¥3000 万（シミュレーションで 8〜16 作目に調整）
+    // 実装ステップ3：各規模を7〜9本ずつ遊べるペースに再校正（docs/spec/score-model.md §5）
+    unlockSalesRequired: 150_000_000, // ¥1.5 億（8作目前後）
     unlockCost: 2_000_000, // ¥200 万
     neededWeeks: 12, // 3 ヶ月
   },
   indie: {
     devCost: 50_000_000, // ¥5000 万
-    baseRevenue: 30_000_000, // normal で ¥5 億
-    unlockSalesRequired: 200_000_000, // ¥2 億（v0.18）
+    baseRevenue: 300_000_000, // 普通（×1）で ¥3 億
+    unlockSalesRequired: 1_100_000_000, // ¥11 億（16作目前後）
     unlockCost: 15_000_000, // ¥1500 万（v0.18）
     neededWeeks: 20, // 5 ヶ月
   },
   hit: {
     devCost: 1_000_000_000, // ¥10 億
-    baseRevenue: 300_000_000, // normal で ¥50 億
-    unlockSalesRequired: 2_000_000_000, // ¥20 億（v0.18）
+    baseRevenue: 2_000_000_000, // 普通（×1）で ¥20 億
+    unlockSalesRequired: 4_000_000_000, // ¥40 億（24作目前後）
     unlockCost: 150_000_000, // ¥1.5 億（v0.18）
     neededWeeks: 28, // 7 ヶ月
   },
   aaa: {
-    devCost: 10_000_000_000, // ¥100 億
-    baseRevenue: 3_000_000_000, // normal で ¥500 億
-    unlockSalesRequired: 25_000_000_000, // ¥250 億（v0.18）
+    // ¥100 億では**話題作のほうが儲かり、AAA を作る理由が消えていた**
+    // （A級Lv10 で 話題作 ¥110億 vs AAA ¥75億。終盤13本が「話題作を回すのが最適」になる）。
+    devCost: 4_000_000_000, // ¥40 億
+    // 普通（×1）で ¥60 億。¥50 億では、実ガチャで組んだチーム（2スキル持ちが混ざる）だと
+    // AAA がほぼ話題作に負け、最上位規模を作る理由が消えていた。
+    // 神ゲーで ¥600 億＝オーナー確定の「上限は数百億」に収まる。
+    baseRevenue: 6_000_000_000,
+    unlockSalesRequired: 20_000_000_000, // ¥200 億（32作目前後）
     unlockCost: 1_500_000_000, // ¥15 億（v0.18）
     neededWeeks: 36, // 9 ヶ月
   },
 };
 
 // ============================================================
-// v0.21「投資」：未解放ジャンル/テーマの先行購入（docs/v21 §4-A）
+// v0.21「投資」：未解放ジャンル/テーマの先行購入（v0.21 §4-A）
 // ============================================================
 
 /**
  * 未解放のジャンル/テーマを資金で「先行購入」する価格（`unlockStage` 別・ジャンル/テーマ共通）。
- * 叩き台 🔧：SCALE_BALANCE.unlockCost が各 stage の累計売上ゲートの約 6〜8% である比率を参考に設定。
  * stage が上がるほど到達に必要な実績が大きい＝価値が高い、を「人気なほど高い」の代理指標とする
  * （新しい人気度パラメータは作らない）。stage 1 は初期解放なので購入対象外（テーブルに載せない）。
- * 既存の無償自動解放（computeStageUnlocks：累計売上 or ヒット作本数）はそのまま併存する。
+ *
+ * **購入が唯一の解放経路。** 無償の自動解放（旧 computeStageUnlocks）は v0.29 で廃止した。
  */
 export const INVEST_CONFIG = {
   /**
@@ -362,54 +524,30 @@ export const INVEST_CONFIG = {
   } as Record<number, number>,
   /**
    * 先行購入するたびに次の価格へ掛かる公比（逓増カーブ・オーナー指示 2026-07-19「買うほど高くなる」）。
-   * price = 基礎額 × priceGrowth^(これまでの先行購入数)。1.8 で 5 個ごとに約 ×18、青天井の金の吸収先。
+   * `price = 基礎額 × priceGrowth^(その stage でこれまでに買った数)`。
+   *
+   * **1.8 → 1.2（2026-07-29）。** 1.8 は無償の自動解放と併存する前提の値で、
+   * v0.29 で自動解放を廃止したのに再調整されていなかった。実測で 21個目が ¥382億 ＝
+   * AAA の基準売上 ¥60億 でも次の1個が買えず、オーナー指摘「途中からあげれない」の直接原因。
+   *
+   * 1.2 なら stage2 の最後（22個目）が ¥1,380万、全49個の総額が ¥17.1億 ＝
+   * AAA 規模の解放費（¥15億）と同水準。「盤面を全部開ける」が長期の目標として成立する。
+   * それでも最後は初手の46倍なので「買うほど高くなる」は保っている。
    */
-  priceGrowth: 1.8,
+  priceGrowth: 1.2,
 } as const;
 
 // ============================================================
-// 品質計算の難易度補正（balance-design §2, §6-3〜§6-5）
+// 品質計算の難易度補正（balance-scenario §2, §6-3〜§6-5）
 // ============================================================
 
-/**
- * 4 要素品質計算のウェイト。
- *
- * v0.14 再配分（オーナー指示 2026-06-27）：
- * - タイピング 15%→37%：最大レバー化＝北極星「タイピングが主役」を数式で担保
- * - 運 10%→3%：適当プレイが運で 70 の壁（売上×33 倍）を越えないように
- * - 社員 50%→35%：ミニ規模では 2 人雇うだけで power 上限に飽和し、
- *   放置プレイでも高得点が出てしまっていた問題の緩和
- *
- *   final = (charPower × 0.35 + genreAffinity × 0.25 + typingScore × 0.37 + luck × 0.03)
- *           × luckMultiplier(0.97〜1.03)
- */
 /**
  * v0.16 改訂（オーナー確定「能力を一番考慮する」）：
  * キャラ能力を最大の支配項（0.60）に。相性とタイピングを両方カンストしても
  * 能力抜きでは品質 +30 が上限＝スコア帯は会社の育ちでしか上がらない。
  * 旧: charPower 0.35 / genreAffinity 0.25 / typingScore 0.37 / luck 0.03
  */
-export const QUALITY_WEIGHTS = {
-  charPower: 0.6,
-  genreAffinity: 0.15,
-  typingScore: 0.15,
-  luck: 0.1,
-} as const;
 
-/**
- * v0.16：ビルドアップ属性ボーナス（devStats → 品質加点）の上限。
- * 旧実装は上限なしで青天井だったため、序盤でもスコアが積み上がりすぎた。
- */
-export const STAT_QUALITY_BONUS_CAP = 8;
-
-/**
- * v0.17.1：軸ボーナス（企画の面白さ/操作性/バランス×0.3 ＋ ビルドアップ属性）の
- * **正の合計の上限**。これらはコンボ・速度倍率＝タイピングの腕で増えるため、
- * 上限がないと QUALITY_WEIGHTS のタイピング 0.15 を裏口で迂回してしまう
- * （オーナー指摘「タイピングは0.15のはずなのにかなり加算されてる」）。
- * 上限 8 ＝ 分布シミュレーションで「序盤はメタ70に届かない」帯を維持できる最大値 🔧
- */
-export const AXIS_QUALITY_BONUS_CAP = 8;
 
 /**
  * v0.25：装備（設備）によるカテゴリ品質ボーナスの上限。
@@ -418,7 +556,6 @@ export const AXIS_QUALITY_BONUS_CAP = 8;
  * 青天井にすると分布ガード（メタ95は終盤）を壊すため上限付き。
  * 値は装備込み/なし両シナリオで balanceSimulation / progressionSimulation が緑になる交点で確定する 🔧
  */
-export const EQUIP_QUALITY_BONUS_CAP = 6;
 
 // ============================================================
 // v0.17：バグ発生システム（spec v17 §4。数値は叩き台 🔧）
@@ -440,8 +577,11 @@ export const BUG_CONFIG = {
    * 社員能力が高ければ割合が低くなる」。mini（正打 200〜300 打）で 3〜5 匹の期待値
    */
   onKeystrokeRate: 0.02,
-  /** 抑制率 = min(maxSuppression, プログラマー power 合計 / suppressCap) */
-  suppressCap: 2.0,
+  /**
+   * 抑制率 = min(maxSuppression, プログラミングスキル合計 / suppressSkillCap)。
+   * 旧 power 合計（上限2.0）と同じ体感になるよう ×100 スケールに合わせた。
+   */
+  suppressSkillCap: 200,
   maxSuppression: 0.8,
   /**
    * 開発完了時の最低保証バグ数。「どんなコードにもバグはいる」＝
@@ -458,7 +598,7 @@ export const BUG_CONFIG = {
 } as const;
 
 // ============================================================
-// v0.20：打鍵ジュース＆山場（docs/v20。数値は叩き台 🔧）
+// v0.20：打鍵ジュース＆山場（v0.20。数値は叩き台 🔧）
 // ============================================================
 
 /**
@@ -501,13 +641,10 @@ export const JUICE_CONFIG = {
 } as const;
 
 /**
- * 各スコアの計算基準値（balance-design §6-3〜§6-5）。
+ * 各スコアの計算基準値（balance-scenario §6-3〜§6-5）。
  * 「何もしないと base 30」設計。base + 各種ボーナスで 100 まで上がる。
  */
-export const SCORE_BASE = 30;
 
-/** 運の中庸値 */
-export const LUCK_DEFAULT = 50;
 
 /**
  * v0.18：リリース結果アドバイス（core/advice.ts）の「高水準」しきい値 🔧叩き台。

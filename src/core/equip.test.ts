@@ -1,23 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { EQUIPMENT_BY_ID } from '../data/equipment';
+import { ALL_EQUIPMENT, EQUIPMENT_BY_ID } from '../data/equipment';
 import {
   canBuyEquipment,
-  computeEquipCategoryMul,
   countAssigned,
   type EquipLoadout,
   equipmentPrice,
   freeCopies,
+  effectiveSkillsOf,
   loadoutCategoryMul,
 } from './equip';
 
 describe('loadoutCategoryMul', () => {
   it('未装備（空ロードアウト）は全カテゴリ 1.0', () => {
-    expect(loadoutCategoryMul({})).toEqual({ program: 1, graphics: 1, sound: 1, design: 1 });
+    expect(loadoutCategoryMul({})).toEqual({ program: 1, graphics: 1, sound: 1, scenario: 1 });
   });
 
   it('初期装備（cost0・categoryMulなし）も 1.0', () => {
     const lo: EquipLoadout = { pc: 'pc-laptop', chair: 'chair-basic', misc: 'misc-none' };
-    expect(loadoutCategoryMul(lo)).toEqual({ program: 1, graphics: 1, sound: 1, design: 1 });
+    expect(loadoutCategoryMul(lo)).toEqual({ program: 1, graphics: 1, sound: 1, scenario: 1 });
   });
 
   it('スロットのカテゴリ倍率をカテゴリごとに掛け合わせる（PC×チェア）', () => {
@@ -27,7 +27,7 @@ describe('loadoutCategoryMul', () => {
     expect(m.program).toBeCloseTo(1.2 * 1.05, 5);
     expect(m.graphics).toBeCloseTo(1.05, 5);
     expect(m.sound).toBeCloseTo(1.05, 5);
-    expect(m.design).toBeCloseTo(1.05, 5);
+    expect(m.scenario).toBeCloseTo(1.05, 5);
   });
 
   it('小物のカテゴリ特化（液タブ=graphics）が乗る', () => {
@@ -41,37 +41,11 @@ describe('loadoutCategoryMul', () => {
       program: 1,
       graphics: 1,
       sound: 1,
-      design: 1,
+      scenario: 1,
     });
   });
 });
 
-describe('computeEquipCategoryMul（集約）', () => {
-  it('社員ゼロは全カテゴリ 1.0', () => {
-    expect(computeEquipCategoryMul([])).toEqual({ program: 1, graphics: 1, sound: 1, design: 1 });
-  });
-
-  it('全員同じ装備なら、その増分が満額で乗る', () => {
-    const lo: EquipLoadout = { pc: 'pc-desktop' }; // program 1.2
-    const m = computeEquipCategoryMul([lo, lo, lo]);
-    expect(m.program).toBeCloseTo(1.2, 5);
-  });
-
-  it('半分だけ装備すると増分が平均化される（人数非依存の集約）', () => {
-    // 2人中1人だけ program 1.2 → 集約 program = 1 + (0.2 + 0)/2 = 1.1
-    const equipped: EquipLoadout = { pc: 'pc-desktop' };
-    const bare: EquipLoadout = {};
-    const m = computeEquipCategoryMul([equipped, bare]);
-    expect(m.program).toBeCloseTo(1.1, 5);
-    expect(m.graphics).toBe(1);
-  });
-
-  it('渡した byId を使う（依存注入）', () => {
-    const m = computeEquipCategoryMul([{ pc: 'pc-gaming' }], EQUIPMENT_BY_ID);
-    expect(m.program).toBeCloseTo(1.35, 5);
-    expect(m.design).toBeCloseTo(1.1, 5);
-  });
-});
 
 describe('equipmentPrice / canBuyEquipment', () => {
   it('価格はテーブルの cost', () => {
@@ -104,5 +78,49 @@ describe('countAssigned / freeCopies（実体方式の空き）', () => {
     expect(freeCopies(owned, loadouts, 'pc-desktop')).toBe(1);
     expect(freeCopies(owned, [], 'pc-desktop')).toBe(3);
     expect(freeCopies({}, loadouts, 'pc-desktop')).toBe(-2); // 所有0で2使用中（防御的に負値）
+  });
+});
+
+describe('effectiveSkillsOf（実装ステップ4：装備は社員のスキルに倍率を掛ける）', () => {
+  const emp = (skills: Record<string, number>, equipped = {}) =>
+    ({ id: 'e', name: 'x', role: 'programmer', power: 0, basePower: 0, level: 1, exp: 0, wage: 0, specialties: [], skills, equipped }) as never;
+
+  it('装備なしならスキルは変わらない', () => {
+    expect(effectiveSkillsOf(emp({ graphics: 60 }))).toEqual({ graphics: 60 });
+  });
+
+  it('液タブ（グラフィック ×1.25）でグラフィックだけ伸びる', () => {
+    const e = emp({ graphics: 60, sound: 40 }, { misc: 'misc-pentab' });
+    const s = effectiveSkillsOf(e);
+    expect(s.graphics).toBe(75);
+    expect(s.sound).toBe(40);
+  });
+
+  it('スロットの倍率は掛け合わさる（PC × チェア）', () => {
+    const e = emp({ programming: 100 }, { pc: 'pc-desktop', chair: 'chair-ergo' });
+    // 1.2 × 1.1 = 1.32
+    expect(effectiveSkillsOf(e).programming).toBeCloseTo(132, 0);
+  });
+
+  it('実効スキルは 100 を超えてよい（終盤に装備を買う理由を残す）', () => {
+    const e = emp({ graphics: 100 }, { misc: 'misc-pentab' });
+    expect(effectiveSkillsOf(e).graphics).toBeGreaterThan(100);
+  });
+
+  it('持っていないスキルは装備で生えない', () => {
+    expect(effectiveSkillsOf(emp({ graphics: 50 }, { misc: 'misc-monitor-speaker' })).sound).toBeUndefined();
+  });
+
+  it('広報スキルは装備の対象外（開発4分野だけに掛かる）', () => {
+    const e = emp({ pr: 80 }, { chair: 'chair-ergo' });
+    expect(effectiveSkillsOf(e).pr).toBe(80);
+  });
+
+  it('4つの開発分野すべてに特化アイテムがある（引いた職種が腐らない）', () => {
+    const fields = ['program', 'graphics', 'sound', 'scenario'] as const;
+    for (const f of fields) {
+      const has = ALL_EQUIPMENT.some((d) => (d.categoryMul?.[f] ?? 1) >= 1.2);
+      expect(has, f).toBe(true);
+    }
   });
 });

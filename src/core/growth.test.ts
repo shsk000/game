@@ -12,7 +12,7 @@ const emp = (over: Partial<Employee> = {}): Employee => ({
   level: 1,
   exp: 0,
   wage: 540_000,
-  specialties: [],
+  specialties: [], skills: {},
   ...over,
 });
 
@@ -64,13 +64,15 @@ describe('applyReleaseGrowth', () => {
     expect(r.levelUps).toEqual([]);
   });
 
-  it('しきい値を越えるとレベルアップし、power と月給が上がる', () => {
-    const a = emp({ id: 'a', exp: nextExpFor(1) - 5 }); // あと 5 で Lv2
+  it('しきい値を越えるとレベルアップし、スキル・power・月給が上がる', () => {
+    // 実装ステップ3：伸びるのは**総合力**で、power はそこから導出される
+    const a = emp({ id: 'a', exp: nextExpFor(1) - 5, rank: 'B', skills: { programming: 18 } });
     const r = applyReleaseGrowth([a], ['a'], 50); // +15 exp
     const grown = r.employees[0];
     expect(grown.level).toBe(2);
     expect(grown.exp).toBe(a.exp + 15 - nextExpFor(1));
-    expect(grown.power).toBe(powerAt(a.basePower, 2));
+    expect(grown.skills!.programming!).toBeGreaterThan(a.skills!.programming!);
+    expect(grown.power).toBeCloseTo(grown.skills!.programming! / 100, 2);
     expect(grown.wage).toBe(Math.round(computeMonthlyWage(grown.power, 2)));
     expect(r.levelUps).toEqual([
       expect.objectContaining({ employeeId: 'a', name: a.name, level: 2 }),
@@ -95,5 +97,56 @@ describe('applyReleaseGrowth', () => {
     const r = applyReleaseGrowth([a], ['a'], 95);
     expect(r.employees[0].level).toBe(GROWTH.levelCap);
     expect(r.levelUps).toEqual([]);
+  });
+});
+
+describe('旧セーブから移行した社員（rank なし）の成長', () => {
+  it('レベルが上がるとスキルも旧来の成長率と同じ比率で伸びる', () => {
+    // 旧セーブ移行組は rank を持たない。以前はここでスキルが据え置かれ、
+    // 「レベルは上がったのに強くならない」状態になっていた（実機検証で発見）。
+    const before = emp({ power: 0.4, basePower: 0.4, level: 1, skills: { programming: 40 } });
+    const after = applyReleaseGrowth([before], ['e1'], 95).employees[0];
+    expect(after.level).toBeGreaterThan(before.level);
+    expect(after.power).toBe(powerAt(0.4, after.level));
+    // power と同じ倍率でスキルも伸びている
+    expect(after.skills!.programming!).toBeCloseTo(40 * (after.power / before.power), 1);
+  });
+
+  it('2スキル持ちでも配分の比率は変わらない', () => {
+    const before = emp({ power: 0.5, basePower: 0.5, level: 1, skills: { graphics: 30, sound: 20 } });
+    const after = applyReleaseGrowth([before], ['e1'], 95).employees[0];
+    expect(after.skills!.graphics! / after.skills!.sound!).toBeCloseTo(30 / 20, 2);
+  });
+});
+
+describe('ゲーム規模ごとの exp 倍率（docs/spec/score-model.md §1）', () => {
+  it('大きい規模ほど1本あたりの exp が増える', () => {
+    const meta = 63;
+    const gains = (['mini', 'mobile', 'indie', 'hit', 'aaa'] as const).map((s) =>
+      expForRelease(meta, s),
+    );
+    for (let i = 1; i < gains.length; i++) {
+      expect(gains[i]).toBeGreaterThan(gains[i - 1]);
+    }
+    // ミニゲームは従来どおり（倍率 ×1）
+    expect(gains[0]).toBe(GROWTH.expBase + 5);
+  });
+
+  it('規模を省略するとミニゲーム扱い（既存の呼び出しの挙動を変えない）', () => {
+    expect(expForRelease(63)).toBe(expForRelease(63, 'mini'));
+  });
+
+  it('上位規模は失敗しても経験値が入る（育て直しに戻れない死の螺旋を防ぐ）', () => {
+    // メタが低くても規模の倍率は掛かるので、AAA で失敗し続けても育つ
+    const failAtAaa = expForRelease(20, 'aaa');
+    const successAtMini = expForRelease(95, 'mini');
+    expect(failAtAaa).toBeGreaterThan(successAtMini);
+  });
+
+  it('applyReleaseGrowth に規模が伝わる', () => {
+    const e = emp({ id: 'e1', exp: 0 });
+    const mini = applyReleaseGrowth([e], ['e1'], 63, 'mini');
+    const aaa = applyReleaseGrowth([e], ['e1'], 63, 'aaa');
+    expect(aaa.employees[0].level).toBeGreaterThan(mini.employees[0].level);
   });
 });

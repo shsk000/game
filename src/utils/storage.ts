@@ -1,7 +1,14 @@
 import { computeStageUnlocks } from '../core/progression';
-import { computeMonthlyWage, INITIAL_FUNDS, SCALE_BALANCE } from '../data/balance';
-import type { CategoryId } from '../data/categories';
-import { INITIAL_CATEGORY_IDS } from '../data/categories';
+import { capSkill, ownedSkillIds, totalPowerFor, totalPowerOf } from '../core/skills';
+import {
+  computeMonthlyWage,
+  GACHA_CONFIG,
+  type GachaRank,
+  INITIAL_FUNDS,
+  RANK_TOTAL_POWER,
+  SCALE_BALANCE,
+  SKILL_CONFIG,
+} from '../data/balance';
 import type { GenreId } from '../data/genres';
 import { INITIAL_GENRE_IDS } from '../data/genres';
 import type { Scale } from '../data/scales';
@@ -13,6 +20,7 @@ import type {
   Candidate,
   Employee,
   GameDate,
+  SkillId,
   Work,
   WorkBreakdown,
 } from '../state/types';
@@ -57,7 +65,6 @@ export type Persisted = {
   unlockedScales: Scale[];
   unlockedGenres: GenreId[];
   unlockedThemes: ThemeId[];
-  unlockedCategories: CategoryId[];
   ghosts: Record<Scale, number | null>;
   library: Work[];
   trend: Trend | null;
@@ -74,7 +81,6 @@ export type Persisted = {
   candidate: Candidate | null;
   gachaPity: number;
   /** v0.21 投資：先行購入した累計回数（価格の逓増カーブ計算に使う。旧セーブは 0 に既定） */
-  investPurchaseCount: number;
   /**
    * v0.25 装備：購入済み装備の個数マップ（itemId→個数・実体方式で1個=1社員ぶん）。
    * version は 7 のまま（加算的変更・旧セーブは defaults マージで {}）。
@@ -96,12 +102,10 @@ const emptyGhostsRecord = (): Record<Scale, number | null> => ({
 });
 
 const defaultBreakdown = (): WorkBreakdown => ({
-  base: 30,
-  categories: 0,
-  employees: 0,
-  performance: 0,
-  ads: 0,
-  variance: 0,
+  base: 0,
+  compatBonus: 0,
+  trendBonus: 0,
+  criticVariance: 0,
 });
 
 export const defaults = (): Persisted => ({
@@ -117,7 +121,6 @@ export const defaults = (): Persisted => ({
   // ファンタジー・SF・忍者などの人気テーマは終盤解放。
   unlockedGenres: [...INITIAL_GENRE_IDS],
   unlockedThemes: [...INITIAL_THEME_IDS],
-  unlockedCategories: [...INITIAL_CATEGORY_IDS],
   ghosts: emptyGhostsRecord(),
   library: [],
   trend: null,
@@ -128,7 +131,6 @@ export const defaults = (): Persisted => ({
   currentDate: { ...INITIAL_GAME_DATE },
   candidate: null,
   gachaPity: 0,
-  investPurchaseCount: 0,
   ownedItems: {},
   muted: false,
   volume: 1,
@@ -153,7 +155,6 @@ const migrateWorkV2 = (w: LegacyWork): Work => {
     genreId: (w.genreId ?? 'action') as Work['genreId'],
     themeId: (w.themeId ?? 'fantasy') as Work['themeId'],
     scale: (w.scale ?? 'mini') as Work['scale'],
-    quality: w.quality ?? 0,
     metascore: w.metascore ?? 0,
     isMasterpiece: w.isMasterpiece ?? false,
     developSec: w.developSec ?? 0,
@@ -170,7 +171,6 @@ const migrateWorkV2 = (w: LegacyWork): Work => {
     releasedAt: w.createdAt ?? Date.now(),
     createdAt: w.createdAt ?? Date.now(),
     breakdown: w.breakdown ?? defaultBreakdown(),
-    selectedCategories: w.selectedCategories,
   };
 };
 
@@ -199,18 +199,75 @@ const OLD_POWER_MAX: Record<Employee['role'], number> = {
 
 const normalizeEmployeeV6 = (e: LegacyEmployeeV5): Employee => {
   if (e.basePower !== undefined && e.level !== undefined && e.exp !== undefined) {
-    return e as Employee; // すでに v6 形式
+    return ensureSkills(e as Employee); // すでに v6 形式
   }
   const raw = e.power / (OLD_POWER_MAX[e.role] ?? 1);
   const power = Math.min(1, Math.max(0.05, Math.round(raw * 100) / 100));
-  return {
+  return ensureSkills({
     ...e,
     power,
     basePower: power,
     level: 1,
     exp: 0,
     wage: Math.round(computeMonthlyWage(power)),
-  };
+  } as Employee);
+};
+
+/**
+ * スキル移行（docs/spec/score-model.md §1・実装ステップ1）。
+ *
+ * 旧セーブの社員は `power`（0..1）と `role` しか持たない。総合力は `power × 100` で復元し、
+ * 役割から主スキルを1つ割り当てる（**1スキルの尖った社員**として復元）。
+ * 旧 `specialties` はカテゴリ体系が違ううえ未接続だったため引き継がない。
+ *
+ * バージョンは上げない加算的移行（欠損フィールドの補完）。既存セーブは壊れない。
+ */
+const ROLE_TO_PRIMARY_SKILL: Record<string, SkillId> = {
+  programmer: 'programming',
+  designer: 'graphics',
+  pr: 'pr',
+};
+
+/**
+ * `basePower` からランクを復元する。
+ *
+ * `basePower` は `rollPowerForRank` がランク帯（B 0.2〜0.4 / A 0.4〜0.55 / S 0.55〜0.7）から
+ * 引いた値なので、帯へ戻すのは**推測ではなく逆変換**。実装ステップ1 ではランクは
+ * 表示（ガチャランクのバッジ）にしか効かないので、これで数値は一切動かない。
+ */
+const rankFromBasePower = (basePower: number): GachaRank => {
+  if (basePower >= GACHA_CONFIG.powerRange.S.min) return 'S';
+  if (basePower >= GACHA_CONFIG.powerRange.A.min) return 'A';
+  return 'B';
+};
+
+const ensureSkills = (e: Employee): Employee => {
+  const rank = e.rank ?? rankFromBasePower(e.basePower ?? e.power);
+  const level = e.level ?? 1;
+  const owned = ownedSkillIds(e.skills ?? {});
+
+  // 実装ステップ3：総合力は**ランクとレベルから引き直す**（Lv1 15〜28／Lv10 で天井）。
+  // 旧スケール（旧 power × 100）のままだと天井を超えたまま残る。
+  // 実装ステップ1〜2 期のセーブは**すでにスキルを持っている**ので、
+  // 「スキルが無い社員だけ」を対象にすると引き直しから漏れる（実際に漏れていた）。
+  const total = totalPowerFor(rank, level);
+
+  if (owned.length === 0) {
+    const primary = ROLE_TO_PRIMARY_SKILL[e.role] ?? 'programming';
+    return { ...e, rank, skills: { [primary]: capSkill(total) } };
+  }
+
+  // すでに新スケールに収まっているなら触らない（毎回引き直すと成長のブレが消える）
+  const current = totalPowerOf(e.skills ?? {});
+  const ceiling = RANK_TOTAL_POWER[rank].lv10;
+  if (current <= ceiling + 0.5) return e.rank ? e : { ...e, rank };
+
+  // 天井を超えている＝旧スケールのまま。配分の比率を保って引き直す
+  const spread = owned.length >= 2 ? SKILL_CONFIG.spreadPenalty : 1;
+  const eff = total * spread;
+  const skills: Employee['skills'] = {};
+  for (const id of owned) skills[id] = capSkill(eff * ((e.skills?.[id] ?? 0) / current));
+  return { ...e, rank, skills };
 };
 
 /** v0.9 → v0.10 用：work の金額を ×10,000 倍する */
@@ -253,10 +310,6 @@ const migrateFromV4 = (raw: string): Persisted | null => {
       unlockedScales: (old.unlockedScales ?? base.unlockedScales) as Scale[],
       unlockedGenres: (old.unlockedGenres ?? base.unlockedGenres) as GenreId[],
       unlockedThemes: (old.unlockedThemes ?? base.unlockedThemes) as ThemeId[],
-      unlockedCategories:
-        old.unlockedCategories && old.unlockedCategories.length > 0
-          ? (old.unlockedCategories as CategoryId[])
-          : [...INITIAL_CATEGORY_IDS],
       ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
       library,
       trend: old.trend ?? null,
@@ -299,7 +352,6 @@ const migrateFromV3 = (raw: string): Persisted | null => {
       unlockedScales: (old.unlockedScales ?? base.unlockedScales) as Scale[],
       unlockedGenres: (old.unlockedGenres ?? base.unlockedGenres) as GenreId[],
       unlockedThemes: (old.unlockedThemes ?? base.unlockedThemes) as ThemeId[],
-      unlockedCategories: [...INITIAL_CATEGORY_IDS],
       ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
       library,
       trend: old.trend ?? null,
@@ -341,7 +393,6 @@ const migrateFromV2 = (raw: string): Persisted | null => {
       unlockedScales: (old.unlockedScales ?? ['mini']) as Scale[],
       unlockedGenres: (old.unlockedGenres ?? base.unlockedGenres) as GenreId[],
       unlockedThemes: (old.unlockedThemes ?? base.unlockedThemes) as ThemeId[],
-      unlockedCategories: [...INITIAL_CATEGORY_IDS],
       ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
       library,
       trend: old.trend ?? null,
@@ -367,7 +418,6 @@ const migrateFromV1 = (raw: string): Persisted | null => {
       ...base,
       funds: Math.round((old.funds ?? 0) * V10_MONEY_MULTIPLIER),
       unlockedScales: (old.unlockedScales ?? ['mini']) as Scale[],
-      unlockedCategories: [...INITIAL_CATEGORY_IDS],
       ghosts: { ...base.ghosts, ...(old.ghosts ?? {}) } as Record<Scale, number | null>,
       library: (old.library ?? []).map(migrateWorkV2).map(rescaleWorkForV10),
       currentDate: { ...INITIAL_GAME_DATE },
@@ -421,10 +471,6 @@ const shapeLoaded = (parsed: Persisted): Persisted => {
   merged.employees = merged.employees.map((e) =>
     normalizeEmployeeV6({ ...e, specialties: e.specialties ?? [] }),
   );
-  merged.unlockedCategories =
-    parsed.unlockedCategories && parsed.unlockedCategories.length > 0
-      ? parsed.unlockedCategories
-      : [...INITIAL_CATEGORY_IDS];
   merged.currentDate = parsed.currentDate ?? { ...INITIAL_GAME_DATE };
   // v0.22：旧 v7 セーブにはガチャフィールドが無い（デフォルト補完）
   merged.candidate = parsed.candidate ?? null;

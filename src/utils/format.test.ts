@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SALES_MULTIPLIER_BY_SCORE, SCALE_BALANCE } from '../data/balance';
 import { estimateRevenueRange, formatRoi, formatWeeks, formatYen, formatYenShort } from './format';
 
 describe('formatYen', () => {
@@ -62,12 +63,65 @@ describe('formatRoi', () => {
   });
 });
 
-describe('estimateRevenueRange', () => {
-  it('baseUnit を中央値に low ×0.5 / high ×5 のレンジ', () => {
-    expect(estimateRevenueRange(1_000_000)).toEqual({
-      low: 500_000,
-      mid: 1_000_000,
-      high: 5_000_000,
-    });
+describe('estimateRevenueRange（このチームで届く売上の範囲）', () => {
+  const emp = (skills: Record<string, number>) =>
+    ({
+      id: 'e',
+      name: 'e',
+      role: 'designer',
+      power: 0.2,
+      basePower: 0.2,
+      level: 1,
+      exp: 0,
+      wage: 0,
+      specialties: [],
+      rank: 'B',
+      skills,
+    }) as never;
+
+  it('社員がいなければ最低帯（打てる分野が無いので致命的失敗）', () => {
+    const r = estimateRevenueRange('mini', []);
+    expect(r.mid).toBe(
+      Math.round(SCALE_BALANCE.mini.baseRevenue * SALES_MULTIPLIER_BY_SCORE.catastrophic),
+    );
+  });
+
+  it('チームが強いほど予測が上がる（固定の段ではない）', () => {
+    const weak = estimateRevenueRange('mini', [emp({ programming: 10 })]);
+    const strong = estimateRevenueRange('mini', [
+      emp({ programming: 100 }),
+      emp({ graphics: 100 }),
+      emp({ sound: 100 }),
+      emp({ scenario: 100 }),
+    ]);
+    expect(strong.mid).toBeGreaterThan(weak.mid);
+  });
+
+  it('low ≤ mid ≤ high（評価家のブレ ±5 の幅）', () => {
+    const r = estimateRevenueRange('indie', [emp({ programming: 60 }), emp({ graphics: 60 })]);
+    expect(r.low).toBeLessThanOrEqual(r.mid);
+    expect(r.mid).toBeLessThanOrEqual(r.high);
+  });
+
+  it('実際に起こりうる売上の範囲を外さない（致命的失敗〜神ゲー）', () => {
+    for (const scale of ['mini', 'mobile', 'indie', 'hit', 'aaa'] as const) {
+      const base = SCALE_BALANCE[scale].baseRevenue;
+      const r = estimateRevenueRange(scale, [emp({ programming: 50 })]);
+      expect(r.low).toBeGreaterThanOrEqual(base * SALES_MULTIPLIER_BY_SCORE.catastrophic);
+      expect(r.high).toBeLessThanOrEqual(base * SALES_MULTIPLIER_BY_SCORE.godGame);
+    }
+  });
+
+  it('AAA を赤字帯で固定表示しない（旧実装は失敗帯固定で −¥70億 と出していた）', () => {
+    const best = estimateRevenueRange('aaa', [
+      emp({ programming: 100 }),
+      emp({ graphics: 100 }),
+      emp({ sound: 100 }),
+      emp({ scenario: 100 }),
+      emp({ programming: 100 }),
+      emp({ graphics: 100 }),
+    ]);
+    // 開発費 ¥100億 を上回る予測が出る
+    expect(best.mid).toBeGreaterThan(10_000_000_000);
   });
 });

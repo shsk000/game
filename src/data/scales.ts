@@ -7,7 +7,6 @@ export type ScaleDef = {
   name: string;
   requiredLoC: number;
   baseQuality: number;
-  baseUnit: number;
   unlockCost: number;
   /** v0.18：解放に必要な累計売上（これまで未参照の死に設定だったのを有効化） */
   unlockSalesRequired: number;
@@ -26,30 +25,29 @@ export type ScaleDef = {
  * 旧バージョンでは scales.ts に数値が直接書かれていたが、ゲームバランス調整を
  * 1 ファイルに集約するため balance.ts に移行。ScaleDef の型は互換維持。
  *
- * - requiredLoC, baseQuality, baseUnit は scales.ts ローカルで保持（balance に未含）
+ * - requiredLoC, baseQuality は scales.ts ローカルで保持（balance に未含）
  *   ※ requiredLoC は時間ベース完了の現在は副指標、進捗バー表示用
+ * - 旧 `baseUnit`（予想売上レンジ用の別数列）は削除。実売上式（baseRevenue × 段倍率）と
+ *   接点がなく、インディー以上で予測が実際の最悪帯すら下回る詐称の原因だった。
+ *   予測は utils/format.ts の estimateRevenueRange が balance.ts から直接引く。
  * - neededWeeks, baseCost, monthlyRent は balance.ts から引く
  * - unlockCost は balance.ts の unlockCost を踏襲
  */
 export const SCALES: ScaleDef[] = (['mini', 'mobile', 'indie', 'hit', 'aaa'] as Scale[]).map(
   (id) => {
     const b = SCALE_BALANCE[id];
-    const meta: Record<
-      Scale,
-      { name: string; requiredLoC: number; baseQuality: number; baseUnit: number }
-    > = {
-      mini: { name: 'ミニゲーム', requiredLoC: 8, baseQuality: 30, baseUnit: 1_000_000 },
-      mobile: { name: 'スマホゲーム', requiredLoC: 20, baseQuality: 35, baseUnit: 3_000_000 },
-      indie: { name: 'インディー大作', requiredLoC: 50, baseQuality: 40, baseUnit: 8_000_000 },
-      hit: { name: '話題作', requiredLoC: 100, baseQuality: 45, baseUnit: 18_000_000 },
-      aaa: { name: 'AAAタイトル', requiredLoC: 200, baseQuality: 50, baseUnit: 40_000_000 },
+    const meta: Record<Scale, { name: string; requiredLoC: number; baseQuality: number }> = {
+      mini: { name: 'ミニゲーム', requiredLoC: 8, baseQuality: 30 },
+      mobile: { name: 'スマホゲーム', requiredLoC: 20, baseQuality: 35 },
+      indie: { name: 'インディー大作', requiredLoC: 50, baseQuality: 40 },
+      hit: { name: '話題作', requiredLoC: 100, baseQuality: 45 },
+      aaa: { name: 'AAAタイトル', requiredLoC: 200, baseQuality: 50 },
     };
     return {
       id,
       name: meta[id].name,
       requiredLoC: meta[id].requiredLoC,
       baseQuality: meta[id].baseQuality,
-      baseUnit: meta[id].baseUnit,
       unlockCost: b.unlockCost,
       unlockSalesRequired: b.unlockSalesRequired,
       neededWeeks: b.neededWeeks,

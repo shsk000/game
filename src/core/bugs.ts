@@ -1,7 +1,7 @@
-import { BUG_CONFIG, ROLE_EFFECT } from '../data/balance';
-import { sumProgrammerSpeed } from '../data/employees';
+import { BUG_CONFIG } from '../data/balance';
 import type { Employee } from '../state/types';
 import type { Rng } from './ports';
+import { skillTotalsOf } from './skills';
 
 /**
  * v0.17 バグ発生システム（spec v17 §4）。純粋関数のみ。
@@ -9,16 +9,21 @@ import type { Rng } from './ports';
  * エンジニア（プログラマー）の質が高いほど発生が抑制される。
  */
 
-/** プログラマー power 合計（正規化スケール）。sumProgrammerSpeed は係数込みなので割り戻す */
-const programmerPowerSum = (employees: Employee[]): number =>
-  sumProgrammerSpeed(employees) / ROLE_EFFECT.programmerLocPerSec;
-
 /**
- * バグ抑制率（0..maxSuppression）。プログラマーの power 合計で決まる。
- * 例：新人 1 人（0.4）→ 20% 抑制 / 育った 2 人（合計 2.0）→ 80% 抑制（上限）
+ * バグ抑制率（0..maxSuppression）。**プログラミングスキルの合計**で決まる。
+ *
+ * 実装ステップ3：旧「役職 programmer の power 合計」から付け替えた
+ * （docs/spec/score-model.md §1）。役職という枠をやめたので、
+ * 「プログラミングを持っている人が何人いるか」で決まる形にした。
+ * 同分野の2人目以降は半減（`skillTotalsOf`）＝分業のロスは他と同じ扱い。
+ *
+ * 例：スキル40 が1人 → 20% 抑制 ／ スキル100 が2人（合計150）→ 75% 抑制
  */
 export const bugSuppression = (employees: Employee[]): number =>
-  Math.min(BUG_CONFIG.maxSuppression, programmerPowerSum(employees) / BUG_CONFIG.suppressCap);
+  Math.min(
+    BUG_CONFIG.maxSuppression,
+    skillTotalsOf(employees).programming / BUG_CONFIG.suppressSkillCap,
+  );
 
 /**
  * ミス打鍵はバグ確定（v0.17.1 オーナー指示「入力間違えた場合はバグ」）。
@@ -26,9 +31,23 @@ export const bugSuppression = (employees: Employee[]): number =>
  */
 export const rollBugOnMiss = (): boolean => BUG_CONFIG.missAlwaysBugs;
 
+/**
+ * バグ率の軸（`axes.bugRate`）による発生率の補正。
+ *
+ * イベントが「バグ率 −10%」と表示して与える報酬の**効き先**。
+ * 実装ステップ3 で旧品質経路を消したとき、この消費側だけが道連れで消え、
+ * 報酬（4イベント）と画面表示だけが残って**効かない数値**になっていた。
+ * `docs/CLAUDE.md` が列挙している事故（軸「売上予測」・「開発 +0.60 LoC/秒」）と同じ形。
+ *
+ * −100% で発生ゼロ、+100% で倍。極端な値でも壊れないよう 0〜2 でクランプする。
+ */
+export const bugRateMultiplier = (bugRate = 0): number =>
+  Math.max(0, Math.min(2, 1 + bugRate / 100));
+
 /** 正打 1 打鍵ごとのバグ発生判定（実装するほどバグは埋まる。ミスゼロでも出る） */
-export const rollBugOnKeystroke = (employees: Employee[], rng: Rng): boolean =>
-  rng() < BUG_CONFIG.onKeystrokeRate * (1 - bugSuppression(employees));
+export const rollBugOnKeystroke = (employees: Employee[], rng: Rng, bugRate = 0): boolean =>
+  rng() <
+  BUG_CONFIG.onKeystrokeRate * (1 - bugSuppression(employees)) * bugRateMultiplier(bugRate);
 
 /**
  * 開発完了時の最低保証（v0.17.1）。抽選が全部外れても最低 minBugsOnDevComplete 匹は
@@ -79,7 +98,7 @@ export const BUG_FIX_PHRASES = [
   'てすとをかきたす',
   'あさーとをいれる',
   'えっじけーすをつぶす',
-  'おふばいわんをなおす',
+  'ひとつずれをなおす',
   'たいむあうとをのばす',
   'りとらいをくみこむ',
   'でっどろっくをさける',

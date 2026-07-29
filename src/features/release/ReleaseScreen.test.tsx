@@ -15,7 +15,7 @@ const finishedProject: CurrentProject = {
   scale: 'mini',
   phase: 'release',
   axes: { ...ZERO_AXES },
-  devStats: { program: 0, graphics: 0, sound: 0, design: 0 },
+  devStats: { program: 0, graphics: 0, sound: 0, scenario: 0 },
   requiredLoC: 100,
   doneLoC: 24,
   maxCombo: 50,
@@ -26,7 +26,6 @@ const finishedProject: CurrentProject = {
   finishedAt: 60_000,
   adBoostActive: false,
   surveyedCompat: null,
-  selectedCategories: [],
   assignedEmployeeIds: [],
   perf: { wpm: 120, maxCombo: 50, accuracy: 1 },
   startDate: { year: 2026, month: 1, week: 1 },
@@ -57,7 +56,7 @@ describe('ReleaseScreen（ユースケース：結果を発表して作品が世
     expect(s.current).toBeNull();
 
     // UI 側：開封演出（約 3.8 秒）の後にメタスコアのラベルが出る
-    await expect.element(page.getByText('メタスコア'), { timeout: 8000 }).toBeInTheDocument();
+    await expect.element(page.getByText('/100'), { timeout: 8000 }).toBeInTheDocument();
   });
 
   it('参加社員がレベルアップすると開封画面に「⬆ Lv up」が出る（v0.16）', async () => {
@@ -76,7 +75,7 @@ describe('ReleaseScreen（ユースケース：結果を発表して作品が世
           level: 1,
           exp: 19, // nextExpFor(1)=20。リリースで +10 以上入る
           wage: 540_000,
-          specialties: [],
+          specialties: [], skills: {},
         },
       ],
     });

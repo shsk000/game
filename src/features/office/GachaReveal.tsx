@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { PixelButton } from '../../components/ui';
-import { CATEGORY_BY_ID } from '../../data/categories';
-import { roleLabel } from '../../data/employees';
-import type { Candidate } from '../../state/types';
-import { formatPower, RANK_VISUAL } from './employeeDisplay';
+import type { Candidate, Employee } from '../../state/types';
+import { monthsOfRunway, type EconomyCtx } from '../../core/economy';
+import { jobTitleOf, skillsAtCap } from '../../core/skills';
+import { formatRunway, formatYen, runwayColor } from '../../utils/format';
+import { formatSkills, RANK_VISUAL } from './employeeDisplay';
 
 /**
  * v0.22 採用ガチャのカード開封演出（spec v22 §6）。
@@ -18,11 +19,20 @@ type Props = {
   candidate: Candidate;
   funds: number;
   isFull: boolean;
+  /** ランウェイ（採用前/採用後）の試算に使う。会社の今の状態 */
+  economy: EconomyCtx;
   onHire: () => void;
   onDismiss: () => void;
 };
 
-export const GachaReveal = ({ candidate, funds, isFull, onHire, onDismiss }: Props) => {
+export const GachaReveal = ({
+  candidate,
+  funds,
+  isFull,
+  economy,
+  onHire,
+  onDismiss,
+}: Props) => {
   const [revealed, setRevealed] = useState(false);
 
   // マウント時に裏面→めくりの演出を1回走らせる。候補が変わったときの作り直しは
@@ -76,18 +86,52 @@ export const GachaReveal = ({ candidate, funds, isFull, onHire, onDismiss }: Pro
             borderRadius: 2,
           }}
         >
-          {roleLabel(candidate.role)}
+          {jobTitleOf(candidate.skills)}
         </span>
       </div>
       <div style={{ fontSize: 13, marginTop: 8, color: '#eef3fa' }}>
-        {formatPower(candidate.role, candidate.power)}
+        {formatSkills(candidate.skills)}
       </div>
-      <div style={{ fontSize: 12, marginTop: 4, color: '#aab8cc' }}>
-        得意:{' '}
-        {candidate.specialties
-          .map((sp) => `${CATEGORY_BY_ID[sp.categoryId]?.name ?? sp.categoryId} +${sp.bonus}`)
-          .join(' / ')}
+      {/* 育てきったときの値（docs/spec/score-model.md §1）。
+          Lv1 はランクによらずほぼ同じなので、ここで初めてランクの意味が伝わる */}
+      <div style={{ fontSize: 12, marginTop: 4, color: rankVisual.color, fontWeight: 700 }}>
+        ▲ 育てば {formatSkills(skillsAtCap(candidate.skills, rank))}
       </div>
+      {/* **採るとどうなるか**を採用前に出す（オーナー要望の「破産が理不尽」対策）。
+          スキルだけ見て採ると月固定費が跳ね上がり、序盤は1〜2ヶ月で資金が尽きる。
+          ランウェイの前後を並べれば「1人だけ採る」「先に数本回す」を選べる */}
+      {(() => {
+        const before = monthsOfRunway(economy);
+        const after = monthsOfRunway(economy, [
+          ...economy.employees,
+          candidate as unknown as Employee,
+        ]);
+        const delta = after.monthly - before.monthly;
+        // 雇用ボタンの額（`hireCandidate` が即座に引く）と月給は**同額だが別の支払い**。
+        // 片方しか見えていないと「1回きり」と読めるので、両方を1行に書く
+        return (
+          <div style={{ fontSize: 12, marginTop: 8, color: '#c8d2e0', lineHeight: 1.6 }}>
+            👛 いま <strong style={{ color: '#ffb454' }}>{formatYen(candidate.wage)}</strong>
+            {' ＋ '}
+            <strong style={{ color: '#ffb454' }}>毎月 {formatYen(delta)}</strong>
+            <span style={{ opacity: 0.8 }}>
+              {' '}
+              （固定費 {formatYen(before.monthly)} → {formatYen(after.monthly)}/月）
+            </span>
+            <br />⏳ 資金がもつのは{' '}
+            <span style={{ opacity: 0.8 }}>{formatRunway(before.months)}</span>
+            {' → '}
+            <strong
+              style={{
+                color:
+                  runwayColor(after.months) === '#222a35' ? '#8fe0a0' : runwayColor(after.months),
+              }}
+            >
+              {formatRunway(after.months)}
+            </strong>
+          </div>
+        );
+      })()}
       {isFull && (
         <div style={{ fontSize: 12, color: '#c66', marginTop: 6 }}>
           満席です（席を空けると雇用できます）

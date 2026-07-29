@@ -23,7 +23,7 @@ tools: Read, Grep, Glob, Bash, Skill, WebSearch
 1. **最上位の目的を再確認**: `game-design` スキルを読む。焦点指示（`focus`）があればそれを最優先の観点にする。
 2. **今のゲームを現物で分析**:
    - `docs/roadmap.md`（プロデューサー計画・進捗サマリ・敵対的レビュー検出）
-   - `docs/` 内の最大版 `vNN/spec.md` と `vNN/tasks.md` の `[ ]`/`[~]`、`docs/v08/gaps.md`
+   - `docs/` 内の最大版 `vNN/spec.md` と `vNN/tasks.md` の `[ ]`/`[~]`、`docs/spec/`
    - 実コード（`src/core/` のルール計算、`src/data/` のバランス、`src/features/`）を必要に応じて Grep/Read
    - 数値の当たりを付けたいときは `npm run test:unit` の既存シミュレーション（`*Simulation.test.ts`）を読む/走らせる
 3. **目的に対する差分（ギャップ）を洗い出す**。各ギャップは「何が足りない・なぜ目的に反する・直すなら」の3点で。

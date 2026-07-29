@@ -1,11 +1,17 @@
-import { describe, expect, it } from 'vitest';
-import { AXIS_QUALITY_BONUS_CAP, EQUIP_QUALITY_BONUS_CAP } from '../data/balance';
+import { afterEach, describe, expect, it } from 'vitest';
+import { scoreTierFor } from '../data/balance';
 import { SCALE_BY_ID } from '../data/scales';
-import type { CurrentProject, DevAxes, Work } from '../state/types';
-import { ZERO_AXES } from '../state/types';
+import type { CurrentProject, DevAxes, Employee, Work, FeaturePoints } from '../state/types';
+import { ZERO_AXES, ZERO_FEATURES } from '../state/types';
 import { INITIAL_SHARE } from '../utils/sales';
-import { mulberry32 } from './ports';
-import { computeRelease, type ReleaseCtx } from './release';
+import { setGameDeps, useGameStore } from '../state/gameStore';
+import { defaultDeps, mulberry32 } from './ports';
+import {
+  applyLaunchAd,
+  computeRelease,
+  LAUNCH_AD_INITIAL_MULTIPLIER,
+  type ReleaseCtx,
+} from './release';
 
 const NOW = 1_800_000_000_000;
 const deps = (seed = 42) => ({ rng: mulberry32(seed), now: () => NOW });
@@ -17,7 +23,7 @@ const project = (over: Partial<CurrentProject> = {}): CurrentProject => ({
   scale: 'mini',
   phase: 'release',
   axes: { ...ZERO_AXES },
-  devStats: { program: 0, graphics: 0, sound: 0, design: 0 },
+  devStats: { program: 0, graphics: 0, sound: 0, scenario: 0 },
   requiredLoC: 100,
   doneLoC: 100,
   maxCombo: 50,
@@ -28,7 +34,6 @@ const project = (over: Partial<CurrentProject> = {}): CurrentProject => ({
   finishedAt: 60_000, // 60 秒開発
   adBoostActive: false,
   surveyedCompat: null,
-  selectedCategories: [],
   assignedEmployeeIds: [],
   perf: { wpm: 120, maxCombo: 50, accuracy: 1 },
   startDate: { year: 2026, month: 1, week: 1 },
@@ -51,7 +56,6 @@ const ctx = (over: Partial<ReleaseCtx> = {}): ReleaseCtx => ({
   newlyAchieved: [],
   unlockedGenres: ['puzzle', 'adventure', 'simulation'],
   unlockedThemes: ['sushi', 'onsen', 'farming'],
-  unlockedCategories: ['graphics', 'sound', 'gameplay'],
   currentDate: { year: 2026, month: 2, week: 1 }, // 開始から 4 週後
   ...over,
 });
@@ -90,7 +94,7 @@ describe('computeRelease', () => {
   it('市場系軸の売上倍率は 0.5〜2.0 にクランプされる', () => {
     const base = computeRelease(ctx(), undefined, deps()).work;
     const boosted = computeRelease(
-      ctx({ current: project({ axes: axes({ salesForecast: 999 }) }) }),
+      ctx({ current: project({ axes: axes({ buzz: 999 }) }) }),
       undefined,
       deps(),
     ).work;
@@ -143,26 +147,7 @@ describe('computeRelease', () => {
     expect(floor.work.developWeeks).toBe(0);
   });
 
-  it('devStats（ビルドアップ属性）は品質を押し上げる', () => {
-    const plain = computeRelease(ctx(), undefined, deps()).work;
-    const built = computeRelease(
-      ctx({
-        current: project({ devStats: { program: 100, graphics: 100, sound: 100, design: 100 } }),
-      }),
-      undefined,
-      deps(),
-    ).work;
-    expect(built.quality).toBeGreaterThan(plain.quality);
-    expect(built.quality).toBeLessThanOrEqual(100);
-  });
 
-  it('breakdown.performance が設定される（v0.10 潜在バグの回帰テスト）', () => {
-    // 旧実装は typingScore のまま Work.breakdown にスプレッドしていたため
-    // 開封演出の「タイピング演技」寄与が常に 0 表示になっていた
-    const { work } = computeRelease(ctx(), undefined, deps());
-    expect(work.breakdown.performance).toBeDefined();
-    expect(work.breakdown.performance).toBeGreaterThan(0);
-  });
 
   it('records は最大値で更新される', () => {
     const { work, patch } = computeRelease(
@@ -184,17 +169,6 @@ describe('computeRelease', () => {
   });
 
   it('参加社員はリリースで exp を得る（v0.16 成長システムの合流）', () => {
-    const worker = {
-      id: 'e1',
-      name: 'テスト 花子',
-      role: 'programmer' as const,
-      power: 0.4,
-      basePower: 0.4,
-      level: 1,
-      exp: 0,
-      wage: 540_000,
-      specialties: [],
-    };
     const bystander = { ...worker, id: 'e2', name: 'テスト 次郎' };
     const c = ctx({
       employees: [worker, bystander],
@@ -207,25 +181,7 @@ describe('computeRelease', () => {
     expect(Array.isArray(patch.lastLevelUps)).toBe(true);
   });
 
-  it('企画・イベント由来の品質ボーナスは上限で頭打ち（v0.17.1 タイピング0.15の迂回防止）', () => {
-    const plain = computeRelease(ctx(), undefined, deps()).work;
-    // 面白さを極端に盛っても（×0.3 で +300 相当）、品質増は AXIS_QUALITY_BONUS_CAP まで
-    const boosted = computeRelease(
-      ctx({ current: project({ axes: axes({ funFactor: 1000 }) }) }),
-      undefined,
-      deps(),
-    ).work;
-    expect(boosted.quality - plain.quality).toBeLessThanOrEqual(AXIS_QUALITY_BONUS_CAP);
-    expect(boosted.quality).toBeGreaterThan(plain.quality);
-  });
 
-  it('残バグを抱えたまま発売すると品質が下がる（v0.17 バグシステム）', () => {
-    const clean = computeRelease(ctx({ current: project({ bugCount: 0 }) }), undefined, deps());
-    const buggy = computeRelease(ctx({ current: project({ bugCount: 5 }) }), undefined, deps());
-    // バグゼロは noBugs ボーナス（+5）も乗るため、差は品質減点(5×2)以上になる
-    expect(buggy.work.quality).toBeLessThan(clean.work.quality);
-    expect(clean.work.quality - buggy.work.quality).toBeGreaterThanOrEqual(10);
-  });
 
   it('残バグは炎上リスクとして売上にも響く', () => {
     const clean = computeRelease(ctx({ current: project({ bugCount: 0 }) }), undefined, deps());
@@ -245,70 +201,12 @@ describe('computeRelease', () => {
     level: 1,
     exp: 0,
     wage: 540_000,
-    specialties: [],
+    specialties: [], skills: {},
   };
   // program の devStats を積んだ状態（装備の program 倍率が効く土台）
-  const builtProgram = () =>
-    project({
-      assignedEmployeeIds: ['e1'],
-      devStats: { program: 100, graphics: 0, sound: 0, design: 0 },
-    });
 
-  it('装備なしと「初期装備（効果1.0）」は品質が一致する（装備枠は未装備で0）', () => {
-    const bare = computeRelease(
-      ctx({ employees: [worker], current: builtProgram() }),
-      undefined,
-      deps(),
-    ).work;
-    const defaultEquipped = computeRelease(
-      ctx({
-        employees: [
-          { ...worker, equipped: { pc: 'pc-laptop', chair: 'chair-basic', misc: 'misc-none' } },
-        ],
-        current: builtProgram(),
-      }),
-      undefined,
-      deps(),
-    ).work;
-    expect(defaultEquipped.quality).toBe(bare.quality);
-  });
 
-  it('装備した社員は、打ったカテゴリの品質が上がる（上限内）', () => {
-    const bare = computeRelease(
-      ctx({ employees: [worker], current: builtProgram() }),
-      undefined,
-      deps(),
-    ).work;
-    const equipped = computeRelease(
-      ctx({
-        employees: [{ ...worker, equipped: { pc: 'pc-gaming' } }], // program 1.35
-        current: builtProgram(),
-      }),
-      undefined,
-      deps(),
-    ).work;
-    expect(equipped.quality).toBeGreaterThan(bare.quality);
-    // 装備以外は同一入力・同一 seed なので、差分＝装備枠のみ ≤ EQUIP_QUALITY_BONUS_CAP
-    expect(equipped.quality - bare.quality).toBeLessThanOrEqual(EQUIP_QUALITY_BONUS_CAP);
-  });
 
-  it('打っていないカテゴリの装備は効かない（devStatsが0なら加点0）', () => {
-    // graphics を打っていない（program だけ積んだ）状態で graphics 装備（液タブ）を付けても不変
-    const bare = computeRelease(
-      ctx({ employees: [worker], current: builtProgram() }),
-      undefined,
-      deps(),
-    ).work;
-    const pentab = computeRelease(
-      ctx({
-        employees: [{ ...worker, equipped: { misc: 'misc-pentab' } }], // graphics 1.25
-        current: builtProgram(),
-      }),
-      undefined,
-      deps(),
-    ).work;
-    expect(pentab.quality).toBe(bare.quality);
-  });
 
   it('ゴースト（開発タイム記録）を上回ったら ghostBeaten', () => {
     const slow = computeRelease(
@@ -325,7 +223,7 @@ describe('computeRelease', () => {
     expect(fast.ghostBeaten).toBe(true); // 60 秒 ≤ 記録 120 秒
   });
 
-  // v0.29：ジャンル/テーマは発売で自動解放しない（解放は購入のみ）。docs/v29/spec.md
+  // v0.29：ジャンル/テーマは発売で自動解放しない（解放は購入のみ）。v0.29（資料は削除済み）
   it('発売でジャンル/テーマは自動解放されない（累計売上・ヒット作が閾値を超えても不変）', () => {
     const hitWork = (id: string): Work => ({
       id,
@@ -333,7 +231,6 @@ describe('computeRelease', () => {
       genreId: 'puzzle',
       themeId: 'sushi',
       scale: 'mini',
-      quality: 90,
       metascore: 90, // ヒット作（メタ 70+）: 旧ロジックなら stage 加速で一括解放
       isMasterpiece: false,
       developSec: 1,
@@ -360,5 +257,240 @@ describe('computeRelease', () => {
     const { patch } = computeRelease(c, undefined, deps());
     expect(patch.unlockedGenres).toEqual(c.unlockedGenres); // 初期解放のまま増えない
     expect(patch.unlockedThemes).toEqual(c.unlockedThemes);
+  });
+});
+
+describe('applyLaunchAd（ローンチ広告＝発売後リワード）', () => {
+  const released = (over: Partial<Work> = {}): Work => ({
+    id: 'w1',
+    title: 't',
+    genreId: 'puzzle',
+    themeId: 'sushi',
+    scale: 'mini',
+    metascore: 60,
+    isMasterpiece: false,
+    developSec: 1,
+    initialRevenue: 1_000_000,
+    salesPool: 4_000_000,
+    initialSalesPool: 4_000_000,
+    decayPerSec: 0.02,
+    totalRevenue: 1_000_000,
+    selling: true,
+    fansGained: 0,
+    ghostBeaten: false,
+    launchAdUsed: false,
+    pioneer: false,
+    releasedAt: 0,
+    createdAt: 0,
+    breakdown: {},
+    ...over,
+  });
+
+  it('初動売上を正確に ×1.5 する（ラベル「初動売上 +50%」どおり）', () => {
+    const r = applyLaunchAd(released());
+    expect(r).not.toBeNull();
+    expect(r?.bonus).toBe(500_000);
+    expect(r?.work.initialRevenue).toBe(1_000_000 * LAUNCH_AD_INITIAL_MULTIPLIER);
+  });
+
+  it('ボーナスは totalRevenue（入金累計）にも載る＝ライブラリ/図鑑から消えない', () => {
+    const r = applyLaunchAd(released());
+    expect(r?.work.totalRevenue).toBe(1_000_000 + 500_000);
+  });
+
+  it('販売プールには掛からない（オーナー判断：総売上+50%は大きすぎる）', () => {
+    const r = applyLaunchAd(released());
+    expect(r?.work.salesPool).toBe(4_000_000);
+    expect(r?.work.initialSalesPool).toBe(4_000_000);
+  });
+
+  it('総売上に対する実効は +10%（初動シェア 20% × 50%）', () => {
+    const before = released();
+    const totalBefore = before.initialRevenue + before.salesPool;
+    const r = applyLaunchAd(before);
+    const totalAfter = (r?.work.initialRevenue ?? 0) + (r?.work.salesPool ?? 0);
+    expect(totalAfter / totalBefore).toBeCloseTo(1 + INITIAL_SHARE * 0.5, 10);
+  });
+
+  it('launchAdUsed を立てる／二重適用は null で弾く', () => {
+    const r = applyLaunchAd(released());
+    expect(r?.work.launchAdUsed).toBe(true);
+    expect(applyLaunchAd(r!.work)).toBeNull();
+  });
+
+  it('元の作品オブジェクトは書き換えない（純粋関数）', () => {
+    const original = released();
+    applyLaunchAd(original);
+    expect(original.initialRevenue).toBe(1_000_000);
+    expect(original.launchAdUsed).toBe(false);
+  });
+});
+
+describe('実装ステップ3：スコアは特徴ポイントの一本道でしか動かない', () => {
+  const teamOf = (skills: Employee['skills'][]): Employee[] =>
+    skills.map((sk, i) => ({
+      id: `e${i}`,
+      name: `社員${i}`,
+      role: 'programmer' as const,
+      power: 0.3,
+      basePower: 0.3,
+      level: 1,
+      exp: 0,
+      wage: 540_000,
+      specialties: [],
+      skills: sk,
+      rank: 'B' as const,
+    })) as Employee[];
+
+  const runWith = (features: Partial<FeaturePoints>, scale: 'mini' | 'indie' = 'mini') => {
+    const employees = teamOf([{ programming: 50 }]);
+    const c = ctx({
+      employees,
+      current: project({
+        scale,
+        assignedEmployeeIds: employees.map((e) => e.id),
+        features: { ...ZERO_FEATURES, ...features },
+      }),
+    });
+    return computeRelease(c, undefined, deps()).work;
+  };
+
+  it('1文も打たなければ致命的失敗になる（革新性ぶんしか入らない）', () => {
+    // 旧実装は1文も打たずに品質72＝普通が出ていた。「打たなくても売れる」の解消が
+    // このモデル再設計の出発点（docs/plans/20260725-score-redesign/proposal.md）
+    const w = runWith({ innovationPt: 100 });
+    expect(w.metascore).toBeLessThan(30);
+    expect(scoreTierFor(w.metascore)).toBe('catastrophic');
+  });
+
+  it('特徴ポイントを積むほどメタスコアが上がる（単調）', () => {
+    const scores = [0, 25, 50, 75, 100].map(
+      (v) =>
+        runWith({
+          usabilityPt: v,
+          graphicsPt: v,
+          soundPt: v,
+          storyPt: v,
+          innovationPt: v,
+        }).metascore,
+    );
+    for (let i = 1; i < scores.length; i++) {
+      expect(scores[i]).toBeGreaterThan(scores[i - 1]);
+    }
+  });
+
+  it('社員の能力そのものはスコアに直接効かない（打った結果だけが効く）', () => {
+    // 社員は「打鍵1回あたりの伸び」を決めるだけ。同じ特徴ポイントなら同じスコアになる
+    const features = { ...ZERO_FEATURES, graphicsPt: 60, innovationPt: 100 };
+    const weak = ctx({
+      employees: teamOf([{ programming: 10 }]),
+      current: project({ scale: 'mini', assignedEmployeeIds: ['e0'], features }),
+    });
+    const strong = ctx({
+      employees: teamOf([{ programming: 100 }]),
+      current: project({ scale: 'mini', assignedEmployeeIds: ['e0'], features }),
+    });
+    expect(computeRelease(strong, undefined, deps()).work.metascore).toBe(
+      computeRelease(weak, undefined, deps()).work.metascore,
+    );
+  });
+
+  it('内訳の合計がメタスコアと整合する（画面の数値が計算と食い違わない）', () => {
+    const w = runWith({ usabilityPt: 80, graphicsPt: 60, innovationPt: 100 });
+    const bd = w.breakdown;
+    const sum = Object.values(bd.features ?? {}).reduce((a, b) => a + b, 0);
+    expect(sum).toBeCloseTo(bd.base ?? 0, 1);
+    const total =
+      (bd.base ?? 0) + (bd.compatBonus ?? 0) + (bd.trendBonus ?? 0) + (bd.criticVariance ?? 0);
+    expect(Math.max(0, Math.min(100, Math.round(total)))).toBe(w.metascore);
+  });
+});
+
+describe('無打鍵で発売したときのガード（採用 → 発売の通し）', () => {
+  /**
+   * ガチャで実際に引いた社員で発売まで通し、**プレイヤーが受け取る結果**を固定する。
+   *
+   * 上のゴールデン値テストは power を直接渡すので、「式は同じだが入力の分布が変わった」
+   * 事故（実装ステップ1 の回帰）では落ちない。ここは**本番の入口（`pullGacha`）から**
+   * 採用して通すので落ちる（lessons #16：ガードは本番が実際に呼ぶ入口から通す）。
+   *
+   * 序盤（社員2人・ミニゲーム）はメタスコアがヒット区分の境界（29/30）付近に居るため、
+   * 採用が少し弱くなるだけで 失敗 ×3.333 → 致命的失敗 ×0.333 に落ちて売上が桁で変わる。
+   * ゲーム開始時の社員は0人なので、全プレイヤーが必ずここを通る。
+   */
+  afterEach(() => {
+    setGameDeps(defaultDeps);
+    useGameStore.setState({ candidate: null, gachaPity: 0 });
+  });
+
+  /** 本番の入口（pullGacha）から社員を2人引く */
+  const hireTwoViaStore = (): Employee[] => {
+    const out: Employee[] = [];
+    for (let k = 0; k < 2; k++) {
+      useGameStore.setState({ funds: 1e12, gachaPity: 0, candidate: null });
+      useGameStore.getState().pullGacha('normal');
+      const c = useGameStore.getState().candidate;
+      if (c) out.push({ ...c, id: `e${k}` } as Employee);
+    }
+    return out;
+  };
+
+  it('1文も打たずに発売すると、ほぼ確実に致命的失敗になる（革新性ぶんしか入らない）', () => {
+    setGameDeps({ rng: mulberry32(101), now: () => 0 });
+    let sum = 0;
+    let metaSum = 0;
+    let fatal = 0;
+    const N = 2_000;
+    for (let i = 0; i < N; i++) {
+      const employees = hireTwoViaStore();
+      const c = ctx({
+        employees,
+        current: project({ scale: 'mini', assignedEmployeeIds: employees.map((e) => e.id) }),
+      });
+      const w = computeRelease(c, undefined, deps()).work;
+      sum += w.salesPool + w.initialRevenue;
+      metaSum += w.metascore;
+      if (w.metascore <= 29) fatal += 1;
+    }
+    // 実装ステップ3：スコアは特徴ポイントだけで決まる。**社員をどれだけ強くしても、
+    // 打たなければスコアは動かない**ことを確認している（社員差が出ないのが正しい挙動）。
+    // 旧モデルは社員の power がそのままスコアに乗り、打たなくても品質72が出ていた。
+    // 実際に打った場合のバランスは teamLayout / progressionSimulation / solvencySimulation で見る。
+    console.log(
+      `[序盤・無打鍵] 平均メタ ${(metaSum / N).toFixed(1)} / 平均売上 ¥${Math.round(sum / N).toLocaleString()} / 致命的失敗 ${((fatal / N) * 100).toFixed(1)}%`,
+    );
+    expect(metaSum / N).toBeLessThan(30);
+    expect(fatal / N).toBeGreaterThan(0.9);
+  });
+
+  it('社員をどれだけ強くしても、打たなければスコアは動かない', () => {
+    // 旧モデルの「打たなくても社員が強ければスコアが出る」を潰したことの確認。
+    // ここで社員差が出たら、スコアへの裏口が復活している
+    const run = (skill: number) => {
+      const employees = [
+        {
+          id: 'e0',
+          name: '社員',
+          role: 'programmer' as const,
+          power: skill / 100,
+          basePower: skill / 100,
+          level: 1,
+          exp: 0,
+          wage: 540_000,
+          specialties: [],
+          rank: 'B' as const,
+          skills: { programming: skill },
+        },
+      ] as Employee[];
+      return computeRelease(
+        ctx({
+          employees,
+          current: project({ scale: 'mini', assignedEmployeeIds: ['e0'] }),
+        }),
+        undefined,
+        deps(),
+      ).work.metascore;
+    };
+    expect(run(100)).toBe(run(1));
   });
 });

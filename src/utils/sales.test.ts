@@ -59,7 +59,6 @@ describe('settleAllWorks', () => {
     genreId: 'action',
     themeId: 'ninja',
     scale: 'mini',
-    quality: 50,
     metascore: 60,
     isMasterpiece: false,
     developSec: 60,

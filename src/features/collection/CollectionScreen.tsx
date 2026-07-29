@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { PixelWindow } from '../../components/ui';
-import { compatLabel, getCompat } from '../../data/compatibility';
+import { COMPAT_TIERS, compatLabel, getCompat } from '../../data/compatibility';
 import type { GenreId } from '../../data/genres';
 import { GENRE_BY_ID, GENRES } from '../../data/genres';
 import { THEME_BY_ID, THEMES } from '../../data/themes';
@@ -30,22 +30,22 @@ type Cell = {
   bestMeta: number;
 };
 
-// 相性ランクに応じた背景色（ピクセル風単色のみ）
-// v0.16でgetCompatの実効上限を2.0→1.6に圧縮した際、この閾値(1.7)を下げ忘れており
-// 「神」が理論上出せなくなっていた（2026-07-16 発見・修正）。上限と同じ1.6に揃える。
+/**
+ * 相性ランクの背景色。
+ *
+ * **閾値は `COMPAT_TIERS` から引く。** ここに数字を直書きしていたせいで、
+ * 判定（compatLabel 1.5/1.2/0.9）・色（1.6/1.3/0.9）・凡例テキスト（1.7+/1.3+）の
+ * **3箇所がバラバラ**になっていた。相性の上限は 1.60 なので、凡例の「1.7+」は
+ * **到達できない帯をプレイヤーに見せていた**（オーナー指摘系の詐称。2026-07-29 に統一）。
+ */
 export const compatBg = (c: number): string => {
-  if (c >= 1.6) return '#f0c020'; // 神（金）
-  if (c >= 1.3) return '#5aa84a'; // good（緑）
-  if (c >= 0.9) return '#a0b85a'; // 普通（薄緑）
+  if (c >= COMPAT_TIERS.divine) return '#f0c020'; // 神（金）
+  if (c >= COMPAT_TIERS.good) return '#5aa84a'; // good（緑）
+  if (c >= COMPAT_TIERS.normal) return '#a0b85a'; // 普通（薄緑）
   return '#a83a3a'; // 地雷（赤）
 };
 
-export const compatFg = (c: number): string => {
-  if (c >= 1.6) return '#1a0f08';
-  if (c >= 1.3) return '#1a0f08';
-  if (c >= 0.9) return '#1a0f08';
-  return '#fff8e0';
-};
+export const compatFg = (c: number): string => (c >= COMPAT_TIERS.normal ? '#1a0f08' : '#fff8e0');
 
 const LEGEND_SWATCH: React.CSSProperties = {
   display: 'inline-block',
@@ -97,7 +97,7 @@ export const CollectionScreen = () => {
         bestMeta: 0,
       };
       cur.count += 1;
-      cur.bestQ = Math.max(cur.bestQ, w.quality);
+      cur.bestQ = Math.max(cur.bestQ, w.metascore);
       cur.bestRevenue = Math.max(cur.bestRevenue, w.totalRevenue);
       cur.bestMeta = Math.max(cur.bestMeta, w.metascore);
       map.set(key, cur);
@@ -256,16 +256,20 @@ export const CollectionScreen = () => {
           }}
         >
           <span>
-            <span style={{ ...LEGEND_SWATCH, background: '#f0c020' }} />🔥 神（1.7+）
+            <span style={{ ...LEGEND_SWATCH, background: '#f0c020' }} />🔥 神（
+            {COMPAT_TIERS.divine}+）
           </span>
           <span>
-            <span style={{ ...LEGEND_SWATCH, background: '#5aa84a' }} />👍 good（1.3+）
+            <span style={{ ...LEGEND_SWATCH, background: '#5aa84a' }} />👍 good（
+            {COMPAT_TIERS.good}+）
           </span>
           <span>
-            <span style={{ ...LEGEND_SWATCH, background: '#a0b85a' }} />😐 普通（0.9+）
+            <span style={{ ...LEGEND_SWATCH, background: '#a0b85a' }} />😐 普通（
+            {COMPAT_TIERS.normal}+）
           </span>
           <span>
-            <span style={{ ...LEGEND_SWATCH, background: '#a83a3a' }} />💀 地雷（&lt;0.9）
+            <span style={{ ...LEGEND_SWATCH, background: '#a83a3a' }} />💀 地雷（&lt;
+            {COMPAT_TIERS.normal}）
           </span>
           <span>
             <span style={{ ...LEGEND_SWATCH, background: '#16263e' }} />？ 未発見

@@ -1,4 +1,7 @@
 import { CATEGORY_ORDER, type TicketCategory } from '../data/devPhrases';
+import type { Employee, SkillSet } from '../state/types';
+import { DEV_SKILL_IDS } from '../state/types';
+import { SKILL_TO_TICKET } from './features';
 import {
   EQUIPMENT_BY_ID,
   type EquipLoadout,
@@ -9,7 +12,7 @@ import {
 export type { EquipLoadout };
 
 /**
- * v0.25 装備システムの純粋計算（docs/v25/spec.md §4-2）。
+ * v0.25 装備システムの純粋計算（v0.25（資料は削除済み） §4-2）。
  * 状態・乱数・時刻を持たない（logic-architecture §2）。
  *
  * 装備は社員単位（EquipLoadout）だが、devStats はプロジェクト単位の累積なので、
@@ -19,7 +22,7 @@ export type { EquipLoadout };
 /** カテゴリ別倍率（1.0 = 無強化）。 */
 export type CategoryMul = Record<TicketCategory, number>;
 
-const ONE_MUL = (): CategoryMul => ({ program: 1, graphics: 1, sound: 1, design: 1 });
+const ONE_MUL = (): CategoryMul => ({ program: 1, graphics: 1, sound: 1, scenario: 1 });
 
 /**
  * 社員1人のロードアウト → カテゴリ別倍率。
@@ -50,20 +53,6 @@ export const loadoutCategoryMul = (
  *  - チーム全員が良いPCなら program の増分が満額、半分だけなら半分になる（人数に依存しない）。
  *  - 空配列（誰もいない）は全カテゴリ 1.0。
  */
-export const computeEquipCategoryMul = (
-  loadouts: EquipLoadout[],
-  byId: Record<string, EquipmentDef> = EQUIPMENT_BY_ID,
-): CategoryMul => {
-  if (loadouts.length === 0) return ONE_MUL();
-  const acc: CategoryMul = { program: 0, graphics: 0, sound: 0, design: 0 };
-  for (const lo of loadouts) {
-    const m = loadoutCategoryMul(lo, byId);
-    for (const cat of CATEGORY_ORDER) acc[cat] += m[cat] - 1;
-  }
-  const out = ONE_MUL();
-  for (const cat of CATEGORY_ORDER) out[cat] = 1 + acc[cat] / loadouts.length;
-  return out;
-};
 
 /** 装備の購入価格（現状はテーブルの cost をそのまま。将来ティア/規模連動を挟む余地）。 */
 export const equipmentPrice = (def: EquipmentDef): number => def.cost;
@@ -91,3 +80,34 @@ export const countAssigned = (loadouts: EquipLoadout[], itemId: string): number 
 /** 空き個数（購入済み − 使用中）。0 以下なら新たに別の社員へは装備できない。 */
 export const freeCopies = (owned: OwnedItems, loadouts: EquipLoadout[], itemId: string): number =>
   (owned[itemId] ?? 0) - countAssigned(loadouts, itemId);
+
+
+/**
+ * 装備を掛けた**実効スキル**（docs/spec/score-model.md §1）。
+ *
+ * ```
+ * その分野の実効スキル ＝ スキル値 × 装備の倍率（3スロットの積）
+ * ```
+ *
+ * **実効スキルは 100 を超えてよい。** スキル値そのものの上限は 100 だが、
+ * ここに上限を置くとスキル100 の社員（S級Lv10）に装備が無意味になり、
+ * 終盤に装備を買う理由が消える。特徴ポイント側が 0〜100 で頭打ちなので
+ * スコアは壊れず、効果は「**特徴ポイントを速く積める**」＝開発が早く終わる＝固定費が安い、に出る。
+ *
+ * 固定値を足す方式は不採用：弱い社員に装備を回すのが効率的になり、育成と競合するため。
+ * 倍率なら**育った社員に良い装備を持たせるほど効く**ので投資の方向が一致する。
+ */
+export const effectiveSkillsOf = (employee: Employee): SkillSet => {
+  const mul = loadoutCategoryMul(employee.equipped ?? {});
+  const out: SkillSet = { ...(employee.skills ?? {}) };
+  for (const field of DEV_SKILL_IDS) {
+    const v = out[field];
+    if (!v) continue;
+    out[field] = Math.round(v * mul[SKILL_TO_TICKET[field]] * 10) / 10;
+  }
+  return out;
+};
+
+/** 装備込みの社員一覧（特徴ポイントの計算はこれを通す） */
+export const withEffectiveSkills = (employees: Employee[]): Employee[] =>
+  employees.map((e) => ({ ...e, skills: effectiveSkillsOf(e) }));

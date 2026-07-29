@@ -37,7 +37,8 @@ export const PLAN_CATEGORY_META: Record<
     /** 企画書のチェックリストに出す短い項目名 */
     docLabel: string;
     /** 1 文完了ごとの実効果ウェイト（gain に乗算して applyAxisDelta へ） */
-    effects: { funFactor: number; hype: number };
+    /** 実装ステップ3：企画フェーズの打鍵は期待度（発売時のファン増加）だけに効く */
+    effects: { hype: number };
   }
 > = {
   concept: {
@@ -46,7 +47,7 @@ export const PLAN_CATEGORY_META: Record<
     color: '#ffd166',
     dim: '#4a3a12',
     docLabel: 'ゲームの核',
-    effects: { funFactor: 2, hype: 1 },
+    effects: { hype: 3 },
   },
   genre: {
     icon: '🎯',
@@ -54,7 +55,7 @@ export const PLAN_CATEGORY_META: Record<
     color: '#4db3ff',
     dim: '#123a5a',
     docLabel: 'ジャンル',
-    effects: { funFactor: 1, hype: 2 },
+    effects: { hype: 3 },
   },
   target: {
     icon: '👥',
@@ -62,7 +63,7 @@ export const PLAN_CATEGORY_META: Record<
     color: '#5fe08a',
     dim: '#124a28',
     docLabel: 'ターゲット',
-    effects: { funFactor: 1, hype: 2 },
+    effects: { hype: 3 },
   },
   world: {
     icon: '🗺️',
@@ -70,7 +71,7 @@ export const PLAN_CATEGORY_META: Record<
     color: '#d8a5ff',
     dim: '#3a2255',
     docLabel: '世界観',
-    effects: { funFactor: 1, hype: 2 },
+    effects: { hype: 3 },
   },
   core: {
     icon: '⚙️',
@@ -78,7 +79,7 @@ export const PLAN_CATEGORY_META: Record<
     color: '#ff8a3c',
     dim: '#4a2a10',
     docLabel: 'コアシステム',
-    effects: { funFactor: 2, hype: 1 },
+    effects: { hype: 3 },
   },
   title: {
     icon: '✒️',
@@ -86,7 +87,7 @@ export const PLAN_CATEGORY_META: Record<
     color: '#7adfff',
     dim: '#123a4a',
     docLabel: 'タイトル',
-    effects: { funFactor: 1, hype: 2 },
+    effects: { hype: 3 },
   },
   sales: {
     icon: '💰',
@@ -94,7 +95,7 @@ export const PLAN_CATEGORY_META: Record<
     color: '#f0c020',
     dim: '#4a3a08',
     docLabel: '販売方針',
-    effects: { funFactor: 1, hype: 1 },
+    effects: { hype: 2 },
   },
 };
 

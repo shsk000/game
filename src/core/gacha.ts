@@ -1,6 +1,5 @@
 import { GACHA_CONFIG, type GachaKind, type GachaRank } from '../data/balance';
 import type { Scale } from '../data/scales';
-import type { Rng } from './ports';
 
 /**
  * v0.22 採用ガチャの純粋ロジック（spec v22 §4・§7）。
@@ -15,15 +14,14 @@ import type { Rng } from './ports';
  * ランク抽選。premium はピティ（pityThreshold 回連続 S 非排出）到達時に S 確定。
  * 判定順は S → A → B（rates の合計は 1.0 前提。normal は S=0 なので S は出ない）。
  */
-export const rollRank = (kind: GachaKind, rng: Rng = Math.random, pityCount = 0): GachaRank => {
-  const cfg = GACHA_CONFIG[kind];
-  // pityThreshold=0（normal）はピティ無効。premium のみ天井が効く。
-  if (cfg.pityThreshold > 0 && pityCount >= cfg.pityThreshold) return 'S';
-  const r = rng();
-  if (r < cfg.rates.S) return 'S';
-  if (r < cfg.rates.S + cfg.rates.A) return 'A';
-  return 'B';
-};
+/**
+ * 実装ステップ1〜2 で使う現行のランク抽選（B/A/S の3種）。
+ * C を含む4種（`core/skills.ts` の `rollRank4`）への切り替えは実装ステップ3。
+ * C の天井 40 はスキルがスコアに直結してから効くので、それまで排出すると
+ * 「C と表示されるが実際は B と同じ」という別の嘘になる。
+ * 旧テーブル `GACHA_CONFIG[kind].rates` を読むため C も出るが、新しい正は `GACHA_RANK_RATES`。
+ * 参照が消えたら削除する。
+ */
 
 /**
  * 単発ガチャ価格。種類別テーブルを解放済み最高規模（unlockedScales 末尾＝economy.ts

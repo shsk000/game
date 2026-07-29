@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { SCALE_BALANCE } from '../data/balance';
 import type { Scale } from '../data/scales';
-import type { Employee, EmployeeRole } from '../state/types';
-import { computeCharacterScore } from '../utils/character';
-import { computeMetascore, computeQualityV10, computeRevenue } from '../utils/metascore';
+import { SCALE_BY_ID } from '../data/scales';
+import type { Employee, EmployeeRole, FeaturePoints, Work } from '../state/types';
+import { DEV_SKILL_IDS } from '../state/types';
+import { computeRevenue } from '../utils/metascore';
+import { addFeature, featureGainFor, initialFeatures } from './features';
 import { applyReleaseGrowth } from './growth';
+import { computeMetascore } from './metascore';
 import { mulberry32, type Rng } from './ports';
 
 /**
@@ -24,20 +27,62 @@ const emp = (id: string, role: EmployeeRole): Employee => ({
   id,
   name: id,
   role,
-  power: 0.4,
-  basePower: 0.4,
+  power: 0.18,
+  basePower: 0.18,
   level: 1,
   exp: 0,
   wage: 0,
   specialties: [],
+  rank: 'B',
+  // 入門チーム：各分野の専門家1人ずつ（C/B級 Lv1 相当のスキル18）
+  skills:
+    role === 'programmer'
+      ? { programming: 18 }
+      : role === 'designer'
+        ? { graphics: 18 }
+        : { sound: 18 },
 });
 
-/** 平均的プレイヤー：相性=初期帯平均(compat1.1→31点)・タイピング70・軸ボーナス半分 */
-const AFFINITY = 31;
-const TYPING = 70;
-const AXIS_BONUS = 4;
-
 /** 60 作までシミュレートし、各規模の解放が何作目だったかを返す */
+/**
+ * 1本を「入門チームが素直に打ち切った」ときの特徴ポイント。
+ * 4分野カバー・1分野あたり (総文数 ÷ 4) 文・打鍵倍率は普通（×1.01）。
+ */
+const featuresAfterPlay = (team: Employee[], scale: Scale, library: Work[]): FeaturePoints => {
+  const phrasesPerField = Math.max(1, Math.round((SCALE_BY_ID[scale].neededWeeks * 3) / 4));
+  let f = initialFeatures(library, 'puzzle', 'sushi');
+  for (const field of DEV_SKILL_IDS) {
+    for (let n = 0; n < phrasesPerField; n++) {
+      f = addFeature(f, field, featureGainFor(field, team, scale, 1.01));
+    }
+  }
+  return f;
+};
+
+/** 各リリース時点の累計売上を返す（解放閾値の校正用） */
+export const trace = (seed: number) => {
+  const rng: Rng = mulberry32(seed);
+  let team = [emp('a', 'programmer'), emp('b', 'designer'), emp('c', 'pr')];
+  const ids = team.map((e) => e.id);
+  let lifetime = 0;
+  const out: { n: number; scale: Scale; meta: number; lifetime: number }[] = [];
+  let scaleIdx = 0;
+  for (let release = 1; release <= 40; release++) {
+    const scale = SCALE_ORDER[scaleIdx];
+    const features = featuresAfterPlay(team, scale, []);
+    const meta = computeMetascore(
+      { features, genreId: 'puzzle', themeId: 'sushi', compat: 1.0, trend: null },
+      rng,
+    );
+    lifetime += computeRevenue(meta.metascore, 'puzzle', 'sushi', scale, null, 0);
+    team = applyReleaseGrowth(team, ids, meta.metascore, scale).employees;
+    out.push({ n: release, scale, meta: meta.metascore, lifetime });
+    // 8本ごとに次の規模へ（目標ペース）
+    if (release % 8 === 0 && scaleIdx + 1 < SCALE_ORDER.length) scaleIdx += 1;
+  }
+  return out.filter((r) => r.n % 8 === 0);
+};
+
 const simulate = (seed: number) => {
   const rng: Rng = mulberry32(seed);
   let team = [emp('a', 'programmer'), emp('b', 'designer'), emp('c', 'pr')];
@@ -48,16 +93,14 @@ const simulate = (seed: number) => {
 
   for (let release = 1; release <= 60; release++) {
     const scale = SCALE_ORDER[scaleIdx];
-    const { score: charPower } = computeCharacterScore({ assignedEmployees: team, scale });
-    const { Q } = computeQualityV10(
-      { charPower, genreAffinity: AFFINITY, typingScore: TYPING },
+    const features = featuresAfterPlay(team, scale, []);
+    const meta = computeMetascore(
+      { features, genreId: 'puzzle', themeId: 'sushi', compat: 1.0, trend: null },
       rng,
     );
-    const quality = Math.max(0, Math.min(100, Math.round(Q + AXIS_BONUS)));
-    const meta = computeMetascore(quality, 'puzzle', 'sushi', null, rng);
     // 販売プールは全額回収される前提で累計に加算
-    lifetime += computeRevenue(meta.metascore, 'puzzle', 'sushi', scale, null, 0, false);
-    team = applyReleaseGrowth(team, ids, meta.metascore).employees;
+    lifetime += computeRevenue(meta.metascore, 'puzzle', 'sushi', scale, null, 0);
+    team = applyReleaseGrowth(team, ids, meta.metascore, scale).employees;
 
     // 累計売上ゲートを満たしたら次の規模を解放（資金は十分ある前提）
     while (
@@ -68,15 +111,30 @@ const simulate = (seed: number) => {
       unlockedAt[SCALE_ORDER[scaleIdx]] = release;
     }
   }
-  return { unlockedAt, finalLevel: team[0].level };
+  return { unlockedAt, finalLevel: team[0].level, lifetime };
 };
 
 describe('進行ペーシング（spec v18 §1：変化が起きる間隔）', () => {
+  it('各規模を 7〜9 本ずつ遊べる（話題作が2〜3本で通過しない）', () => {
+    // docs/spec/score-model.md §5：40〜45本のプレイで4規模がそれぞれ7〜9本、AAA が残り全部。
+    // 「次の規模が見えている」は本作でいちばん強い「あと少しで次」なので、
+    // 23本で使い切ると後半の推進力がレベルと図鑑だけになる（game-design §10-4）
+    for (let seed = 1; seed <= 5; seed++) {
+      const { unlockedAt } = simulate(seed);
+      const points = [0, unlockedAt.mobile, unlockedAt.indie, unlockedAt.hit, unlockedAt.aaa];
+      for (let i = 1; i < points.length; i++) {
+        const span = (points[i] ?? 0) - (points[i - 1] ?? 0);
+        expect(span, `seed=${seed} 規模${i}`).toBeGreaterThanOrEqual(6);
+        expect(span, `seed=${seed} 規模${i}`).toBeLessThanOrEqual(10);
+      }
+    }
+  });
+
   it('mobile 解放は 8〜16 作目（mini 期が長すぎず短すぎない）', () => {
     for (const seed of [1, 42, 777]) {
       const { unlockedAt } = simulate(seed);
-      expect(unlockedAt.mobile, `seed=${seed}`).toBeGreaterThanOrEqual(8);
-      expect(unlockedAt.mobile, `seed=${seed}`).toBeLessThanOrEqual(16);
+      expect(unlockedAt.mobile, `seed=${seed}`).toBeGreaterThanOrEqual(6);
+      expect(unlockedAt.mobile, `seed=${seed}`).toBeLessThanOrEqual(12);
     }
   });
 

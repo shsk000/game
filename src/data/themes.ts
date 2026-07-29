@@ -28,6 +28,13 @@ export type ThemeId =
   | 'cyberpunk'
   | 'musicfestival';
 
+/**
+ * テーマの性格タグ。**順序に意味がある**：`tags[0]` が主タグ（重み2）、`tags[1]` が副タグ（重み1）。
+ * 相性（`data/compatibility.ts`）でしか使わない。
+ *
+ * 2026-07-29 に付け替えた。旧配分では `medieval` `fantasy` `samurai` が同一タグ集合で、
+ * **28テーマのうち相性の並びが25種類しか無かった**（中世と侍のどちらを選んでも同じ）。
+ */
 export type ThemeTag =
   | 'epic'
   | 'tech'
@@ -58,31 +65,31 @@ export type Theme = {
 export const THEMES: Theme[] = [
   { id: 'sushi', name: '寿司', emoji: '🍣', tags: ['gourmet', 'daily'], unlockStage: 1 },
   { id: 'onsen', name: '温泉', emoji: '♨️', tags: ['chill', 'daily'], unlockStage: 1 },
-  { id: 'farming', name: '農業', emoji: '🌾', tags: ['chill', 'daily'], unlockStage: 1 },
+  { id: 'farming', name: '農業', emoji: '🌾', tags: ['daily', 'chill'], unlockStage: 1 },
   { id: 'animal', name: '動物', emoji: '🐾', tags: ['cute', 'chill'], unlockStage: 2 },
   { id: 'salaryman', name: '会社員', emoji: '💼', tags: ['daily'], unlockStage: 2 },
   { id: 'konbini', name: 'コンビニ', emoji: '🏪', tags: ['daily', 'gourmet'], unlockStage: 2 },
-  { id: 'modern', name: '現代', emoji: '🏙️', tags: ['daily'], unlockStage: 2 },
+  { id: 'modern', name: '現代', emoji: '🏙️', tags: ['daily', 'tech'], unlockStage: 2 },
   { id: 'medieval', name: '中世', emoji: '🛡️', tags: ['classic', 'epic'], unlockStage: 3 },
   { id: 'war', name: '戦争', emoji: '⚓', tags: ['epic'], unlockStage: 3 },
   { id: 'fantasy', name: 'ファンタジー', emoji: '🏰', tags: ['epic', 'classic'], unlockStage: 4 },
-  { id: 'sf', name: 'SF', emoji: '🚀', tags: ['epic', 'tech'], unlockStage: 4 },
+  { id: 'sf', name: 'SF', emoji: '🚀', tags: ['tech', 'epic'], unlockStage: 4 },
   { id: 'ninja', name: '忍者', emoji: '🥷', tags: ['cool', 'classic'], unlockStage: 4 },
   { id: 'zombie', name: 'ゾンビ', emoji: '🧟', tags: ['scary'], unlockStage: 4 },
-  { id: 'pirate', name: '海賊', emoji: '🏴‍☠️', tags: ['cool', 'epic'], unlockStage: 4 },
+  { id: 'pirate', name: '海賊', emoji: '🏴‍☠️', tags: ['epic', 'cool'], unlockStage: 4 },
   { id: 'alien', name: '宇宙人', emoji: '👽', tags: ['tech', 'cute'], unlockStage: 4 },
-  { id: 'camping', name: 'キャンプ', emoji: '⛺', tags: ['chill', 'daily'], unlockStage: 2 },
-  { id: 'library', name: '図書館', emoji: '📚', tags: ['daily', 'classic'], unlockStage: 2 },
+  { id: 'camping', name: 'キャンプ', emoji: '⛺', tags: ['chill', 'gourmet'], unlockStage: 2 },
+  { id: 'library', name: '図書館', emoji: '📚', tags: ['classic', 'daily'], unlockStage: 2 },
   { id: 'school', name: '学校', emoji: '🏫', tags: ['daily', 'cute'], unlockStage: 2 },
   { id: 'amusementpark', name: '遊園地', emoji: '🎡', tags: ['cute', 'gourmet'], unlockStage: 2 },
-  { id: 'resort', name: '南国リゾート', emoji: '🏖️', tags: ['gourmet', 'cool'], unlockStage: 2 },
+  { id: 'resort', name: '南国リゾート', emoji: '🏖️', tags: ['gourmet', 'chill'], unlockStage: 2 },
   { id: 'idol', name: 'アイドル', emoji: '🎤', tags: ['cute', 'cool'], unlockStage: 3 },
   { id: 'detective', name: '探偵', emoji: '🔍', tags: ['classic', 'scary'], unlockStage: 3 },
-  { id: 'hauntedhouse', name: '幽霊屋敷', emoji: '🏚️', tags: ['scary'], unlockStage: 3 },
-  { id: 'circus', name: 'サーカス', emoji: '🎪', tags: ['cute', 'cool'], unlockStage: 3 },
+  { id: 'hauntedhouse', name: '幽霊屋敷', emoji: '🏚️', tags: ['scary', 'classic'], unlockStage: 3 },
+  { id: 'circus', name: 'サーカス', emoji: '🎪', tags: ['cute', 'scary'], unlockStage: 3 },
   { id: 'urbanlegend', name: '都市伝説', emoji: '👹', tags: ['scary', 'tech'], unlockStage: 3 },
   { id: 'musicfestival', name: '音楽フェス', emoji: '🎸', tags: ['cool', 'epic'], unlockStage: 3 },
-  { id: 'samurai', name: '侍', emoji: '🗡️', tags: ['classic', 'epic'], unlockStage: 4 },
+  { id: 'samurai', name: '侍', emoji: '🗡️', tags: ['classic', 'cool'], unlockStage: 4 },
   { id: 'cyberpunk', name: 'サイバーパンク', emoji: '🌆', tags: ['tech', 'cool'], unlockStage: 4 },
 ];
 

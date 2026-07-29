@@ -1,7 +1,6 @@
 import { computeOfflineEarnings } from '../core/economy';
 import type { Deps } from '../core/ports';
 import { defaultDeps, mulberry32 } from '../core/ports';
-import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import { ensureTrend } from '../data/trend';
 import { startBgm } from '../utils/bgm';
 import { setSfxMuted, setSfxVolume } from '../utils/sfx';
@@ -24,7 +23,6 @@ const persistedSnapshot = (s: GameState): Omit<storage.Persisted, 'version' | 'l
   unlockedScales: s.unlockedScales,
   unlockedGenres: s.unlockedGenres,
   unlockedThemes: s.unlockedThemes,
-  unlockedCategories: s.unlockedCategories,
   ghosts: s.ghosts,
   library: s.library,
   trend: s.trend,
@@ -34,7 +32,6 @@ const persistedSnapshot = (s: GameState): Omit<storage.Persisted, 'version' | 'l
   currentDate: s.currentDate,
   candidate: s.candidate,
   gachaPity: s.gachaPity,
-  investPurchaseCount: s.investPurchaseCount,
   ownedItems: s.ownedItems,
   muted: s.muted,
   volume: s.volume,
@@ -65,10 +62,6 @@ export const buildBootPatch = (
     unlockedGenres: persisted.unlockedGenres,
     unlockedThemes: persisted.unlockedThemes,
     // 旧セーブデータ防御：カテゴリが空のときは初期3カテゴリを補完
-    unlockedCategories:
-      persisted.unlockedCategories && persisted.unlockedCategories.length > 0
-        ? persisted.unlockedCategories
-        : [...INITIAL_CATEGORY_IDS],
     ghosts: persisted.ghosts,
     library: offline.library,
     trend: ensureTrend(persisted.trend, nowMs, deps.rng),
@@ -78,7 +71,6 @@ export const buildBootPatch = (
     offlineReport: offline.report,
     currentDate: persisted.currentDate ?? INITIAL_GAME_DATE,
     gachaPity: persisted.gachaPity ?? 0,
-    investPurchaseCount: persisted.investPurchaseCount ?? 0,
     ownedItems: persisted.ownedItems ?? {},
     muted: persisted.muted ?? false,
     volume: persisted.volume ?? 1,

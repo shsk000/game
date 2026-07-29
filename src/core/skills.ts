@@ -1,0 +1,285 @@
+import {
+  GACHA_RANK_RATES,
+  GACHA_RANKS,
+  type GachaKind,
+  type GachaRank,
+  GROWTH,
+  RANK_TOTAL_POWER,
+  SKILL_CONFIG,
+} from '../data/balance';
+import type { DevSkillId, Employee, SkillId, SkillSet } from '../state/types';
+import { DEV_SKILL_IDS } from '../state/types';
+import type { Rng } from './ports';
+
+/**
+ * スキル（docs/spec/score-model.md §1）の純粋ロジック。
+ *
+ * 用語（docs/spec/glossary.md）:
+ * - **スキル**  … 社員が持つ能力値（0〜100）。持てるのは1つか2つ
+ * - **総合力**  … スキル値の合計。ランクが天井、レベルが現在値を決める
+ * - **ランク**  … C/B/A/S。採用時に決まる素質のラベルで、育っても変わらない
+ * - **職種**    … 一番高いスキルの呼び名（管理する枠ではない）
+ */
+
+/** 全スキル（広報を含む5種） */
+export const ALL_SKILL_IDS: readonly SkillId[] = [...DEV_SKILL_IDS, 'pr'] as const;
+
+const SKILL_LABELS: Record<SkillId, string> = {
+  programming: 'プログラミング',
+  graphics: 'グラフィック',
+  sound: 'サウンド',
+  scenario: 'シナリオ',
+  pr: '広報',
+};
+
+/** 職種名（＝一番高いスキルの呼び名）。管理する枠ではなく表示上の名前 */
+const JOB_LABELS: Record<SkillId, string> = {
+  programming: 'プログラマー',
+  graphics: 'グラフィッカー',
+  sound: 'サウンドクリエイター',
+  scenario: 'シナリオライター',
+  pr: '広報',
+};
+
+export const skillLabel = (id: SkillId): string => SKILL_LABELS[id];
+
+/**
+ * 総合力（＝スキル値の合計）。
+ * Lv1 はランクによらずほぼ同じで、Lv10 でランクごとの天井へ線形に伸びる。
+ */
+export const totalPowerFor = (rank: GachaRank, level: number, lv1Roll = 0.5): number => {
+  const r = RANK_TOTAL_POWER[rank];
+  const lv1 = r.lv1Min + (r.lv1Max - r.lv1Min) * lv1Roll;
+  const lv = Math.max(1, Math.min(GROWTH.levelCap, level));
+  const t = (lv - 1) / (GROWTH.levelCap - 1);
+  return Math.round((lv1 + (r.lv10 - lv1) * t) * 10) / 10;
+};
+
+/**
+ * 総合力をスキルへ配分する。
+ * - 1スキル … そのまま1分野に乗る（尖る）
+ * - 2スキル … 分散ペナルティを掛けてから2分野へ配分（**専門特化のほうが総合力が高い**）
+ */
+export const distributeSkills = (
+  totalPower: number,
+  ids: SkillId[],
+  spreadPenalty: number = SKILL_CONFIG.spreadPenalty,
+): SkillSet => {
+  if (ids.length === 0) return {};
+  if (ids.length === 1) return { [ids[0]]: capSkill(totalPower) };
+  const eff = Math.round(totalPower * spreadPenalty * 10) / 10;
+  const { primary } = SKILL_CONFIG.spreadRatio;
+  const head = capSkill(eff * primary);
+  // 端数は副スキル側で吸収する（丸めで合計が総合力からズレないように）
+  return { [ids[0]]: head, [ids[1]]: capSkill(eff - head) };
+};
+
+/**
+ * スキル値は **0〜100**（docs/spec/score-model.md §1）。
+ * 装備を掛けた**実効**スキルは 100 を超えてよいが、社員が持つ素の値はここで頭打ちにする。
+ */
+export const capSkill = (v: number): number => Math.round(Math.max(0, Math.min(100, v)) * 10) / 10;
+
+/** 社員が実際に持っているスキルの ID（値が 0 より大きいもの） */
+export const ownedSkillIds = (skills: SkillSet): SkillId[] =>
+  ALL_SKILL_IDS.filter((id) => (skills[id] ?? 0) > 0);
+
+/** その社員の総合力（スキル値の合計） */
+export const totalPowerOf = (skills: SkillSet): number =>
+  Math.round(ALL_SKILL_IDS.reduce((sum, id) => sum + (skills[id] ?? 0), 0) * 10) / 10;
+
+/** 一番高いスキル（同値なら ALL_SKILL_IDS の順で先のもの） */
+export const primarySkillOf = (skills: SkillSet): SkillId | null => {
+  let best: SkillId | null = null;
+  let bestVal = 0;
+  for (const id of ALL_SKILL_IDS) {
+    const v = skills[id] ?? 0;
+    if (v > bestVal) {
+      best = id;
+      bestVal = v;
+    }
+  }
+  return best;
+};
+
+/** 職種名（一番高いスキルの呼び名）。スキルが無ければ「社員」 */
+export const jobTitleOf = (skills: SkillSet): string => {
+  const p = primarySkillOf(skills);
+  return p ? JOB_LABELS[p] : '社員';
+};
+
+/** ランク抽選（C を含む4種）。premium のみ天井が効く */
+export const rollRank4 = (kind: GachaKind, rng: Rng = Math.random, pityCount = 0): GachaRank => {
+  const rates = GACHA_RANK_RATES[kind];
+  const pity = kind === 'premium' ? 10 : 0;
+  if (pity > 0 && pityCount >= pity) return 'S';
+  // 強い順に判定（S → A → B → C）。合計は 1.0 前提
+  const r = rng();
+  let acc = 0;
+  for (const rank of [...GACHA_RANKS].reverse()) {
+    acc += rates[rank];
+    if (r < acc) return rank;
+  }
+  return 'C';
+};
+
+/**
+ * 主スキルの抽選重み。
+ *
+ * 開発4分野は均等（各22%）。**広報だけ 12% に落としてある**：
+ * 広報は開発の特徴ポイントに一切効かず売上倍率にしか効かないので、
+ * 均等（20%）だと5人に1人が「作品づくりに使えない社員」になり、
+ * 実ガチャで組んだチームが想定スコアに届かなくなる（本番経路の実測で判明）。
+ */
+/**
+ * ⚠ **前提**：この重み付けが職種分布を再現できるのは、`roleFromSkills` が見る
+ * `primarySkillOf`（値が最大のスキル）が「抽選で引いた主スキル」と一致するから。
+ * これは `SKILL_CONFIG.spreadRatio` が primary 0.55 > secondary 0.45 で成り立っている。
+ * 50/50 にすると同値のタイブレークが `ALL_SKILL_IDS` の順（programming が先頭）に落ち、
+ * **職種分布が黙って programming 寄りに歪む**（＝バグ抑制の期待値が動く）。
+ * skills.test.ts に「引いた主スキル＝最大値」を固定するテストがある。
+ */
+const PRIMARY_SKILL_WEIGHTS: readonly (readonly [SkillId, number])[] = [
+  ['programming', 0.22],
+  ['graphics', 0.22],
+  ['sound', 0.22],
+  ['scenario', 0.22],
+  // 広報は**開発の特徴ポイントに効かない**（売上倍率だけ）。20% では
+  // 「引いたのに作品づくりに使えない」が5人に1人になり、実ガチャのチームが
+  // 想定スコアに届かなかった。12% に下げて開発分野を厚くする
+  ['pr', 0.12],
+] as const;
+
+const pickWeighted = (rng: Rng): SkillId => {
+  const r = rng();
+  let acc = 0;
+  for (const [id, w] of PRIMARY_SKILL_WEIGHTS) {
+    acc += w;
+    if (r < acc) return id;
+  }
+  return 'programming';
+};
+
+/**
+ * 採用時のスキル抽選。
+ * スキル数（1つ／2つ）は確率で決まり、**ランクとは無関係**。
+ *
+ * `totalPower` は呼び出し側が渡す。実装ステップ1 では**旧 `power` × 100** を渡して
+ * 数値を凍結しており、ランクの天井（`totalPowerFor`）が効き始めるのは実装ステップ3 から。
+ */
+export const rollSkills = (
+  totalPower: number,
+  rng: Rng,
+  spreadPenalty: number = SKILL_CONFIG.spreadPenalty,
+): SkillSet => {
+  const two = rng() < SKILL_CONFIG.twoSkillChance;
+  const primary = pickWeighted(rng);
+  const ids: SkillId[] = [primary];
+  if (two) {
+    const rest = ALL_SKILL_IDS.filter((id) => id !== primary);
+    ids.push(rest[Math.floor(rng() * rest.length)]);
+  }
+  return distributeSkills(totalPower, ids, spreadPenalty);
+};
+
+/**
+ * レベルアップ後のスキル。**増えるのは総合力**で、それが持っているスキルに
+ * 同じ比率で配分される（スキルの種類は増えない）。
+ */
+export const growSkills = (skills: SkillSet, rank: GachaRank, newLevel: number): SkillSet => {
+  const ids = ownedSkillIds(skills);
+  if (ids.length === 0) return skills;
+  const current = totalPowerOf(skills);
+  // 現在の総合力がランクの Lv1 帯のどこにあったかを推定して、同じ引きのまま伸ばす
+  const r = RANK_TOTAL_POWER[rank];
+  const lv1Span = r.lv1Max - r.lv1Min;
+  const spread = ids.length >= 2 ? SKILL_CONFIG.spreadPenalty : 1;
+  const baseAtLv1 = current / spread;
+  const roll = lv1Span > 0 ? Math.max(0, Math.min(1, (baseAtLv1 - r.lv1Min) / lv1Span)) : 0.5;
+  const next = totalPowerFor(rank, newLevel, roll);
+  // 配分比は維持する（尖った社員は尖ったまま強くなる）
+  const ratio = ids.map((id) => (skills[id] ?? 0) / current);
+  const eff = next * spread;
+  const out: SkillSet = {};
+  ids.forEach((id, i) => {
+    out[id] = capSkill(eff * ratio[i]);
+  });
+  return out;
+};
+
+/**
+ * スキルを一律の倍率で伸ばす（配分の比率は維持）。
+ *
+ * **旧セーブから移行した社員は `rank` を持たない**ため、ランクの天井から総合力を
+ * 決められない。その場合はこちらを使い、旧来の成長率（`powerAt`）と同じ比率で伸ばす。
+ * これで「レベルは上がったのにスキルが伸びない」状態を防ぎ、旧 power との整合も保てる。
+ */
+export const scaleSkills = (skills: SkillSet, factor: number): SkillSet => {
+  const out: SkillSet = {};
+  for (const id of ownedSkillIds(skills)) {
+    out[id] = capSkill((skills[id] ?? 0) * factor);
+  }
+  return out;
+};
+
+/**
+ * **育てきったときのスキル値**（Lv10 到達時）。
+ *
+ * Lv1 の総合力はランクによらずほぼ同じなので、開封した瞬間の数値では差が分からない。
+ * 「グラフィック 24 → 育てば 100」と**到達点**を出すことで、ランクバッジが何を約束して
+ * いるのかが伝わる（docs/spec/score-model.md §1）。
+ *
+ * **2スキル持ちは分散ペナルティ込み**で返す（S の2スキル持ちは合計90＝49.5/40.5 であって
+ * 100 ではない）。スキルごとの到達値を出せば専門特化と器用貧乏の違いも同時に伝わる。
+ */
+export const skillsAtCap = (skills: SkillSet, rank: GachaRank): SkillSet => {
+  const ids = ownedSkillIds(skills);
+  if (ids.length === 0) return {};
+  const current = totalPowerOf(skills);
+  if (current <= 0) return skills;
+  const spread = ids.length >= 2 ? SKILL_CONFIG.spreadPenalty : 1;
+  const eff = RANK_TOTAL_POWER[rank].lv10 * spread;
+  const out: SkillSet = {};
+  for (const id of ids) out[id] = capSkill(eff * ((skills[id] ?? 0) / current));
+  return out;
+};
+
+/**
+ * 分野ごとの担当者（その分野でいちばんスキルが高い1人）。
+ *
+ * **各分野の出来は、担当1人で決まる。2人目以降は控え。**
+ * サッカーやバンドと同じで、ポジションには1人が入る——説明が1行で済む。
+ *
+ * 以前は「合計だが2人目以降は効率が落ちる（×0.12）」だった。数字としては
+ * 「均等に散らす > ◎に寄せる」を作れていたが、**画面に3か所も注釈を足さないと
+ * 伝わらなかった**（`絵 二郎 30→4` / `⚠ 2人目は分業ロス` / `2人目は12%しか足されない`）。
+ * 担当制なら注釈ゼロで、しかも均等と集中の差は 6.6点 → 12.6点 と強くなる。
+ *
+ * 合計ではなく最大値なので、**規模・レベル・装備が変わっても関係が崩れない**
+ * （旧方式の 0.12 は上下から挟まれた連立解で、調整のたびに窓が閉じないか
+ * 確かめる必要があった）。
+ */
+export const leadForField = (employees: Employee[], field: DevSkillId): Employee | null => {
+  let best: Employee | null = null;
+  for (const e of employees) {
+    const v = e.skills?.[field] ?? 0;
+    if (v > 0 && (best === null ? 0 : (best.skills?.[field] ?? 0)) < v) best = e;
+  }
+  return best;
+};
+
+/** 分野ごとの実効スキル（＝担当者のスキル値） */
+export const skillTotalsOf = (employees: Employee[]): Record<DevSkillId, number> => {
+  const out = {} as Record<DevSkillId, number>;
+  for (const field of DEV_SKILL_IDS) {
+    out[field] = leadForField(employees, field)?.skills?.[field] ?? 0;
+  }
+  return out;
+};
+
+/** 広報スキル（売上ボーナスの素）。開発分野と同じく**担当1人**で決まる */
+export const prSkillTotalOf = (employees: Employee[]): number => {
+  let best = 0;
+  for (const e of employees) best = Math.max(best, e.skills?.pr ?? 0);
+  return best;
+};

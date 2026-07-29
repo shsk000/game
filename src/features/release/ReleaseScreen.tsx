@@ -4,9 +4,7 @@ import { JacketView } from '../../components/JacketView';
 import { PixelWindow } from '../../components/ui';
 import { adviceFor } from '../../core/advice';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
-import { QUALITY_WEIGHTS } from '../../data/balance';
 import { compatLabel, getCompat } from '../../data/compatibility';
-import { sumMonthlySalaries } from '../../data/employees';
 import { GENRE_BY_ID } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
@@ -15,38 +13,32 @@ import type { Achievement } from '../../state/types';
 import { formatRoi, formatWeeks, formatYen } from '../../utils/format';
 import { scoreFlavor } from '../../utils/metascore';
 import { computeProfit } from '../../utils/profit';
+import { normalizedWeightsFor, weightsFor } from '../../data/archetypes';
+import { SCORE_TIER_LABEL, type ScoreTier } from '../../data/balance';
+import type { FeatureId } from '../../state/types';
 import { sfx } from '../../utils/sfx';
 
-type RevealStage =
-  | 'pre-ads'
-  | 'reveal-character'
-  | 'reveal-affinity'
-  | 'reveal-performance'
-  | 'reveal-luck'
-  | 'reveal-total'
-  | 'done';
+type RevealStage = 'pre-ads' | 'reveal-features' | 'reveal-bonus' | 'reveal-total' | 'done';
 
-const STAGE_SEQUENCE: RevealStage[] = [
-  'reveal-character',
-  'reveal-affinity',
-  'reveal-performance',
-  'reveal-luck',
-  'reveal-total',
-  'done',
+const STAGE_SEQUENCE: RevealStage[] = ['reveal-features', 'reveal-bonus', 'reveal-total', 'done'];
+
+/** 内訳に出す特徴ポイント（docs/spec/score-model.md §2 の順） */
+const FEATURE_ROWS: { id: FeatureId; emoji: string; label: string }[] = [
+  { id: 'usabilityPt', emoji: '🕹', label: '操作性' },
+  { id: 'graphicsPt', emoji: '🎨', label: 'グラフィック' },
+  { id: 'soundPt', emoji: '🎵', label: 'サウンド' },
+  { id: 'storyPt', emoji: '📖', label: 'ストーリー' },
+  { id: 'innovationPt', emoji: '💡', label: '革新性' },
 ];
+
+/** 実績・レベルアップの表示行数の上限（1280×720 スクロール禁止） */
+const MAX_BADGE_ROWS = 1;
 
 const stageReached = (current: RevealStage, target: RevealStage): boolean => {
   const order: RevealStage[] = ['pre-ads', ...STAGE_SEQUENCE];
   return order.indexOf(current) >= order.indexOf(target);
 };
 
-/** 4 要素ウェイト（v0.14 で再配分。balance.ts の QUALITY_WEIGHTS と同期） */
-const WEIGHTS = {
-  charPower: QUALITY_WEIGHTS.charPower,
-  genreAffinity: QUALITY_WEIGHTS.genreAffinity,
-  performance: QUALITY_WEIGHTS.typingScore,
-  luck: QUALITY_WEIGHTS.luck,
-};
 
 /**
  * v0.14 §5-3：開発完了（打ち上げ）のフレーバー追加評価。
@@ -75,8 +67,8 @@ export const ReleaseScreen = () => {
   const work = useGameStore((s) => s.lastReleased);
   const current = useGameStore((s) => s.current);
   const lastLevelUps = useGameStore((s) => s.lastLevelUps);
-  const employees = useGameStore((s) => s.employees);
   const releaseWork = useGameStore((s) => s.releaseWork);
+  const applyLaunchAd = useGameStore((s) => s.applyLaunchAd);
   const goTo = useGameStore((s) => s.goTo);
   const clearNewlyAchieved = useGameStore((s) => s.clearNewlyAchieved);
 
@@ -85,11 +77,14 @@ export const ReleaseScreen = () => {
   const [resultStep, setResultStep] = useState<'score' | 'sales'>('score');
   const [displayQ, setDisplayQ] = useState(0);
   const [displayMeta, setDisplayMeta] = useState(0);
-  const [launchAdApplied, setLaunchAdApplied] = useState(false);
   // 発売前のマーケティング広告（売上 +10%。スコアには影響しない）
   const [marketingApplied, setMarketingApplied] = useState(false);
   const [adRunning, setAdRunning] = useState<null | 'marketing' | 'debug' | 'launch'>(null);
+  /** 直前に加算されたボーナス額（`(+¥○○)` の演出用。正の額は work 側に既に反映済み） */
   const [bonusRevenue, setBonusRevenue] = useState(0);
+  // 適用済み判定は store の作品データが唯一の真実（ローカル state だと画面を出入りすると
+  // 「未適用」に戻り、二重視聴できてしまう）。
+  const launchAdApplied = work?.launchAdUsed ?? false;
   const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
   const timersRef = useRef<number[]>([]);
 
@@ -97,7 +92,6 @@ export const ReleaseScreen = () => {
   useEffect(() => {
     if (!work && current) {
       setStage('pre-ads');
-      setLaunchAdApplied(false);
       setMarketingApplied(false);
       setBonusRevenue(0);
       setDisplayQ(0);
@@ -113,32 +107,29 @@ export const ReleaseScreen = () => {
     if (!work) return;
     if (current) return;
     setNewAchievements(useGameStore.getState().newlyAchieved);
-    const charContrib = (work.breakdown.charPower ?? 0) * WEIGHTS.charPower;
     sfx.complete(); // 開封（評価ブレイクダウン再生）の合図
-    setStage('reveal-character');
+    setStage('reveal-features');
     setResultStep('score');
-    setDisplayQ(Math.round(charContrib));
+    setDisplayQ(Math.round(work.breakdown.base ?? 0));
 
     const timers: number[] = [];
     const schedule = (ms: number, fn: () => void) => {
       timers.push(window.setTimeout(fn, ms));
     };
 
-    schedule(500, () => {
-      setStage('reveal-affinity');
+    schedule(700, () => {
+      setStage('reveal-bonus');
       setDisplayQ(
-        (q) => q + Math.round((work.breakdown.genreAffinity ?? 0) * WEIGHTS.genreAffinity),
+        (q) =>
+          q +
+          Math.round(
+            (work.breakdown.compatBonus ?? 0) +
+              (work.breakdown.trendBonus ?? 0) +
+              (work.breakdown.criticVariance ?? 0),
+          ),
       );
     });
-    schedule(1100, () => {
-      setStage('reveal-performance');
-      setDisplayQ((q) => q + Math.round((work.breakdown.performance ?? 0) * WEIGHTS.performance));
-    });
-    schedule(1700, () => {
-      setStage('reveal-luck');
-      setDisplayQ((q) => q + Math.round((work.breakdown.luck ?? 50) * WEIGHTS.luck));
-    });
-    schedule(2300, () => {
+    schedule(1500, () => {
       setStage('reveal-total');
     });
     schedule(2900, () => {
@@ -210,15 +201,11 @@ export const ReleaseScreen = () => {
     ads.showRewarded({
       label: 'launch-ad',
       onComplete: () => {
-        const extra = Math.round(work.initialRevenue * 0.5);
-        setBonusRevenue(extra);
-        setLaunchAdApplied(true);
+        // 加算は store のアクションに一本化（初動・累計・記録・ライブラリをまとめて更新）。
+        // 旧実装は funds/lifetimeRevenue だけを setState 直叩きしていたため、ボーナスが
+        // work.totalRevenue に載らずライブラリ「累計」や図鑑の最高売上から消えていた。
+        setBonusRevenue(applyLaunchAd());
         setAdRunning(null);
-        const s = useGameStore.getState();
-        useGameStore.setState({
-          funds: s.funds + extra,
-          lifetimeRevenue: s.lifetimeRevenue + extra,
-        });
       },
       onFail: () => setAdRunning(null),
     });
@@ -282,14 +269,9 @@ export const ReleaseScreen = () => {
   }
 
   // ブレイクダウン演出後の表示
-  const charContrib = (work.breakdown.charPower ?? 0) * WEIGHTS.charPower;
-  const affContrib = (work.breakdown.genreAffinity ?? 0) * WEIGHTS.genreAffinity;
-  const perfContrib = (work.breakdown.performance ?? 0) * WEIGHTS.performance;
-  const luckContrib = (work.breakdown.luck ?? 50) * WEIGHTS.luck;
-  const total = Math.max(
-    0,
-    Math.min(100, Math.round(charContrib + affContrib + perfContrib + luckContrib)),
-  );
+  const bd = work.breakdown;
+  const weights = normalizedWeightsFor(work.genreId);
+  const labels = weightsFor(work.genreId);
   const isDone = stage === 'done';
 
   return (
@@ -299,10 +281,23 @@ export const ReleaseScreen = () => {
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        gap: 12,
-        padding: 12,
+        gap: 8,
+        padding: 8,
         minHeight: 0,
-        overflow: 'auto',
+        /**
+         * **この画面だけスクロールを許す**（オーナー判断 2026-07-29「スクロールできるようにして」）。
+         *
+         * リリース画面は内容量が**プレイの結果で変わる**：売上の計算は補正が乗るほど行が増え
+         * （広報・ファン・初組合せ・トレンド・マーケ広告・話題性で最大6行）、
+         * 打ち上げの評価も最大5件、実績と昇格のバッジも出たり出なかったりする。
+         * 縦を詰めても「あと1行」で溢れる状態が続き、そのたびに**次へ進めなくなる**
+         * （`overflow: hidden` で押せなくなる）。
+         *
+         * ほかの画面の「1280×720 スクロール禁止」は維持する。ここは結果を読む画面で、
+         * 操作の最中ではないため、スクロールが手触りを壊さない。
+         */
+        overflowY: 'auto',
+        overflowX: 'hidden',
         background: '#c9ccd0',
       }}
     >
@@ -323,78 +318,57 @@ export const ReleaseScreen = () => {
 
           <div style={{ display: resultStep === 'score' ? undefined : 'none' }}>
             <div className="breakdown-list">
-              {/* v0.14：内訳の読み方を明示（「41 → +14」が何なのか分からない問題への対応） */}
-              <p style={{ margin: '0 0 4px', fontSize: 11, opacity: 0.75 }}>
-                各要素の実力（0〜100 点）× 重み ＝ 品質 Q への加点。合計が Q になる
+              {/* 内訳の読み方（docs/spec/score-model.md §4：この一本以外でスコアは動かない） */}
+              <p style={{ margin: '0 0 2px', fontSize: 10, opacity: 0.7 }}>
+                特徴（0〜100）× ジャンルの重み ＝ メタスコアへの加点
               </p>
-              {stageReached(stage, 'reveal-character') && (
-                <div className="breakdown-row">
-                  <span className="breakdown-emoji">🧑‍💻</span>
-                  <span className="breakdown-label">
-                    キャラ能力 {work.breakdown.charPower ?? 0}点 ×{' '}
-                    {Math.round(WEIGHTS.charPower * 100)}%
-                  </span>
-                  <span className="breakdown-value">品質 +{Math.round(charContrib)}</span>
-                </div>
-              )}
-              {stageReached(stage, 'reveal-affinity') && (
+              {stageReached(stage, 'reveal-features') &&
+                FEATURE_ROWS.filter(
+                  // 0点の分野は畳む（1280×720 に収める。伸ばす余地は「次の一手」で伝える）
+                  (row) => (bd.features?.[row.id] ?? 0) > 0,
+                ).map((row) => {
+                  const contrib = bd.features?.[row.id] ?? 0;
+                  const weight = weights[row.id];
+                  const point = weight > 0 ? Math.round(contrib / weight) : 0;
+                  return (
+                    <div className="breakdown-row" key={row.id}>
+                      <span className="breakdown-emoji">{row.emoji}</span>
+                      <span className="breakdown-label">
+                        {row.label} {point}点 × {labels[row.id]}（{Math.round(weight * 100)}%）
+                      </span>
+                      <span className="breakdown-value">+{contrib.toFixed(1)}</span>
+                    </div>
+                  );
+                })}
+              {stageReached(stage, 'reveal-bonus') && (bd.compatBonus ?? 0) !== 0 && (
                 <div className="breakdown-row">
                   <span className="breakdown-emoji">🧩</span>
                   <span className="breakdown-label">
-                    ジャンル相性 {work.breakdown.genreAffinity ?? 0}点 ×{' '}
-                    {Math.round(WEIGHTS.genreAffinity * 100)}%
+                    相性 {compatLabel(compat)}
                   </span>
-                  <span className="breakdown-value">品質 +{Math.round(affContrib)}</span>
+                  <span className="breakdown-value">
+                    {(bd.compatBonus ?? 0) > 0 ? '+' : ''}
+                    {bd.compatBonus}
+                  </span>
                 </div>
               )}
-              {stageReached(stage, 'reveal-performance') && (
+              {stageReached(stage, 'reveal-bonus') && (bd.trendBonus ?? 0) !== 0 && (
                 <div className="breakdown-row">
-                  <span className="breakdown-emoji">⚡</span>
-                  <span className="breakdown-label">
-                    タイピング演技 {work.breakdown.performance ?? 0}点 ×{' '}
-                    {Math.round(WEIGHTS.performance * 100)}%
-                  </span>
-                  <span className="breakdown-value">品質 +{Math.round(perfContrib)}</span>
+                  <span className="breakdown-emoji">📈</span>
+                  <span className="breakdown-label">トレンド合致</span>
+                  <span className="breakdown-value">+{bd.trendBonus}</span>
                 </div>
               )}
-              {stageReached(stage, 'reveal-luck') && (
+              {stageReached(stage, 'reveal-bonus') && (
                 <div className="breakdown-row">
                   <span className="breakdown-emoji">🎲</span>
-                  <span className="breakdown-label">
-                    運 {work.breakdown.luck ?? 50}点 × {Math.round(WEIGHTS.luck * 100)}%
-                  </span>
-                  <span className="breakdown-value">品質 +{Math.round(luckContrib)}</span>
-                </div>
-              )}
-              {/* v0.14：開発中イベントの成果（面白さ/操作性/バランス−バグ率）を品質加点として開示 */}
-              {stageReached(stage, 'reveal-luck') && (work.breakdown.axisBonus ?? 0) !== 0 && (
-                <div className="breakdown-row">
-                  <span className="breakdown-emoji">🎪</span>
-                  <span className="breakdown-label">イベント成果（開発中に稼いだ面白さ等）</span>
+                  <span className="breakdown-label">評価家のブレ</span>
                   <span className="breakdown-value">
-                    品質 {(work.breakdown.axisBonus ?? 0) > 0 ? '+' : ''}
-                    {work.breakdown.axisBonus}
+                    {(bd.criticVariance ?? 0) > 0 ? '+' : ''}
+                    {bd.criticVariance}
                   </span>
                 </div>
               )}
-              {stageReached(stage, 'reveal-total') && (
-                <div className="breakdown-row breakdown-total">
-                  <span className="breakdown-emoji">🎯</span>
-                  <span className="breakdown-label">品質 Q</span>
-                  <span className="breakdown-value">{total}</span>
-                </div>
-              )}
-              {stageReached(stage, 'reveal-total') &&
-                work.breakdown.luckMultiplier !== undefined &&
-                work.breakdown.luckMultiplier !== 1 && (
-                  <div className="breakdown-row" style={{ fontSize: 11, opacity: 0.85 }}>
-                    <span className="breakdown-emoji">✨</span>
-                    <span className="breakdown-label">
-                      運揺らぎ ×{work.breakdown.luckMultiplier}
-                    </span>
-                    <span className="breakdown-value">適用済</span>
-                  </div>
-                )}
             </div>
 
             {/* v0.17：レーダー図は内訳行と情報重複のため撤去（1280×720 スクロール禁止を優先） */}
@@ -408,30 +382,16 @@ export const ReleaseScreen = () => {
 
           {isDone && resultStep === 'score' && (
             <>
-              {work.isMasterpiece && (
-                <PixelWindow variant="emphasis" style={{ marginBottom: 8 }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 4,
-                      padding: 6,
-                      background: '#24395c',
-                      border: '3px solid #0a1422',
-                    }}
-                  >
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#a85a28' }}>
-                      🏆 名作認定！（メタ {work.metascore}）
-                    </div>
-                  </div>
-                </PixelWindow>
-              )}
+              {/* 神ゲーは**1行のバッジ**で出す。メタスコアは真上の金枠（`.meta-score.masterpiece`）
+                  にもう出ているので、「（メタ 99）」を枠付きで再掲すると同じ数字が2回並ぶ。
+                  さらにこの枠（58px）が縦を押し出し、下の「💰 売上を見る ▶」が画面外に出て
+                  **先に進めなくなっていた**（オーナー報告 2026-07-29。実測 top 691 / 1280×720）。 */}
+              {work.isMasterpiece && <div className="masterpiece-badge-pill">🏆 神ゲー認定！</div>}
               <div className="meta-flavor">『{scoreFlavor(work.metascore)}』</div>
               {work.ghostBeaten && <div className="ghost-update-badge">🏁 ゴースト記録更新！</div>}
               {newAchievements.length > 0 && (
                 <div className="achievement-badge-stack">
-                  {newAchievements.map((a) => {
+                  {newAchievements.slice(0, MAX_BADGE_ROWS).map((a) => {
                     const def = ACHIEVEMENT_BY_ID[a];
                     return (
                       <div key={a} className="achievement-badge">
@@ -439,23 +399,40 @@ export const ReleaseScreen = () => {
                       </div>
                     );
                   })}
+                  {newAchievements.length > MAX_BADGE_ROWS && (
+                    <div className="achievement-badge">
+                      🏆 ほか {newAchievements.length - MAX_BADGE_ROWS} 件の実績
+                    </div>
+                  )}
                 </div>
               )}
-              {/* v0.16：社員成長。参加社員のレベルアップを開封演出に同居させる */}
+              {/* v0.16：社員成長。参加社員のレベルアップを開封演出に同居させる。
+                  件数が可変なので**行数上限を切る**（1280×720 スクロール禁止） */}
               {lastLevelUps.length > 0 && (
                 <div className="achievement-badge-stack">
-                  {lastLevelUps.map((lu) => (
+                  {lastLevelUps.slice(0, MAX_BADGE_ROWS).map((lu) => (
                     <div key={`${lu.employeeId}-${lu.level}`} className="achievement-badge">
-                      ⬆ {lu.name} が Lv{lu.level} になった！（power {lu.powerBefore.toFixed(2)}→
-                      {lu.powerAfter.toFixed(2)}・給与 +{formatYen(lu.wageDelta)}/月）
+                      ⬆ {lu.name} が Lv{lu.level} になった！（給与 +{formatYen(lu.wageDelta)}/月）
                     </div>
                   ))}
+                  {lastLevelUps.length > MAX_BADGE_ROWS && (
+                    <div className="achievement-badge">
+                      ⬆ ほか {lastLevelUps.length - MAX_BADGE_ROWS} 人が成長した
+                    </div>
+                  )}
                 </div>
               )}
               <ul className="release-stats">
                 <li>
-                  品質 Q {work.quality} ／ 相性 {compatLabel(compat)} ({compat.toFixed(2)}x) ／ 👥
+                  相性 {compatLabel(compat)} ／ 👥
                   ファン +{work.fansGained}
+                  {(bd.fanFromHype ?? 0) > 0 && (
+                    <span style={{ fontSize: 11, opacity: 0.8 }}>
+                      {' '}
+                      （評価 {bd.fanBase} ＋ 企画の期待度 {bd.fanFromHype}
+                      {(bd.fanFromBuzz ?? 0) !== 0 && <> ＋ 話題 {bd.fanFromBuzz}</>}）
+                    </span>
+                  )}
                 </li>
                 <li>
                   ⏱ {work.developSec.toFixed(1)}秒
@@ -484,9 +461,73 @@ export const ReleaseScreen = () => {
                 }}
               >
                 <div>
-                  <ul className="release-stats">
+                  {/* 売上がどう決まったか（docs/spec/scoring.md §3）。
+                      「この数値がどこから来たか」を全部見せる。効かない項は出さない */}
+                  <PixelWindow title="🧮 売上の計算" variant="standard" bodyStyle={{ padding: 8 }}>
+                    <div className="sales-formula">
+                      <div className="sales-formula-row">
+                        <span>基準売上（{SCALE_BY_ID[work.scale].name}）</span>
+                        <span>{formatYen(bd.baseRevenue ?? 0)}</span>
+                      </div>
+                      <div className="sales-formula-row">
+                        <span>
+                          × ヒット区分{' '}
+                          {bd.tier ? SCORE_TIER_LABEL[bd.tier as ScoreTier] : ''}（メタ
+                          {work.metascore}）
+                        </span>
+                        <span>×{bd.tierMul ?? 1}</span>
+                      </div>
+                      {(bd.prBonus ?? 0) > 0 && (
+                        <div className="sales-formula-row">
+                          <span>× 📣 広報スキル</span>
+                          <span>+{Math.round((bd.prBonus ?? 0) * 100)}%</span>
+                        </div>
+                      )}
+                      {(bd.fanBonus ?? 0) > 0 && (
+                        <div className="sales-formula-row">
+                          <span>× 👥 ファン{' '}
+                            {Math.round((bd.fanBonus ?? 0) * 400 * ((bd.fanBonus ?? 0) * 400)).toLocaleString()}
+                            人</span>
+                          <span>+{Math.round((bd.fanBonus ?? 0) * 100)}%</span>
+                        </div>
+                      )}
+                      {(bd.pioneerBonus ?? 0) > 0 && (
+                        <div className="sales-formula-row">
+                          <span>× 🆕 初めての組合せ</span>
+                          <span>+{Math.round((bd.pioneerBonus ?? 0) * 100)}%</span>
+                        </div>
+                      )}
+                      {(bd.trendMul ?? 1) !== 1 && (
+                        <div className="sales-formula-row">
+                          <span>× 📈 トレンド合致</span>
+                          <span>×{bd.trendMul}</span>
+                        </div>
+                      )}
+                      {(bd.marketingMul ?? 1) !== 1 && (
+                        <div className="sales-formula-row">
+                          <span>× 📺 マーケティング広告</span>
+                          <span>×{bd.marketingMul}</span>
+                        </div>
+                      )}
+                      {(bd.axisSalesMul ?? 1) !== 1 && (
+                        <div className="sales-formula-row">
+                          <span>× 🔥 話題性 − 炎上リスク</span>
+                          <span>×{(bd.axisSalesMul ?? 1).toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="sales-formula-row sales-formula-total">
+                        <span>= 総売上</span>
+                        <span>{formatYen(work.initialRevenue + work.salesPool)}</span>
+                      </div>
+                      <div className="sales-formula-note">
+                        このうち 20% が発売直後に入金され、残り 80% は時間をかけて売れる
+                      </div>
+                    </div>
+                  </PixelWindow>
+                  <ul className="release-stats" style={{ marginTop: 8 }}>
                     <li className="revenue">
-                      💰 初動売上 {formatYen(work.initialRevenue + bonusRevenue)}
+                      {/* ローンチ広告のボーナスは work.initialRevenue に既に加算済み（二重計上しない） */}
+                      💰 発売直後の入金 {formatYen(work.initialRevenue)}
                       {bonusRevenue > 0 && (
                         <span className="revenue-bonus"> (+{formatYen(bonusRevenue)})</span>
                       )}
@@ -497,94 +538,124 @@ export const ReleaseScreen = () => {
                     </li>
                   </ul>
 
-                  {/* v0.10：利益ブレイクダウン
-                      v0.17.1：月固定費に給与を含める（賃料だけだと実際の月次徴収と食い違う。オーナー指摘） */}
+                  {/* 利益ブレイクダウン。
+                      **固定費は推定ではなく実額**（`monthlyTick` が開発中に積んだ合計）を出す。
+                      以前は「月固定費 × Math.round(開発週数÷4)」の推定で、下限1ヶ月も掛かっていたため
+                      払っていない月を計上することがあった（誤差1ヶ月＝ミニ1本の総売上を超える）。
+                      オーナー指摘「これ最終的にマイナスだけど本当にマイナス？残高的にはプラス」2026-07-29。
+
+                      あわせて**この作品の粗利**と**会社が払った固定費**を分けて出す。
+                      固定費は作品を作らなくても発生する期間費用なので、まぜると
+                      「この作品が¥537万を溶かした」と読めてしまう。 */}
                   {(() => {
                     const scaleDef = SCALE_BY_ID[work.scale];
-                    const projectedTotal = work.initialRevenue + bonusRevenue + work.salesPool;
-                    const salaries = sumMonthlySalaries(employees);
-                    const monthlyFixed = salaries + scaleDef.monthlyRent;
-                    const devMonths = Math.max(
-                      1,
-                      Math.round((work.developWeeks ?? scaleDef.neededWeeks) / 4),
-                    );
+                    const projectedTotal = work.initialRevenue + work.salesPool;
+                    const fixedCostTotal = work.fixedCostPaid ?? 0;
+                    const fixedTicks = work.fixedCostTicks ?? 0;
                     const result = computeProfit({
                       totalRevenue: projectedTotal,
                       devCost: scaleDef.baseCost,
-                      monthlyFixedCost: monthlyFixed,
-                      developMonths: devMonths,
+                      fixedCostTotal,
                     });
                     const devCost = result.devCost;
-                    const fixedCostTotal = result.fixedCostTotal;
+                    const gross = projectedTotal - devCost;
                     const profit = result.profit;
                     const roi = formatRoi(profit, devCost + fixedCostTotal);
                     const positive = profit >= 0;
+                    const rowStyle = { color: '#ff6b6b' } as const;
                     return (
-                      <PixelWindow
-                        title="💹 利益計算（見込）"
-                        variant="emphasis"
-                        style={{ marginTop: 10 }}
-                      >
+                      <PixelWindow title="💹 利益計算" variant="emphasis" style={{ marginTop: 10 }}>
                         <div
                           style={{
                             display: 'grid',
                             gridTemplateColumns: '1fr auto',
-                            rowGap: 4,
+                            rowGap: 3,
                             fontSize: 13,
                             fontVariantNumeric: 'tabular-nums',
                           }}
                         >
-                          <span>売上見込（初動＋販売プール）</span>
+                          <span>売上見込（発売直後＋販売プール）</span>
                           <strong>{formatYen(projectedTotal)}</strong>
-                          <span>− 開発費（{scaleDef.name}）</span>
-                          <strong style={{ color: '#ff6b6b' }}>-{formatYen(devCost)}</strong>
-                          <span>
-                            − 月固定費 × {devMonths} ヶ月（給与 {formatYen(salaries)} + 賃料{' '}
-                            {formatYen(scaleDef.monthlyRent)} /月）
-                          </span>
-                          <strong style={{ color: '#ff6b6b' }}>-{formatYen(fixedCostTotal)}</strong>
+                          <span>− 開発費（{scaleDef.name}／企画時に支払い済み）</span>
+                          <strong style={rowStyle}>-{formatYen(devCost)}</strong>
+                          <span style={{ fontWeight: 700 }}>この作品の粗利</span>
+                          <strong style={{ color: gross >= 0 ? '#308040' : '#a03030' }}>
+                            {formatYen(gross)}
+                          </strong>
                           <span
                             style={{
                               gridColumn: '1 / 3',
                               height: 1,
                               background: '#16263e',
-                              margin: '4px 0',
+                              margin: '3px 0',
                             }}
                           />
-                          <span style={{ fontWeight: 700 }}>利益見込</span>
-                          <strong
+                          <span>
+                            − 開発中に会社が払った固定費
+                            <span style={{ fontSize: 11, opacity: 0.8 }}>
+                              {' '}
+                              （月初 {fixedTicks} 回・給与＋賃料＋借金利息／支払い済み）
+                            </span>
+                          </span>
+                          <strong style={rowStyle}>-{formatYen(fixedCostTotal)}</strong>
+                          <span
                             style={{
-                              color: positive ? '#308040' : '#a03030',
-                              fontSize: 16,
+                              gridColumn: '1 / 3',
+                              height: 1,
+                              background: '#16263e',
+                              margin: '3px 0',
                             }}
+                          />
+                          <span style={{ fontWeight: 700 }}>差引</span>
+                          <strong
+                            style={{ color: positive ? '#308040' : '#a03030', fontSize: 16 }}
                           >
                             {formatYen(profit)}
                           </strong>
                           <span style={{ fontWeight: 700 }}>ROI</span>
-                          <strong
-                            style={{
-                              color: positive ? '#308040' : '#a03030',
-                            }}
-                          >
-                            {roi}
-                          </strong>
+                          <strong style={{ color: positive ? '#308040' : '#a03030' }}>{roi}</strong>
                         </div>
+                        {/* 「画面はマイナスなのに残高は増えた」の食い違いを潰す1行。
+                            費用はすべて過去に払い終えていて、この画面で動くのは初動の入金だけ */}
+                        <p style={{ margin: '4px 0 0', fontSize: 11, opacity: 0.85 }}>
+                          費用はすべて支払い済み。この画面で入金されるのは
+                          発売直後の {formatYen(work.initialRevenue)} だけで、
+                          残りは販売プールから時間をかけて入る
+                        </p>
                       </PixelWindow>
                     );
                   })()}
                 </div>
                 <div>
                   <div className="ad-block">
+                    {/* 「初動」は用語なので、ボタンのすぐ横で必ず言い換える。
+                        ここを「売上 +50%」と書くと実効 +10% との詐称になる（オーナー指摘 2026-07-25）。
+                        逆に「初動売上 +50%」だけだと、初動が何かを知らないプレイヤーには
+                        意味が伝わらない（オーナー指摘 2026-07-28）。 */}
                     {launchAdApplied ? (
-                      <p className="ad-applied">✅ ローンチ広告キャンペーン適用済（売上 ×1.5）</p>
+                      <p className="ad-applied">
+                        ✅ ローンチ広告 適用済
+                        <span className="ad-note">
+                          発売直後の入金（総売上の20%）が ×1.5 になった
+                          {bonusRevenue > 0 && <> ／ +{formatYen(bonusRevenue)}</>}
+                        </span>
+                      </p>
                     ) : (
-                      <button
-                        className="primary-btn ad-btn"
-                        disabled={adRunning !== null}
-                        onClick={runLaunchAd}
-                      >
-                        {adRunning === 'launch' ? '広告再生中…' : '📺 ローンチ広告 売上 +50%'}
-                      </button>
+                      <>
+                        <button
+                          className="primary-btn ad-btn"
+                          disabled={adRunning !== null}
+                          onClick={runLaunchAd}
+                        >
+                          {adRunning === 'launch'
+                            ? '広告再生中…'
+                            : '📺 ローンチ広告 発売直後の入金 +50%'}
+                        </button>
+                        <p className="ad-note">
+                          発売直後に入る分（総売上の20%）だけが増える。
+                          残り80%は時間をかけて売れるぶんで、こちらは変わらない
+                        </p>
+                      </>
                     )}
                   </div>
 

@@ -60,13 +60,32 @@ describe('canBuyUnlock', () => {
   });
 
   it('購入数が増えて価格が上がると、同じ資金でも買えなくなりうる', () => {
-    // stage2: count0=30万 は買えるが count5 では ¥300万超で ¥100万 では買えない
-    expect(canBuyUnlock({ alreadyUnlocked: false, stage: 2, purchaseCount: 0, funds: 1_000_000 })).toBe(
-      true,
-    );
-    expect(canBuyUnlock({ alreadyUnlocked: false, stage: 2, purchaseCount: 5, funds: 1_000_000 })).toBe(
-      false,
-    );
+    // 公比 1.2：stage2 の1個目 ¥30万 は買えるが、15個目（¥100万超）は ¥100万 では買えない
+    expect(
+      canBuyUnlock({ alreadyUnlocked: false, stage: 2, purchaseCount: 0, funds: 1_000_000 }),
+    ).toBe(true);
+    expect(
+      canBuyUnlock({ alreadyUnlocked: false, stage: 2, purchaseCount: 15, funds: 1_000_000 }),
+    ).toBe(false);
+  });
+
+  it('壁にならない：stage2 を全部（22個）買っても最後が ¥1500万以下', () => {
+    // オーナー指摘「途中からあげれない」への直接のガード。
+    // 旧公比 1.8 では 21個目が ¥382億 で、AAA の基準売上 ¥60億 でも買えなかった
+    expect(investPrice(2, 21)!).toBeLessThanOrEqual(15_000_000);
+  });
+
+  it('壁にならない：全 stage を全部買っても総額が ¥20億以下', () => {
+    const counts = { 2: 22, 3: 14, 4: 13 } as const;
+    let total = 0;
+    for (const [stage, n] of Object.entries(counts)) {
+      for (let i = 0; i < n; i++) total += investPrice(Number(stage), i)!;
+    }
+    expect(total, `全49個で ¥${Math.round(total / 1e8)}億`).toBeLessThanOrEqual(2_000_000_000);
+  });
+
+  it('それでも買うほど高くなる（オーナー指示は保つ）', () => {
+    expect(investPrice(2, 21)!).toBeGreaterThan(investPrice(2, 0)! * 20);
   });
 
   it('すでに解放済みなら資金が足りても不可（二重課金にしない）', () => {

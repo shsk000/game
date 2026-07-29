@@ -1,7 +1,7 @@
 import { PixelButton, PixelModal } from '../../components/ui';
 import { freeCopies, loadoutCategoryMul } from '../../core/equip';
 import { CATEGORY_META, CATEGORY_ORDER } from '../../data/devPhrases';
-import { roleLabel } from '../../data/employees';
+import { jobTitleOf } from '../../core/skills';
 import {
   DEFAULT_LOADOUT,
   EQUIPMENT_BY_ID,
@@ -12,7 +12,7 @@ import {
 } from '../../data/equipment';
 import { useGameStore } from '../../state/gameStore';
 import { formatYen } from '../../utils/format';
-import { formatPower } from './employeeDisplay';
+import { formatSkills } from './employeeDisplay';
 
 const SLOT_LABEL: Record<EquipSlot, string> = { pc: 'PC', chair: 'チェア', misc: '小物' };
 const SLOTS: EquipSlot[] = ['pc', 'chair', 'misc'];
@@ -113,12 +113,12 @@ export const EquipmentModal = ({ open, onClose }: { open: boolean; onClose: () =
                   style={{ ...rowStyle, flexDirection: 'column', alignItems: 'stretch', gap: 6 }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={roleTagStyle}>{roleLabel(e.role)}</span>
+                    <span style={roleTagStyle}>{jobTitleOf(e.skills)}</span>
                     <span style={{ fontWeight: 700, fontSize: 12, color: '#f0f3f8' }}>
                       {e.name}
                     </span>
                     <span style={{ marginLeft: 'auto', fontSize: 10, color: '#cbd6e6' }}>
-                      Lv{e.level}・{formatPower(e.role, e.power)}
+                      Lv{e.level}・{formatSkills(e.skills)}
                     </span>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
@@ -160,7 +160,7 @@ export const EquipmentModal = ({ open, onClose }: { open: boolean; onClose: () =
             </ul>
           )}
           <p style={{ fontSize: 10, color: '#6b7684', marginTop: 8 }}>
-            ※装備は1個＝1人ぶん。打った作業カテゴリの品質を底上げします（効果は上限付き）。
+            ※装備は1個＝1人ぶん。**社員のスキルに分野別の倍率**が掛かり、特徴ポイントを速く積めます（上限なし）。
           </p>
         </div>
       </div>

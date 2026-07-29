@@ -50,58 +50,9 @@ export const EVENT_CATEGORY_META: Record<EventCategory, { label: string; icon: s
 
 /** フェーズ別イベント表（spec §5-2）。 */
 export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
-  planning: [
-    {
-      id: 'plan-idea',
-      name: '天才のひらめき',
-      category: 'chance',
-      flavor: '社員が面白いアイデアを出した',
-      mission: 'あいであをかたちにする',
-      missionLabel: 'アイデアを形にする',
-      rate: 0.2,
-      success: { funFactor: 15, hype: 10 },
-    },
-    {
-      id: 'plan-drift',
-      name: 'コンセプト迷走',
-      category: 'trouble',
-      flavor: '企画の方向性がブレている',
-      mission: 'ほうこうせいをきめなおす',
-      missionLabel: '方向性を決め直す',
-      rate: 0.12,
-      success: { funFactor: 5 },
-    },
-    {
-      id: 'plan-trend',
-      name: '市場トレンド発見',
-      category: 'market',
-      flavor: '今流行のジャンルを見つけた',
-      mission: 'とれんどをぶんせきする',
-      missionLabel: 'トレンドを分析する',
-      rate: 0.15,
-      success: { salesForecast: 15 },
-    },
-    {
-      id: 'plan-budget',
-      name: '予算見直し',
-      category: 'schedule',
-      flavor: '予算が足りるか検討する',
-      mission: 'よさんをちょうせいする',
-      missionLabel: '予算を調整する',
-      rate: 0.1,
-      success: { costMod: -10 },
-    },
-    {
-      id: 'plan-target',
-      name: 'ターゲット再設定',
-      category: 'market',
-      flavor: '想定ユーザーを見直す',
-      mission: 'そうていそうをきめる',
-      missionLabel: 'ターゲットを決める',
-      rate: 0.1,
-      success: { trust: 10 },
-    },
-  ],
+  // 企画フェーズのイベントは廃止（オーナー決定）。短いフェーズに割り込むと
+  // 何をしている時間なのか分からなくなる。開発フェーズ分だけを残す
+  planning: [],
   development: [
     {
       id: 'dev-bug',
@@ -131,7 +82,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'あいであをじっそうする',
       missionLabel: 'アイデアを実装する',
       rate: 0.2,
-      success: { funFactor: 8, buzz: 10 },
+      success: { hype: 8, buzz: 10 },
     },
     {
       id: 'dev-rival',
@@ -151,7 +102,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'しようをくみなおす',
       missionLabel: '仕様を組み直す',
       rate: 0.1,
-      success: { funFactor: 5 },
+      success: { hype: 5 },
     },
   ],
   testing: [
@@ -163,7 +114,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'そうさかんをちょうせいする',
       missionLabel: '操作感を調整する',
       rate: 0.15,
-      success: { usability: 10 },
+      success: { hype: 10 },
     },
     {
       id: 'test-difficulty',
@@ -173,7 +124,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'なんいどをちょうせいする',
       missionLabel: '難易度を調整する',
       rate: 0.15,
-      success: { balance: 10 },
+      success: { hype: 10 },
     },
     {
       id: 'test-hiddenbug',
@@ -203,7 +154,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'がめんをみやすくする',
       missionLabel: 'UIを改善する',
       rate: 0.12,
-      success: { usability: 6 },
+      success: { hype: 6 },
     },
   ],
   debugging: [
@@ -225,7 +176,7 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'くらっしゅをなおす',
       missionLabel: 'クラッシュを直す',
       rate: 0.15,
-      success: { funFactor: 8 },
+      success: { hype: 8 },
     },
     {
       id: 'debug-save',
@@ -255,72 +206,23 @@ export const PHASE_EVENTS: Record<DevPhase, DevEvent[]> = {
       mission: 'しゅうせいをかくにんする',
       missionLabel: '修正内容を確認する',
       rate: 0.12,
-      success: { funFactor: 5 },
+      success: { hype: 5 },
     },
   ],
-  release: [
-    {
-      id: 'rel-sns',
-      name: 'SNSで話題化',
-      category: 'chance',
-      flavor: '発売直後に拡散された',
-      mission: 'わだいをひろげる',
-      missionLabel: '話題を広げる',
-      rate: 0.18,
-      success: { salesForecast: 20 },
-    },
-    {
-      id: 'rel-streamer',
-      name: '配信者が紹介',
-      category: 'chance',
-      flavor: '人気配信者がプレイした',
-      mission: 'せんでんをきょうかする',
-      missionLabel: '宣伝を強化する',
-      rate: 0.15,
-      success: { buzz: 25 },
-    },
-    {
-      id: 'rel-flame',
-      name: '炎上危機',
-      category: 'trouble',
-      flavor: '不満投稿が増えてきた',
-      mission: 'えんじょうたいさくをする',
-      missionLabel: '炎上対策を行う',
-      rate: 0.12,
-      success: { reputationRisk: -10 },
-    },
-    {
-      id: 'rel-store',
-      name: 'ストア審査トラブル',
-      category: 'trouble',
-      flavor: 'ストア公開で問題が発生',
-      mission: 'しんせいをしゅうせいする',
-      missionLabel: '申請内容を修正する',
-      rate: 0.1,
-      success: {},
-    },
-    {
-      id: 'rel-server',
-      name: 'サーバー負荷増加',
-      category: 'trouble',
-      flavor: 'アクセス集中で重くなった',
-      mission: 'ふかたいさくをする',
-      missionLabel: 'サーバーを増強する',
-      rate: 0.12,
-      success: { buzz: 10 },
-    },
-  ],
+  // release フェーズのイベントは全削除（オーナー判断 2026-07-25）。
+  // advancePhase は debugging の次に 'release' を設定せず finishDevelopment() に飛ぶため
+  // （gameStore.ts）、ここに置いた5件（SNSで話題化 / 配信者が紹介 / 炎上危機 /
+  // ストア審査トラブル / サーバー負荷増加）は一度も発生しない死にデータだった。
+  // イベント方式そのものを作り直す方針が決まっているので、暫定で生かすのではなく削除する。
+  // 消したイベント定義が必要になったら git 履歴（この行を含むコミットの親）から復元できる。
+  release: [],
   complete: [],
 };
 
 /** 軸 → 表示ラベル＆単位（イベント結果テロップ用） */
 export const AXIS_META: Record<DevAxis, { label: string; unit: string }> = {
-  funFactor: { label: '面白さ', unit: '' },
-  usability: { label: '操作性', unit: '' },
-  balance: { label: 'バランス', unit: '' },
   hype: { label: '期待度', unit: '' },
   buzz: { label: '話題性', unit: '' },
-  salesForecast: { label: '売上予測', unit: '%' },
   bugRate: { label: 'バグ率', unit: '%' },
   reputationRisk: { label: '炎上リスク', unit: '' },
   devWeeksDelta: { label: '開発期間', unit: '週' },

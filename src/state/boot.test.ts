@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { mulberry32 } from '../core/ports';
-import { INITIAL_CATEGORY_IDS } from '../data/categories';
 import * as storage from '../utils/storage';
 import { buildBootPatch, resolveBootDeps } from './boot';
 import type { Work } from './types';
@@ -14,7 +13,6 @@ const sellingWork = (over: Partial<Work> = {}): Work => ({
   genreId: 'puzzle',
   themeId: 'sushi',
   scale: 'mini',
-  quality: 60,
   metascore: 60,
   isMasterpiece: false,
   developSec: 60,
@@ -61,7 +59,7 @@ describe('buildBootPatch', () => {
         level: 1,
         exp: 0,
         wage: 660_000,
-        specialties: [],
+        specialties: [], skills: {},
       },
       gachaPity: 13,
     };
@@ -97,12 +95,6 @@ describe('buildBootPatch', () => {
     const patch = buildBootPatch(p, deps());
     expect(patch.offlineReport).toBeNull();
     expect(patch.funds).toBe(1_000_000);
-  });
-
-  it('旧データ防御：カテゴリが空なら初期3カテゴリを補完', () => {
-    const p = { ...storage.defaults(), unlockedCategories: [], lastSeenAt: NOW };
-    const patch = buildBootPatch(p, deps());
-    expect(patch.unlockedCategories).toEqual([...INITIAL_CATEGORY_IDS]);
   });
 
   it('期限切れトレンドは補充され、有効なトレンドは維持される', () => {

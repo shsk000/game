@@ -29,7 +29,15 @@ export type GenreId =
   | 'fishing'
   | 'fps';
 
-export type GenreTag = 'fast' | 'logic' | 'epic' | 'scary' | 'chill' | 'wild' | 'story';
+/**
+ * ジャンルの性格タグ。**順序に意味がある**：`tags[0]` が主タグ（重み2）、`tags[1]` が副タグ（重み1）。
+ * 相性（`data/compatibility.ts`）でしか使わない。
+ *
+ * `cute` は 2026-07-29 に追加。旧7種では `puzzle` と `raisingsim`、`strategy` と `boardgame` などが
+ * 同一タグ集合になり、**27ジャンルのうち相性の並びが23種類しか無かった**
+ * （育成シムとパズルのどちらを選んでも相性が1マスも変わらなかった）。
+ */
+export type GenreTag = 'fast' | 'logic' | 'epic' | 'scary' | 'chill' | 'wild' | 'story' | 'cute';
 
 export type Genre = {
   id: GenreId;
@@ -216,7 +224,7 @@ export const GENRES: Genre[] = [
     name: 'シューティング',
     emoji: '🛸',
     bgColor: '#c2185b',
-    tags: ['fast', 'wild'],
+    tags: ['fast', 'epic'],
     unlockStage: 3,
     snippets: [
       'うちまくれ',
@@ -322,7 +330,7 @@ export const GENRES: Genre[] = [
     name: 'シミュレーション',
     emoji: '🏗️',
     bgColor: '#37474f',
-    tags: ['logic', 'chill'],
+    tags: ['logic', 'epic'],
     unlockStage: 1,
     snippets: [
       'けいざいをまわす',
@@ -484,7 +492,7 @@ export const GENRES: Genre[] = [
     name: '格闘',
     emoji: '🥊',
     bgColor: '#7b1818',
-    tags: ['fast', 'wild'],
+    tags: ['wild', 'fast'],
     unlockStage: 3,
     // ↑ 中盤解放のまま
     snippets: [
@@ -539,7 +547,7 @@ export const GENRES: Genre[] = [
     name: 'ローグライク',
     emoji: '🎲',
     bgColor: '#2e7d32',
-    tags: ['wild', 'logic'],
+    tags: ['logic', 'wild'],
     unlockStage: 3,
     snippets: [
       'らんだむせいせい',
@@ -593,7 +601,7 @@ export const GENRES: Genre[] = [
     name: 'リズム',
     emoji: '🎵',
     bgColor: '#ad1457',
-    tags: ['fast', 'chill'],
+    tags: ['fast', 'cute'],
     unlockStage: 2,
     snippets: [
       'びーとをきざめ',
@@ -647,7 +655,7 @@ export const GENRES: Genre[] = [
     name: 'サンドボックス',
     emoji: '🧱',
     bgColor: '#5d4037',
-    tags: ['epic', 'chill'],
+    tags: ['chill', 'epic'],
     unlockStage: 2,
     snippets: [
       'けんちくはじめ',
@@ -701,7 +709,7 @@ export const GENRES: Genre[] = [
     name: 'ストラテジー',
     emoji: '♟️',
     bgColor: '#2c3e5c',
-    tags: ['logic', 'epic'],
+    tags: ['epic', 'logic'],
     unlockStage: 4,
     snippets: [
       'さくせんかいぎ',
@@ -861,7 +869,7 @@ export const GENRES: Genre[] = [
     name: 'タワーディフェンス',
     emoji: '🏹',
     bgColor: '#4a5a3c',
-    tags: ['logic', 'wild'],
+    tags: ['wild', 'logic'],
     unlockStage: 3,
     snippets: [
       'たわーをせっちする',
@@ -901,7 +909,7 @@ export const GENRES: Genre[] = [
     name: 'パーティーゲーム',
     emoji: '🎉',
     bgColor: '#c23b7a',
-    tags: ['fast', 'chill'],
+    tags: ['cute', 'fast'],
     unlockStage: 2,
     snippets: [
       'みんなであそぶ',
@@ -981,7 +989,7 @@ export const GENRES: Genre[] = [
     name: '恋愛アドベンチャー',
     emoji: '💕',
     bgColor: '#d97ba0',
-    tags: ['story', 'chill'],
+    tags: ['cute', 'story'],
     unlockStage: 2,
     snippets: [
       'てがみをわたす',
@@ -1021,7 +1029,7 @@ export const GENRES: Genre[] = [
     name: 'ボードゲーム',
     emoji: '🀄',
     bgColor: '#6b4a2f',
-    tags: ['logic', 'epic'],
+    tags: ['logic', 'cute'],
     unlockStage: 2,
     snippets: [
       'さいころをふる',
@@ -1061,7 +1069,7 @@ export const GENRES: Genre[] = [
     name: 'クイズ',
     emoji: '❓',
     bgColor: '#c9a227',
-    tags: ['logic', 'story'],
+    tags: ['fast', 'logic'],
     unlockStage: 2,
     snippets: [
       'はやおしぼたん',
@@ -1101,7 +1109,7 @@ export const GENRES: Genre[] = [
     name: 'プラットフォーマー',
     emoji: '🍄',
     bgColor: '#4a9fd8',
-    tags: ['fast', 'epic'],
+    tags: ['fast', 'chill'],
     unlockStage: 4,
     snippets: [
       'たかくジャンプする',
@@ -1141,7 +1149,7 @@ export const GENRES: Genre[] = [
     name: 'ノベルゲーム',
     emoji: '📖',
     bgColor: '#6a5a8a',
-    tags: ['story', 'chill'],
+    tags: ['story', 'cute'],
     unlockStage: 2,
     snippets: [
       'ぺーじをめくる',
@@ -1181,7 +1189,7 @@ export const GENRES: Genre[] = [
     name: '育成ゲーム',
     emoji: '🥚',
     bgColor: '#7fc9a0',
-    tags: ['logic', 'chill'],
+    tags: ['cute', 'chill'],
     unlockStage: 2,
     snippets: [
       'たまごがかえる',

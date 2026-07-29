@@ -257,8 +257,7 @@ export const LibraryScreen = () => {
                       fontVariantNumeric: 'tabular-nums',
                     }}
                   >
-                    Q{w.quality} ／ ⏱ {w.developSec.toFixed(1)}秒
-                    <br />💰 初動 {formatYen(w.initialRevenue)} ／ 累計 {formatYen(w.totalRevenue)}
+                    <br />💰 発売直後 {formatYen(w.initialRevenue)} ／ 累計 {formatYen(w.totalRevenue)}
                   </div>
 
                   {w.selling ? (

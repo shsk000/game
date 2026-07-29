@@ -34,3 +34,4 @@ playwright/.cache/
 *.sln
 *.sw?
 .claude/worktrees/
+.vitest-attachments/

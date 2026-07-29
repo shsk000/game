@@ -714,7 +714,7 @@ flat shading, transparent background
 ---
 
 ## 12. 関連ファイル
-- 仕様: [docs/v09/spec.md](../../../docs/v09/spec.md)
+- 仕様: [docs/spec/](../../../docs/spec/)
 - 素材置き場: [public/sprites/](../../../public/sprites/)
 - ドキュメント運用規約: [docs/CLAUDE.md](../../../docs/CLAUDE.md)
 - 配置コンポーネント: [src/components/OfficeView.tsx](../../../src/components/OfficeView.tsx)

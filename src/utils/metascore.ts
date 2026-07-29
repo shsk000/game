@@ -1,65 +1,25 @@
-import type { Rng } from '../core/ports';
-import {
-  LUCK_DEFAULT,
-  QUALITY_WEIGHTS,
-  SCALE_BALANCE,
-  SCORE_BASE,
-  salesMultiplierForScore,
-} from '../data/balance';
+import { SCALE_BALANCE, salesMultiplierForScore } from '../data/balance';
 import type { GenreId } from '../data/genres';
 import type { Scale } from '../data/scales';
 import type { ThemeId } from '../data/themes';
 import type { Trend } from '../data/trend';
-import { trendScoreBonus } from '../data/trend';
 
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-export type MetascoreResult = {
-  metascore: number;
-  isMasterpiece: boolean;
-};
-
-export const computeMetascore = (
-  quality: number,
-  genreId: GenreId,
-  themeId: ThemeId,
-  trend: Trend | null,
-  rng: Rng = Math.random,
-): MetascoreResult => {
-  // トレンドはスコアに直接反映する主経路（両方合致 +10 / 片方 +5）。
-  // 売上側の二重掛け（softBonus）は廃止し、トレンドは「スコアを押し上げて段を上げる」形で効かせる。
-  // ±5 の評価家ブレも加える。旧「3% 確率で名作 +25」は廃止（名作帯は SCORE_TIERS の自然分布）。
-  const trendBoost = trendScoreBonus(trend, genreId, themeId);
-  const variance = (rng() - 0.5) * 10;
-  const metascore = Math.round(clamp(quality + trendBoost + variance, 0, 100));
-  // isMasterpiece は metascore 90+ の自然到達で判定（後方互換のため残す）
-  const isMasterpiece = metascore >= 90;
-  return { metascore, isMasterpiece };
-};
-
-/**
- * v0.10 仕上げ §5-2：メタスコア帯による売上倍率。
- * balance.ts の SALES_MULTIPLIER_BY_SCORE を利用（致命的失敗 ×0.33 〜 神ゲー ×1000）。
- *
- * 旧 4 段階（1 / 4 / 10 / 30）の hitTierMultiplier は廃止し、salesMultiplierForScore に統一。
- */
-export const hitTierMultiplier = (metascore: number): number => salesMultiplierForScore(metascore);
 
 /**
  * v0.10 仕上げ §5-1, §5-2：売上計算。
  *
  *   revenue = baseRevenue × salesMultiplierForScore(metascore) × softBonus
  *
- *   softBonus は trend / fan / launch / pr / pioneer の合算で最大 +50%（×1.5）にキャップ。
+ *   softBonus は fan / pr / pioneer の独立倍率の積（案B。共有キャップは廃止）。
  *
  * 旧バージョンは compat / trend / fan / launch / pr / pioneer を全て乗算でかけていたため、
- * normal 帯（×16.67）でも合算で ×5〜10 になり、設計の「mini normal ¥500 万」が
- * 簡単に ¥2000-5000 万に化けて「余裕でプラス」になっていた。
+ * normal 帯でも合算で ×5〜10 になり、設計の想定売上が簡単に何倍にも化けていた。
  *
  * 対策：
  *   1. compat は既に genreAffinity → quality → metascore 経由で組み込み済み → ここでは掛けない
- *   2. trend / fan / launch / pr / pioneer は合算してから +50% でキャップ
- *      → tier 表（balance-design §5-2）の数値が「実売上の上限の 2/3」になる程度に抑える
+ *   2. trend はスコア側（trendScoreBonus）＋ release.ts の trendSalesMultiplier に一本化
+ *   3. launch（ローンチ広告）は発売後リワードなのでこの式から分離（applyLaunchAd）
  */
 export const computeRevenue = (
   metascore: number,
@@ -68,7 +28,6 @@ export const computeRevenue = (
   scale: Scale,
   _trend: Trend | null,
   fans: number,
-  launchAdActive: boolean,
   prBonus = 0,
   pioneerBonus = 0,
 ): number => {
@@ -77,15 +36,15 @@ export const computeRevenue = (
 
   // 案B：共有の +20% 上限を廃止し、各ボーナスを独立の倍率として掛ける（表示どおり効く）。
   //  - 広報(prBonus) は上限なし（+11%×2人 = 約+22% が本当に効く）
-  //  - ファン / ローンチ広告 / 初回組合せ もそれぞれ独立に上乗せ
+  //  - ファン / 初回組合せ もそれぞれ独立に上乗せ
   // ※ トレンド／マーケ広告の売上倍率は release.ts 側で別途掛ける（同じく上限の外）。
-  const fanBonus = Math.min(0.15, Math.sqrt(Math.max(0, fans)) / 400); // ファン 10000 で +0.15 上限
-  const launchBonus = launchAdActive ? 0.1 : 0;
-  const softMul =
-    (1 + Math.max(0, prBonus)) *
-    (1 + fanBonus) *
-    (1 + launchBonus) *
-    (1 + Math.max(0, pioneerBonus));
+  // ※ ローンチ広告は**発売後**に視聴するリワードなので、ここ（発売時の売上算出）には居ない。
+  //    core/release.ts の applyLaunchAd が確定済みの初動に後から掛ける（下記コメントも参照）。
+  // ファンボーナスは上限なし（オーナー判断 2026-07-25。旧実装は +0.15 で頭打ち＝ファン 3600 人で
+  // 打ち止めになり、それ以上ファンを増やしても売上に一切効かなかった）。
+  // √ なので伸びは緩やか：1万人 +25% / 4万人 +50% / 16万人 +100%。
+  const fanBonus = Math.sqrt(Math.max(0, fans)) / 400;
+  const softMul = (1 + Math.max(0, prBonus)) * (1 + fanBonus) * (1 + Math.max(0, pioneerBonus));
 
   const v = baseRevenue * tierMul * softMul;
   return Math.max(0, Math.round(v));
@@ -99,42 +58,6 @@ export const scoreFlavor = (m: number): string => {
   return 'バグだらけ';
 };
 
-export type QualityBreakdown = {
-  base: number;
-  categories: number;
-  employees: number;
-  performance: number;
-  ads: number;
-  variance: number;
-};
-
-/**
- * 4レバー方式の品質計算。
- *   Q = 30 + cap(20, cat) + cap(25, emp) + cap(20, perf) + cap(15, ad) + variance(±5)
- */
-export const computeQuality = (
-  args: {
-    scaleBase: number;
-    categoryHit: number;
-    employeeHit: number;
-    performance: number;
-    adBonus: number;
-  },
-  rng: Rng = Math.random,
-): { Q: number; breakdown: QualityBreakdown } => {
-  const base = 30;
-  const categories = Math.max(0, Math.min(20, args.categoryHit));
-  const employees = Math.max(0, Math.min(25, args.employeeHit));
-  const performance = Math.max(0, Math.min(20, args.performance));
-  const ads = Math.max(0, Math.min(15, args.adBonus));
-  const variance = Math.round((rng() - 0.5) * 10); // ±5
-  const sum = base + categories + employees + performance + ads + variance;
-  const Q = clamp(sum, 0, 100);
-  return {
-    Q: Math.round(Q),
-    breakdown: { base, categories, employees, performance, ads, variance },
-  };
-};
 
 /**
  * タイピング演技スコア（0..100）。
@@ -149,104 +72,8 @@ export const computeQuality = (
  * 結果レンジ：下手 5-25 / 普通 30-45 / 上手 65-90
  * タイピング能力が「勝負を分ける」設計（品質の 37% を握る最大レバー）。
  */
-export const computePerformanceScore = (perf: {
-  wpm: number;
-  maxCombo: number;
-  accuracy: number;
-  bugsCleared?: number;
-  noBugs?: boolean;
-}): number => {
-  let score = SCORE_BASE;
 
-  // WPM 寄与（120 基準 -25〜+30）
-  if (perf.wpm <= 0) score -= 5;
-  else {
-    const t = clamp((perf.wpm - 120) / 120, -1, 1);
-    score += t * (t >= 0 ? 30 : 25);
-  }
 
-  // コンボ寄与
-  if (perf.maxCombo >= 600) score += 25;
-  else if (perf.maxCombo >= 300) score += 18;
-  else if (perf.maxCombo >= 150) score += 10;
-  else if (perf.maxCombo >= 50) score += 5;
-
-  // 精度ペナルティ（97% 未満から効く）
-  if (perf.accuracy < 0.97) {
-    const def = (0.97 - perf.accuracy) / 0.97; // 0..1
-    score -= clamp(def * 60, 0, 25);
-  }
-
-  // バグなし完走
-  if (perf.noBugs) score += 5;
-
-  return clamp(Math.round(score), 0, 100);
-};
-
-/**
- * v0.10：4要素ウェイト品質計算式。
- *
- *   quality_base = キャラ能力 × 0.50
- *                + ジャンル相性 × 0.25
- *                + タイピング演技 × 0.15
- *                + 0.10（運の基底）
- *   final_quality = quality_base × 運乱数(0.9〜1.1) × ガチャ(5%で×1.5)
- *
- * 各入力スコアは 0..100 で正規化されている前提。
- * 出力 Q は 0..100 にクランプ。
- *
- * @param charPower      キャラ能力スコア 0..100（採用 × アサインの主ドライバー）
- * @param genreAffinity  ジャンル相性スコア 0..100
- * @param typingScore    タイピング演技スコア 0..100
- * @param luck           運の基底に乗る揺らぎ要素 0..100（省略時は 50＝中庸）
- */
-export type QualityV10Breakdown = {
-  charPower: number;
-  genreAffinity: number;
-  typingScore: number;
-  luck: number;
-  base: number;
-  luckMultiplier: number;
-};
-
-export const computeQualityV10 = (
-  args: {
-    charPower: number;
-    genreAffinity: number;
-    typingScore: number;
-    luck?: number;
-  },
-  rng: Rng = Math.random,
-): { Q: number; breakdown: QualityV10Breakdown } => {
-  const charPower = clamp(args.charPower, 0, 100);
-  const genreAffinity = clamp(args.genreAffinity, 0, 100);
-  const typingScore = clamp(args.typingScore, 0, 100);
-  const luck = clamp(args.luck ?? LUCK_DEFAULT, 0, 100);
-
-  // ウェイト（balance-design §0、QUALITY_WEIGHTS）
-  const base =
-    charPower * QUALITY_WEIGHTS.charPower +
-    genreAffinity * QUALITY_WEIGHTS.genreAffinity +
-    typingScore * QUALITY_WEIGHTS.typingScore +
-    luck * QUALITY_WEIGHTS.luck;
-
-  // ±3% の運乱数（v0.14：±10%→±3%。運は味付けに留め、壁は腕で越えさせる）
-  const luckMultiplier = 0.97 + rng() * 0.06;
-
-  // 神ゲーガチャは v0.10 で廃止：4 要素の合算とタイピング演技で正面突破する設計
-  const Q = clamp(Math.round(base * luckMultiplier), 0, 100);
-  return {
-    Q,
-    breakdown: {
-      charPower,
-      genreAffinity,
-      typingScore,
-      luck,
-      base: Math.round(base),
-      luckMultiplier: Math.round(luckMultiplier * 100) / 100,
-    },
-  };
-};
 
 /** リリース時のファン増分。広報ボーナスで底上げ */
 export const fanDelta = (metascore: number, prBonus = 0): number => {

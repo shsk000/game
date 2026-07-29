@@ -6,6 +6,17 @@ import { PixelStatusBar, SegGauge } from '../../components/ui';
 import { type DevEmoteEvent, pickDevEmote } from '../../core/devEmote';
 import { MAX_EMPLOYEES } from '../../data/officeLayout';
 import { bugSuppression, bugsClearedByAd, pickBugFixPhrase } from '../../core/bugs';
+import { withEffectiveSkills } from '../../core/equip';
+import { primarySkillOf, totalPowerOf } from '../../core/skills';
+import { SKILL_VISUAL } from '../office/employeeDisplay';
+import type { DevSkillId, Employee, FeatureId, FeaturePoints } from '../../state/types';
+import { FEATURE_IDS, SKILL_TO_FEATURE, ZERO_FEATURES } from '../../state/types';
+import {
+  coveredCategoriesOf,
+  featureGainFor,
+  TICKET_TO_SKILL,
+  typingMultiplier,
+} from '../../core/features';
 import {
   comboTitleAt,
   type Gear,
@@ -63,15 +74,12 @@ import {
   dateToWeekIndex,
 } from '../../state/types';
 import { sfx } from '../../utils/sfx';
-import { computeDevImpact, progressGain, toCharsPerMin } from './devImpact';
+import { progressGain, toCharsPerMin } from './devImpact';
 import { type TypingView, useTyping } from './useTyping';
 
 /** v0.15.2 フィーバー定数（叩き台 🔧）：正打 60 打で MAX、15 秒間 進捗×2 */
 const FEVER_MAX = 60;
 const FEVER_DURATION_MS = 15000;
-
-/** 開発全体の PHASE ドット総数（演出。overall progressPct に連動） */
-const TOTAL_PHASE_DOTS = 6;
 
 /** チケットカードの固定高さ（内容の長短で入力欄が上下しないように） */
 const TICKET_CARD_HEIGHT = 76;
@@ -100,9 +108,9 @@ type LastResult =
   | {
       kind: 'ticket';
       rank: SpeedRank;
-      speedPct: number;
-      qualityDelta: number;
-      bugPct: number;
+      /** この1文で伸びた特徴ポイント（実際に効く値） */
+      featureId?: FeatureId;
+      featureGain?: number;
       /** この 1 文で実際に進んだ完成度（進捗ゲージに入る値そのもの） */
       progress: number;
       /** v0.20 C：この1文がボス文章の完走だったか（画面シェイクの追加トリガーに使う） */
@@ -112,7 +120,6 @@ type LastResult =
   | {
       kind: 'plan';
       rank: SpeedRank;
-      funGain: number;
       hypeGain: number;
       /** 獲得量の実際の内訳（コンボ倍率・速度倍率） */
       comboMult: number;
@@ -141,6 +148,7 @@ export const DevelopScreen = () => {
   const employees = useGameStore((s) => s.employees);
   const addDevelopLoC = useGameStore((s) => s.addDevelopLoC);
   const addDevStat = useGameStore((s) => s.addDevStat);
+  const addFeaturePoint = useGameStore((s) => s.addFeaturePoint);
   const advancePhase = useGameStore((s) => s.advancePhase);
   // DEV 検証用：タイピングを飛ばし、平均成績を積んで“それなりの品質”で
   // 発売フェーズへ即到達する（docs/qa/bug-hunt.md 参照）
@@ -176,7 +184,29 @@ export const DevelopScreen = () => {
   const ticketIndexRef = useRef(0);
   const [ticketPhraseCount, setTicketPhraseCount] = useState(0);
   const ticketPhraseCountRef = useRef(0);
-  const currentTicket = useMemo(() => getTicketAt(genreId, ticketIndex), [genreId, ticketIndex]);
+  // 割当社員。**装備を掛けた実効スキル**で特徴ポイントを積む（score-model §1）
+  const assignedEmployees = useMemo(
+    () => withEffectiveSkills(employees.filter((e) => current?.assignedEmployeeIds.includes(e.id))),
+    [employees, current?.assignedEmployeeIds],
+  );
+  // 特徴ポイントの加算ポップ（「🎨 +2.7」）
+  const [featurePop, setFeaturePop] = useState<{ field: DevSkillId; gain: number; key: number } | null>(null);
+  const featurePopKeyRef = useRef(0);
+  // チームがカバーしている分野の文だけが回ってくる（score-model §3）。
+  // さらに**上限100 に届いた分野は飛ばす**：届いた分野を打っても1ポイントも増えず、
+  // その文が丸ごと無駄になる（強いプログラマーがいると1文で操作性が100 に届く）。
+  // 全分野が上限なら通常のローテーションに戻す（もう伸びしろが無いので順番は何でもよい）。
+  const coveredCats = useMemo(() => {
+    const all = coveredCategoriesOf(assignedEmployees);
+    const feats = current?.features;
+    if (!feats) return all;
+    const growable = all.filter((c) => (feats[SKILL_TO_FEATURE[TICKET_TO_SKILL[c]]] ?? 0) < 100);
+    return growable.length > 0 ? growable : all;
+  }, [assignedEmployees, current?.features]);
+  const currentTicket = useMemo(
+    () => getTicketAt(genreId, ticketIndex, coveredCats),
+    [genreId, ticketIndex, coveredCats],
+  );
 
   const [ticketPhrase, setTicketPhrase] = useState(() =>
     pickPhrase(currentTicket.category, undefined, current?.scale),
@@ -304,10 +334,13 @@ export const DevelopScreen = () => {
     }
   }, [crunchActive]);
 
-  // イベント抽選：8 秒ごとに 1 回、企画/開発フェーズ中のみ（フェーズごとのイベント表から）
+  // イベント抽選：8 秒ごとに 1 回、**開発フェーズ中のみ**。
+  // 企画フェーズ分は廃止（オーナー決定。proposal.md の判断事項3）。
+  // 企画は「打ち切って期待度を積む」だけの短いフェーズで、割り込みが入ると
+  // 何をしている時間なのか分からなくなる。
   useEffect(() => {
-    if ((!isDevelopment && !isPlanning) || !current) return;
-    const pool = PHASE_EVENTS[isDevelopment ? 'development' : 'planning'];
+    if (!isDevelopment || !current) return;
+    const pool = PHASE_EVENTS.development;
     const timer = window.setInterval(() => {
       if (pendingRef.current || activeRef.current) return;
       for (const ev of pool) {
@@ -320,7 +353,7 @@ export const DevelopScreen = () => {
       }
     }, 8000);
     return () => window.clearInterval(timer);
-  }, [isDevelopment, isPlanning, !current]);
+  }, [isDevelopment, !current]);
 
   // 企画会議：タイプ完了と無関係に、ランダムな間隔で「考え中」吹き出し（💭🤔）を1人ずつ出す。
   // ワード確定の「ひらめき」と同じ吹き出しスロットを共有する（同時に出るのは1つ）。
@@ -377,15 +410,14 @@ export const DevelopScreen = () => {
         const comboMult = comboAttrMultiplier(comboRef.current);
         const gain = Math.max(1, Math.round(PLAN_BASE_GAIN * comboMult * speedMult));
         const weights = PLAN_CATEGORY_META[t.category].effects;
-        const funGain = weights.funFactor * gain;
+        // 実装ステップ3：企画フェーズの打鍵は期待度（発売時のファン増加）に一本化した
         const hypeGain = weights.hype * gain;
-        applyAxisDelta({ funFactor: funGain, hype: hypeGain });
+        applyAxisDelta({ hype: hypeGain });
 
         sfx[rank === 'PERFECT' ? 'success' : 'complete']();
         setLastResult({
           kind: 'plan',
           rank,
-          funGain,
           hypeGain,
           comboMult,
           speedMult,
@@ -436,7 +468,20 @@ export const DevelopScreen = () => {
         const gain = Math.max(1, Math.round(ATTR_BASE_GAIN * comboMult * speedMult * feverMult));
         addDevStat(category, gain);
 
-        const impactNow = computeDevImpact({ wpm: wpmRef.current, accuracy: accuracyRef.current });
+        // 実装ステップ2：特徴ポイントの蓄積（docs/spec/score-model.md §3）
+        // 加算量 ＝ ゲーム規模係数 × 打鍵倍率 × スキル合計（同分野の2人目以降は半減）。
+        // この段階ではスコアに接続しない（接続は実装ステップ3）。
+        const field = TICKET_TO_SKILL[category];
+        const featGain = featureGainFor(
+          field,
+          assignedEmployees,
+          current?.scale ?? 'mini',
+          typingMultiplier(rank === 'PERFECT' ? 'perfect' : rank === 'GREAT' ? 'great' : 'good', comboRef.current),
+        );
+        if (featGain > 0) {
+          addFeaturePoint(field, featGain);
+          setFeaturePop({ field, gain: featGain, key: featurePopKeyRef.current++ });
+        }
         const progressNow =
           progressGain(wpmRef.current, false, comboRef.current) *
           (feverActiveRef.current ? 2 : 1) *
@@ -445,9 +490,8 @@ export const DevelopScreen = () => {
         setLastResult({
           kind: 'ticket',
           rank,
-          speedPct: impactNow.speedPct,
-          qualityDelta: impactNow.qualityDelta,
-          bugPct: impactNow.bugPct,
+          featureId: SKILL_TO_FEATURE[field],
+          featureGain: featGain,
           progress: Math.round(progressNow * 10) / 10,
           boss: isBossPhrase,
           ts: Date.now(),
@@ -483,7 +527,7 @@ export const DevelopScreen = () => {
             if (finishing) next.push(`// ✅ ${currentTicket.flavor.title} 完了`);
             return next.slice(-4);
           });
-        } else if (category === 'design') {
+        } else if (category === 'scenario') {
           setDesignNotes((l) => [...l, currentTicket.flavor.title].slice(-4));
         } else if (category === 'graphics') {
           setGraphicsFrame((f) => f + 1);
@@ -505,30 +549,40 @@ export const DevelopScreen = () => {
           ticketPhraseCountRef.current = nextCount;
           setTicketPhraseCount(nextCount);
         }
-        const newCategory = getTicketAt(genreId, ticketIndexRef.current).category;
-        // v0.20 C：クランチタイム中は稀にボス文章（プール2文連結の長文）を出す
-        // レア文章とは独立抽選だが、両方当たった場合はボスを優先（バッジ・報酬の二重表示を避ける）
-        const nextIsBoss = crunchActive && rollBoss();
-        setTicketPhrase(
-          nextIsBoss
-            ? pickBossPhrase(newCategory, undefined, current?.scale)
-            : pickPhrase(newCategory, undefined, current?.scale),
-        );
-        setIsBossPhrase(nextIsBoss);
-        setIsRarePhrase(nextIsBoss ? false : rollRare());
-        // v0.20 G：ボス出現時にランダムな1体を選び、出現バナーを一度だけ流す
-        if (nextIsBoss) {
-          setBossSprite(BOSS_SPRITES[Math.floor(Math.random() * BOSS_SPRITES.length)]);
-          setBossAppearKey((k) => k + 1);
-          sfx.crunch();
+        // **いま打ち切った文で開発が終わるなら、次の文を用意しない。**
+        // 用意すると「⚔ ボスが現れた！」のバナーが完成の瞬間に流れ、
+        // 打つ相手がいないのに戦闘が始まったように見える（オーナー報告 2026-07-29）。
+        const stateNow = useGameStore.getState();
+        const willFinishWork =
+          (stateNow.current?.doneLoC ?? 0) + 1 >= (stateNow.current?.workTarget ?? 1);
+        if (!willFinishWork) {
+          // covered を渡さないと、表示中のチケット分野（＝加点先）と実際に打つ文の
+          // プールがズレる（2人チームで「🎨 グラフィック作業」なのにプログラムの文が出る）
+          const newCategory = getTicketAt(genreId, ticketIndexRef.current, coveredCats).category;
+          // v0.20 C：クランチタイム中は稀にボス文章（プール2文連結の長文）を出す
+          // レア文章とは独立抽選だが、両方当たった場合はボスを優先（バッジ・報酬の二重表示を避ける）
+          const nextIsBoss = crunchActive && rollBoss();
+          setTicketPhrase(
+            nextIsBoss
+              ? pickBossPhrase(newCategory, undefined, current?.scale)
+              : pickPhrase(newCategory, undefined, current?.scale),
+          );
+          setIsBossPhrase(nextIsBoss);
+          setIsRarePhrase(nextIsBoss ? false : rollRare());
+          // v0.20 G：ボス出現時にランダムな1体を選び、出現バナーを一度だけ流す
+          if (nextIsBoss) {
+            setBossSprite(BOSS_SPRITES[Math.floor(Math.random() * BOSS_SPRITES.length)]);
+            setBossAppearKey((k) => k + 1);
+            sfx.crunch();
+          }
         }
 
-        // 進捗（完成度）は従来通り：速度＋コンボ倍率＋フィーバー×2
-        const progress =
-          progressGain(wpmRef.current, false, comboRef.current) *
-          (feverActiveRef.current ? 2 : 1) *
-          (crunchActive ? JUICE_CONFIG.crunch.progressMult : 1);
-        addDevelopLoC(progress);
+        // 進捗は**打ち切った文の数**で数える（docs/spec/score-model.md §3）。
+        // 速度で進捗が増える旧方式だと、速く打つほど少ない文数で開発が終わり、
+        // 「1分野あたりの文数は固定」が壊れて後半の分野に文が回らなくなる
+        // （実測：2分野カバーなのにグラフィックの文が1回も出ずに完成した）。
+        // 腕は「同じ文数を短い時間で打ち切る」＝実時間の短縮に出る。
+        addDevelopLoC(1);
 
         // 待機中のイベントがあれば、次の文としてイベント文を投入（途中差し替えしない）
         if (pendingRef.current) {
@@ -541,6 +595,14 @@ export const DevelopScreen = () => {
       const done = s.current?.doneLoC ?? 0;
       const target = s.current?.workTarget ?? 1;
       if (done >= target && (s.current?.phase ?? 'development') === 'development') {
+        // 開発が終わったら**ボス／レアの状態を必ず落とす**。
+        // 出現バナーの表示条件は `bossAppearKey > 0 && isBossPhrase` なので、
+        // 最後の1文がボスだった場合 isBossPhrase が true のまま残り、
+        // フェーズ遷移でこの要素が張り替わったときにアニメが再生される
+        // ＝「開発が終わったのにボスが現れた」になる（オーナー報告 2026-07-29）。
+        setIsBossPhrase(false);
+        setIsRarePhrase(false);
+        setBossAppearKey(0);
         advancePhase();
       }
     },
@@ -618,21 +680,11 @@ export const DevelopScreen = () => {
   const charsPerMin = toCharsPerMin(wpm);
   const accuracyPct = Math.round(accuracy * 1000) / 10;
   const progressPct = Math.max(0, Math.min(100, (current.doneLoC / workTarget) * 100));
-  const litPhaseDots = Math.max(
-    1,
-    Math.min(TOTAL_PHASE_DOTS, Math.ceil((progressPct / 100) * TOTAL_PHASE_DOTS)),
-  );
-
   // 企画の進捗（企画書完成度）：完了チケット＋現在チケット内のフレーズ消化
   const planProgressPct = Math.min(
     100,
     ((planIndex + planPhraseCount / PHRASES_PER_PLAN_TICKET) / PLAN_CATEGORY_ORDER.length) * 100,
   );
-  const planLitDots = Math.max(
-    1,
-    Math.min(TOTAL_PHASE_DOTS, Math.ceil((planProgressPct / 100) * TOTAL_PHASE_DOTS)),
-  );
-
   // 予定週 = 開発ぶん（neededWeeks）＋企画・仕上げの猶予（v0.15.3）
   const plannedWeeks = Math.max(1, scaleDef.neededWeeks + planWeeksAllowance(scaleDef.neededWeeks));
   const elapsedWeeks = current.startDate
@@ -797,11 +849,11 @@ export const DevelopScreen = () => {
             currentCategory={isDevelopment ? currentTicket.category : null}
           />
           <div style={{ ...devBox(), gap: 6 }}>
+            {/* ラベルは1つ。「企画全体の進捗」と「企画書完成度」を並べていたが同じものを
+                言い換えているだけだった（オーナー報告 2026-07-29）。
+                進捗の数字はこのパネルだけに出す（中央ヘッダーにも同じ%を出していた） */}
             <span style={{ fontSize: 11, color: DEV.sub }}>
-              {isPlanning ? '企画全体の進捗' : '開発全体の進捗'}
-            </span>
-            <span style={{ fontSize: 10, color: DEV.sub }}>
-              {isPlanning ? '企画書完成度' : '全体完成度'}
+              {isPlanning ? '企画書の完成度' : '開発の完成度'}
             </span>
             <span
               style={{
@@ -826,6 +878,9 @@ export const DevelopScreen = () => {
             <SegGauge pct={budgetPct} color={periodColor} track="#0c1207" height={8} />
             <span style={{ fontSize: 10, fontWeight: 700, color: periodColor }}>{periodNote}</span>
           </div>
+          {isDevelopment && (
+            <FeaturePointsBox features={current.features ?? ZERO_FEATURES} pop={featurePop} />
+          )}
 
         </aside>
 
@@ -834,8 +889,6 @@ export const DevelopScreen = () => {
           {isDevelopment ? (
             <DevelopCenter
               phaseLabel={phaseMeta.label}
-              litPhaseDots={litPhaseDots}
-              progressPct={progressPct}
               ticket={currentTicket}
               ticketProgressPct={Math.min(
                 100,
@@ -864,8 +917,6 @@ export const DevelopScreen = () => {
             />
           ) : isPlanning ? (
             <PlanningCenter
-              litPhaseDots={planLitDots}
-              progressPct={planProgressPct}
               ticket={currentPlanTicket}
               ticketProgressPct={Math.min(
                 100,
@@ -1009,13 +1060,6 @@ const PhaseProgressList = ({ phase }: { phase: DevPhase }) => {
   );
 };
 
-/** 役職が今のチケットカテゴリに乗っているかで気分を変える（相性演出） */
-const ROLE_EXCITED_BY: Record<string, TicketCategory[]> = {
-  programmer: ['program'],
-  designer: ['graphics', 'sound'],
-  pr: ['design'],
-};
-
 /** 左カラム：チーム状態（割り当て社員＋スキルバー＋気分） */
 const TeamStatus = ({
   employeeIds,
@@ -1023,16 +1067,10 @@ const TeamStatus = ({
   currentCategory,
 }: {
   employeeIds: string[];
-  allEmployees: { id: string; name: string; role: string; power: number }[];
+  allEmployees: Employee[];
   currentCategory: TicketCategory | null;
 }) => {
   const team = allEmployees.filter((e) => employeeIds.includes(e.id));
-  const roleEmoji: Record<string, string> = { programmer: '🧑‍💻', designer: '🎨', pr: '📣' };
-  const roleColor: Record<string, string> = {
-    programmer: CATEGORY_META.program.color,
-    designer: CATEGORY_META.graphics.color,
-    pr: CATEGORY_META.design.color,
-  };
   return (
     <div
       style={{
@@ -1053,17 +1091,25 @@ const TeamStatus = ({
         <span style={{ fontSize: 11, color: DEV.sub }}>社員なし（あなた一人で開発中）</span>
       )}
       {team.map((e) => {
-        const excited = currentCategory && ROLE_EXCITED_BY[e.role]?.includes(currentCategory);
+        // 実装ステップ3：役職（role）ではなく**スキル**で描く。
+        // 今のチケット分野のスキルを持っている社員が「乗っている」＝喜ぶ。
+        // 旧実装は e.power / 1.5 でゲージを出しており、スキル100 でも 67% 止まりだった。
+        const field = currentCategory ? TICKET_TO_SKILL[currentCategory] : null;
+        const onDuty = field ? (e.skills?.[field] ?? 0) > 0 : false;
+        const primary = primarySkillOf(e.skills ?? {});
+        const visual = primary ? SKILL_VISUAL[primary] : null;
+        const total = totalPowerOf(e.skills ?? {});
         return (
           <div key={e.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 16 }}>{roleEmoji[e.role] ?? '🧑‍💻'}</span>
+              <span style={{ fontSize: 16 }}>{visual?.emoji ?? '🧑‍💻'}</span>
               <span style={{ fontSize: 12, color: DEV.cream }}>{e.name}</span>
-              <span style={{ marginLeft: 'auto', fontSize: 12 }}>{excited ? '😄' : '🙂'}</span>
+              <span style={{ fontSize: 10, color: DEV.sub }}>{Math.round(total)}</span>
+              <span style={{ marginLeft: 'auto', fontSize: 12 }}>{onDuty ? '😄' : '🙂'}</span>
             </div>
             <SegGauge
-              pct={Math.min(100, (e.power / 1.5) * 100)}
-              color={roleColor[e.role] ?? DEV.green}
+              pct={Math.min(100, total)}
+              color={visual?.color ?? DEV.green}
               track="#0c1207"
               height={5}
             />
@@ -1126,8 +1172,6 @@ const KanaActionLine = ({
 /** 中央：開発フェーズ本体 */
 const DevelopCenter = ({
   phaseLabel,
-  litPhaseDots,
-  progressPct,
   ticket,
   ticketProgressPct,
   activeEvent,
@@ -1148,9 +1192,7 @@ const DevelopCenter = ({
   devEmote,
 }: {
   phaseLabel: string;
-  litPhaseDots: number;
   /** v0.20 D：開発全体の完成度%（左サイドバーと同じ値。ヘッダーに主役として表示する） */
-  progressPct: number;
   ticket: ReturnType<typeof getTicketAt>;
   ticketProgressPct: number;
   activeEvent: DevEvent | null;
@@ -1193,15 +1235,20 @@ const DevelopCenter = ({
         flexDirection: 'column',
       }}
     >
-      {/* ヘッダー：フェーズ名 ＋ PHASE ドット（＋発動中はフィーバーバッジ）。
-          バッジ数で高さが変わると下のオフィスがズレるため、固定高さ＋1行（折返し禁止）に固定する。 */}
+      {/* ヘッダー：フェーズ名 ＋ 発動中のバッジ（FEVER／ラストスパート／たまりやすい／ノーミス継続）。
+          バッジは最大4つ同時に出るので、**折り返して2行になると下のオフィスとレイアウトが全部ずれる**
+          （オーナー報告 2026-07-29）。固定高さ＋1行（折返し禁止）にし、入り切らないバッジは隠す。
+          進捗%は左パネル（開発の完成度）に一本化したのでここには出さない。 */
+      }
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 12,
-          height: 42,
+          // 高さ固定＝バッジが増えても下のオフィスがズレない（main 側の 40px に合わせる）
+          height: 40,
+          boxSizing: 'border-box',
           padding: '0 12px',
           overflow: 'hidden',
           borderBottom: `2px solid ${DEV.panelBorder}`,
@@ -1261,33 +1308,6 @@ const DevelopCenter = ({
               と同じ「6」を使っていて紛らわしく、実際は現フェーズ内の完成度を6分割しただけの別物
               だった（オーナーFB「完成までの進捗があることを理解してなかった」の一因と判断）。
               パーセンテージを主役に出し、ドットは補助の目盛りとして残す。 */}
-          <span style={{ fontSize: 11, color: DEV.sub, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span
-              style={{
-                fontSize: 15,
-                fontWeight: 700,
-                color: DEV.greenBright,
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              開発 {Math.floor(progressPct)}%
-            </span>
-            <span style={{ display: 'inline-flex', gap: 3, verticalAlign: 'middle' }}>
-              {Array.from({ length: 6 }, (_, i) => (
-                <span
-                  key={i}
-                  style={{
-                    width: 7,
-                    height: 7,
-                    display: 'inline-block',
-                    borderRadius: 0,
-                    background: i < litPhaseDots ? DEV.green : '#1e2a14',
-                    border: '1px solid #05080c',
-                  }}
-                />
-              ))}
-            </span>
-          </span>
         </div>
       </div>
 
@@ -1915,7 +1935,7 @@ const SoundMeterPanel = ({ beatKey, title }: { beatKey: number; title: string })
 
 const DesignMemoPanel = ({ notes }: { notes: string[] }) => (
   <div style={{ ...devBox(), gap: 4 }}>
-    <span style={{ fontSize: 11, color: CATEGORY_META.design.color, fontWeight: 700 }}>
+    <span style={{ fontSize: 11, color: CATEGORY_META.scenario.color, fontWeight: 700 }}>
       📋 企画メモ
     </span>
     <div
@@ -1995,8 +2015,9 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
         <span style={{ fontSize: 14, fontWeight: 700, color: RANK_COLOR[result.rank] }}>
           {result.rank}!
         </span>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-          <ResultChip icon="💡" label="面白さ" value={`+${result.funGain}`} color="#ffd166" />
+        {/* 軸「面白さ」は実装ステップ3 で削除した。常に +0 を出していたので撤去
+            （効かない数値を画面に出さない）。企画フェーズの打鍵は期待度だけに効く */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
           <ResultChip icon="⭐" label="期待度" value={`+${result.hypeGain}`} color="#7adfff" />
           <ResultChip icon="🔥" label="コンボ倍率" value={`×${result.comboMult}`} color="#ff9d4d" />
           <ResultChip icon="⚡" label="速度倍率" value={`×${result.speedMult}`} color="#d8a5ff" />
@@ -2013,22 +2034,24 @@ const ResultCard = ({ result }: { result: LastResult | null }) => {
       <span style={{ fontSize: 14, fontWeight: 700, color: RANK_COLOR[result.rank] }}>
         {result.rank}!
       </span>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-        <ResultChip
-          icon="⚡"
-          label="開発速度"
-          value={`${result.speedPct >= 0 ? '+' : ''}${result.speedPct}%`}
-          color="#4db3ff"
-        />
-        <ResultChip icon="💎" label="品質" value={`+${result.qualityDelta}`} color="#ffd54a" />
-        <ResultChip
-          icon="🐛"
-          label="バグリスク"
-          value={`${result.bugPct}%`}
-          color={result.bugPct <= 0 ? '#5fe08a' : '#ff6b6b'}
-        />
-        <ResultChip icon="🏗" label="進捗" value={`+${result.progress}`} color="#d8a5ff" />
-      </div>
+      {/* **実際に効く数値だけを出す。**
+          旧実装は「開発速度 +40%」「バグリスク −5%」を効果の書式で出していたが、
+          どちらもどこにも掛かっていない飾りだった（オーナー指摘 2026-07-28）。
+          いま打鍵が効くのは**その分野の特徴ポイント**だけ。
+
+          ここは**この1打で伸びた分野だけ**を出す。4分野の現在値は左の「作品の特徴」
+          （ゲージ付き）が常時出しているので、ここにも並べると同じ数字が画面に二度出る
+          （オーナー報告 2026-07-29）。役割を分ける：左＝いまの到達値／ここ＝いまの成果。
+          革新性は企画時に決まって打鍵では動かないので出さない。 */}
+      {(() => {
+        const row = DEV_FEATURE_ROWS.find((r) => r.id === result.featureId);
+        if (!row) return null;
+        return (
+          <span style={{ fontSize: 12, color: '#ffd54a', fontWeight: 700 }}>
+            {row.icon} {row.label} +{result.featureGain?.toFixed(1) ?? '0'}
+          </span>
+        );
+      })()}
     </div>
   );
 };
@@ -2037,19 +2060,43 @@ const ResultChip = ({
   icon,
   label,
   value,
+  delta,
   color,
 }: {
   icon: string;
   label: string;
   value: string;
+  /** 今回の増分。値の下に別行で出す（横に足すと枠からはみ出して隣とずれる） */
+  delta?: string;
   color: string;
 }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-    <span style={{ fontSize: 9, color: DEV.sub, whiteSpace: 'nowrap' }}>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, overflow: 'hidden' }}>
+    <span
+      style={{
+        fontSize: 9,
+        color: DEV.sub,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }}
+    >
       {icon} {label}
     </span>
     <span style={{ fontSize: 15, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
       {value}
+    </span>
+    {/* 増分の行は常に確保する（出たり消えたりで高さが変わると下がガタつく） */}
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 700,
+        color,
+        minHeight: 13,
+        opacity: delta ? 1 : 0,
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      {delta ?? '　'}
     </span>
   </div>
 );
@@ -2066,8 +2113,6 @@ const PLAN = {
 
 /** 中央：企画フェーズ本体（v0.15.3 企画チケット UI） */
 const PlanningCenter = ({
-  litPhaseDots,
-  progressPct,
   ticket,
   ticketProgressPct,
   activeEvent,
@@ -2082,9 +2127,7 @@ const PlanningCenter = ({
   planEmote,
   lastResult,
 }: {
-  litPhaseDots: number;
   /** v0.20 D：企画書完成度%（左サイドバーと同じ値。ヘッダーに主役として表示する） */
-  progressPct: number;
   ticket: ReturnType<typeof getPlanTicketAt>;
   ticketProgressPct: number;
   activeEvent: DevEvent | null;
@@ -2129,34 +2172,6 @@ const PlanningCenter = ({
           style={{ color: PLAN.accent, fontWeight: 700, fontSize: 16, letterSpacing: '0.06em' }}
         >
           💡 企画フェーズ
-        </span>
-        {/* v0.20 D：「PHASE X/6」表記は左サイドバーの6段階フェーズ進行リストと紛らわしいため撤去し、
-            パーセンテージを主役に出す（DevelopCenter と同じ方針） */}
-        <span style={{ fontSize: 11, color: DEV.sub, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span
-            style={{
-              fontSize: 15,
-              fontWeight: 700,
-              color: PLAN.accent,
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            企画書 {Math.floor(progressPct)}%
-          </span>
-          <span style={{ display: 'inline-flex', gap: 3, verticalAlign: 'middle' }}>
-            {Array.from({ length: 6 }, (_, i) => (
-              <span
-                key={i}
-                style={{
-                  width: 7,
-                  height: 7,
-                  display: 'inline-block',
-                  background: i < litPhaseDots ? PLAN.accent : '#2a2414',
-                  border: '1px solid #05080c',
-                }}
-              />
-            ))}
-          </span>
         </span>
       </div>
 
@@ -2289,7 +2304,7 @@ const PlanningCenter = ({
             </div>
             {lastResult?.kind === 'plan' && (
               <span key={`fly-${lastResult.ts}`} className="dev-progress-fly dev-progress-fly-plan">
-                +💡{lastResult.funGain} ⭐{lastResult.hypeGain}
+                ⭐{lastResult.hypeGain}
               </span>
             )}
           </div>
@@ -2575,8 +2590,8 @@ const DebugFlow = ({
           </span>
           <span style={{ fontSize: 13, color: DEV.cream }}>
             {total > 0
-              ? `${total} 匹すべて駆除した。品質ボーナスを獲得（バグゼロ +5）`
-              : 'もともとバグが無かった。品質ボーナスを獲得（バグゼロ +5）'}
+              ? `${total} 匹すべて駆除した。残バグ0 なので操作性が削られない`
+              : 'もともとバグが無かった。残バグ0 なので操作性が削られない'}
           </span>
         </div>
       </PhaseShell>
@@ -2588,6 +2603,28 @@ const DebugFlow = ({
   return (
     <PhaseShell label="デバッグ" team={employees}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* 開発ビルド限定：残バグを一括で 0 にする QA フック。
+            デバッグは 1バグ = 2文なので、バグが多いと発売・売上・解放の検証に
+            届く前に時間を使い切る（docs/qa/bug-hunt.md）。 */}
+        {import.meta.env.DEV && bugCount > 0 && (
+          <button
+            type="button"
+            onClick={() => useGameStore.getState().devClearAllBugs()}
+            title="残バグを 0 にしてテストフェーズを飛ばす（DEVビルドのみ）"
+            style={{
+              alignSelf: 'flex-start',
+              padding: '4px 8px',
+              border: '1px dashed #6a7686',
+              background: '#141b26',
+              color: '#c8d2e0',
+              fontSize: 10,
+              borderRadius: 2,
+              cursor: 'pointer',
+            }}
+          >
+            🛠 [DEV] バグを全部消す（{bugCount} 匹）
+          </button>
+        )}
         {/* 進捗バー「駆除 N/M」＋ バグ抑制（プログラマー育成の効果をここでも見せる） */}
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -3029,3 +3066,85 @@ export const devBox = (): React.CSSProperties => ({
   flexDirection: 'column',
   gap: 6,
 });
+
+
+/**
+ * 打鍵結果チップに出す分野（**打鍵で動く4分野だけ**）。
+ * 革新性は企画時に決まって打鍵では動かないので、開発中は出さない。
+ */
+const DEV_FEATURE_ROWS: { id: FeatureId; icon: string; label: string }[] = [
+  { id: 'usabilityPt', icon: '🕹', label: '操作性' },
+  { id: 'graphicsPt', icon: '🎨', label: 'グラフィック' },
+  { id: 'soundPt', icon: '🎵', label: 'サウンド' },
+  { id: 'storyPt', icon: '📖', label: 'ストーリー' },
+];
+
+/** 特徴ポイントの表示メタ（docs/spec/score-model.md §2） */
+const FEATURE_META: Record<FeatureId, { icon: string; label: string; color: string }> = {
+  usabilityPt: { icon: '🕹', label: '操作性', color: '#4db3ff' },
+  graphicsPt: { icon: '🎨', label: 'グラフィック', color: '#5fe08a' },
+  soundPt: { icon: '🎵', label: 'サウンド', color: '#ffd166' },
+  storyPt: { icon: '📖', label: 'ストーリー', color: '#d8a5ff' },
+  innovationPt: { icon: '💡', label: '革新性', color: '#ff9de2' },
+};
+
+/**
+ * 特徴ポイントのリアルタイム表示（実装ステップ2）。
+ *
+ * **この数値はまだスコアに接続していない**（接続は実装ステップ3）。
+ * ここで見せるのは「打った分だけ伸びる」手触りを先に確かめるため。
+ * 革新性だけは打鍵で伸びず、企画時点（同じ組合せの連投判定）で決まる。
+ */
+const FeaturePointsBox = ({
+  features,
+  pop,
+}: {
+  features: FeaturePoints;
+  pop: { field: DevSkillId; gain: number; key: number } | null;
+}) => {
+  const popId = pop ? SKILL_TO_FEATURE[pop.field] : null;
+  return (
+    <div style={{ ...devBox(), gap: 3 }}>
+      <span style={{ fontSize: 11, color: DEV.sub }}>作品の特徴</span>
+      {/* 革新性は企画時に決まって打鍵では動かない。開発中に出しても手の打ちようがないので、
+          企画画面（組合せを選び直せる場所）とリリース画面（結果）だけに出す */}
+      {FEATURE_IDS.filter((id) => id !== 'innovationPt').map((id) => {
+        const m = FEATURE_META[id];
+        const v = features[id];
+        return (
+          <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: 10, width: 76, color: DEV.sub }}>
+              {m.icon} {m.label}
+            </span>
+            <div style={{ flex: 1 }}>
+              <SegGauge pct={v} color={m.color} track="#0c1207" height={6} />
+            </div>
+            <span
+              style={{
+                fontSize: 10,
+                width: 26,
+                textAlign: 'right',
+                color: m.color,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {Math.round(v)}
+            </span>
+            <span
+              key={pop?.key}
+              style={{
+                fontSize: 10,
+                width: 34,
+                color: m.color,
+                opacity: popId === id ? 1 : 0,
+                transition: 'opacity 240ms',
+              }}
+            >
+              {popId === id && pop ? `+${pop.gain.toFixed(1)}` : ''}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};

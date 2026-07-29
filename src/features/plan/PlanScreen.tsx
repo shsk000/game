@@ -4,10 +4,20 @@ import { JacketView } from '../../components/JacketView';
 import { Tutorial } from '../../components/Tutorial';
 import { PixelButton, PixelModal, PixelWindow } from '../../components/ui';
 import { bugSuppression } from '../../core/bugs';
-import { investPrice } from '../../core/invest';
+import { monthsOfRunway } from '../../core/economy';
+import { jobTitleOf } from '../../core/skills';
+import { investPriceFor } from '../../core/invest';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
-import { planWeeksAllowance, ROLE_EFFECT } from '../../data/balance';
+import { planWeeksAllowance } from '../../data/balance';
+import { weightsFor } from '../../data/archetypes';
 import { compatLabel, getCompat } from '../../data/compatibility';
+import { compatBonusFor } from '../../core/metascore';
+import { innovationFor } from '../../core/features';
+import { leadForField } from '../../core/skills';
+import { sumPrBonus } from '../../data/employees';
+import { DEV_SKILL_IDS } from '../../state/types';
+import { SKILL_VISUAL } from '../office/employeeDisplay';
+import { formatSkills } from '../office/employeeDisplay';
 import { sumMonthlySalaries } from '../../data/employees';
 import type { GenreId } from '../../data/genres';
 import { GENRE_BY_ID, GENRES } from '../../data/genres';
@@ -18,7 +28,7 @@ import { THEME_BY_ID, THEMES } from '../../data/themes';
 import { generateTitle } from '../../data/titleGenerator';
 import { trendLabel } from '../../data/trend';
 import { useGameStore } from '../../state/gameStore';
-import { estimateRevenueRange, formatWeeks, formatYen } from '../../utils/format';
+import { estimateRevenueRange, formatRunway, formatWeeks, formatYen, runwayColor } from '../../utils/format';
 import { computeProfit } from '../../utils/profit';
 
 /**
@@ -125,7 +135,8 @@ const LockedShop = ({
   kind,
   locked,
   funds,
-  purchaseCount,
+  unlockedGenres,
+  unlockedThemes,
   open,
   onToggle,
   onRequest,
@@ -133,8 +144,9 @@ const LockedShop = ({
   kind: 'genre' | 'theme';
   locked: LockedItem[];
   funds: number;
-  /** これまでの先行購入数（価格の逓増カーブに使う。買うほど全項目が高くなる） */
-  purchaseCount: number;
+  /** 価格はここから導出する（その stage でこれまでに買った数＝解放済みの数） */
+  unlockedGenres: GenreId[];
+  unlockedThemes: ThemeId[];
   open: boolean;
   onToggle: () => void;
   /** クリック時：即購入せず、確認対象を親へ渡す（親が確認モーダルを開く） */
@@ -153,7 +165,7 @@ const LockedShop = ({
       </PixelButton>
       {open &&
         locked.map((it) => {
-          const price = investPrice(it.unlockStage, purchaseCount);
+          const price = investPriceFor(it.unlockStage, unlockedGenres, unlockedThemes);
           if (price === null) return null;
           const affordable = funds >= price;
           return (
@@ -180,7 +192,6 @@ export const PlanScreen = () => {
   const unlockedThemes = useGameStore((s) => s.unlockedThemes);
   const buyGenre = useGameStore((s) => s.buyGenre);
   const buyTheme = useGameStore((s) => s.buyTheme);
-  const investPurchaseCount = useGameStore((s) => s.investPurchaseCount);
   const funds = useGameStore((s) => s.funds);
   const employees = useGameStore((s) => s.employees);
   const library = useGameStore((s) => s.library);
@@ -190,6 +201,9 @@ export const PlanScreen = () => {
   const newlyAchieved = useGameStore((s) => s.newlyAchieved);
   const clearNewlyAchieved = useGameStore((s) => s.clearNewlyAchieved);
   const tutorialDone = useGameStore((s) => s.tutorialDone);
+  const debt = useGameStore((s) => s.debt);
+  // ランウェイ＝いまの資金が固定費で何ヶ月もつか（規模を選ぶ前に耐えられる期間が読める）
+  const runway = monthsOfRunway({ funds, debt, employees, unlockedScales: unlocked });
 
   const firstGenre = (unlockedGenres[0] ?? GENRES[0].id) as GenreId;
   const firstTheme = (unlockedThemes[0] ?? THEMES[0].id) as ThemeId;
@@ -292,7 +306,8 @@ export const PlanScreen = () => {
               kind="genre"
               locked={GENRES.filter((g) => !unlockedGenres.includes(g.id))}
               funds={funds}
-              purchaseCount={investPurchaseCount}
+              unlockedGenres={unlockedGenres}
+              unlockedThemes={unlockedThemes}
               open={genreShopOpen}
               onToggle={() => setGenreShopOpen((v) => !v)}
               onRequest={setPendingPurchase}
@@ -323,7 +338,8 @@ export const PlanScreen = () => {
               kind="theme"
               locked={THEMES.filter((t) => !unlockedThemes.includes(t.id))}
               funds={funds}
-              purchaseCount={investPurchaseCount}
+              unlockedGenres={unlockedGenres}
+              unlockedThemes={unlockedThemes}
               open={themeShopOpen}
               onToggle={() => setThemeShopOpen((v) => !v)}
               onRequest={setPendingPurchase}
@@ -354,26 +370,29 @@ export const PlanScreen = () => {
             </div>
             {(() => {
               const def = SCALE_BY_ID[scale];
-              const range = estimateRevenueRange(def.baseUnit);
+              // 予測は「このチームで実際に届く範囲」。固定の段だと AAA を赤字表示していた
+              const range = estimateRevenueRange(scale, employees, genreId, themeId);
               // v0.15.3：予定週は企画・仕上げの猶予込みで案内する
               const totalWeeks = def.neededWeeks + planWeeksAllowance(def.neededWeeks);
-              const monthCount = Math.round(totalWeeks / 4);
+              // 月またぎの回数は 週数÷4 の**切り捨て**（4週=1ヶ月）。
+              // 以前は Math.round ＋ 下限1ヶ月で、全規模の固定費を最大1ヶ月ぶん多く見せていた
+              // （＝規模を上げる判断を不当に赤字寄りにしていた。オーナー指摘 2026-07-29）
+              const monthCount = Math.floor(totalWeeks / 4);
               // E-4: 中央値売上で見込み利益。赤字なら赤色で警告
               // v0.17.1：月固定費に給与を含める（賃料だけだと実際の月次徴収と食い違う）
               const salaries = sumMonthlySalaries(employees);
               const monthlyFixed = salaries + def.monthlyRent;
-              const estMonths = Math.max(1, Math.round(totalWeeks / 4));
               const profitMid = computeProfit({
                 totalRevenue: range.mid,
                 devCost: def.baseCost,
                 monthlyFixedCost: monthlyFixed,
-                developMonths: estMonths,
+                developMonths: totalWeeks / 4,
               });
               const profitHigh = computeProfit({
                 totalRevenue: range.high,
                 devCost: def.baseCost,
                 monthlyFixedCost: monthlyFixed,
-                developMonths: estMonths,
+                developMonths: totalWeeks / 4,
               });
               const profitColor = profitMid.profit >= 0 ? COLORS.pioneer : COLORS.accentRed;
               return (
@@ -403,7 +422,7 @@ export const PlanScreen = () => {
                   <EstimateBox
                     label="予想売上レンジ"
                     value={`${formatYen(range.low)} 〜 ${formatYen(range.high)}`}
-                    sub={`平均 ${formatYen(range.mid)}`}
+                    sub={`中央値 ${formatYen(range.mid)}`}
                     accent={COLORS.pioneer}
                   />
                   <EstimateBox
@@ -411,6 +430,14 @@ export const PlanScreen = () => {
                     value={`${formatYen(monthlyFixed)}/月`}
                     sub={`給与 ${formatYen(salaries)} + 賃料 ${formatYen(def.monthlyRent)}`}
                     accent={COLORS.warn}
+                  />
+                  {/* 資金が何ヶ月もつか。規模を選ぶ前に「その期間ぶん耐えられるか」が読める。
+                      予想開発期間より短ければ、その規模は最後まで作りきれない */}
+                  <EstimateBox
+                    label="資金がもつ期間"
+                    value={formatRunway(runway.months)}
+                    sub={`資金 ${formatYen(funds)} ÷ 固定費`}
+                    accent={runwayColor(runway.months) === '#222a35' ? COLORS.pioneer : runwayColor(runway.months)}
                   />
                   <EstimateBox
                     label="予想利益（中央値）"
@@ -451,27 +478,18 @@ export const PlanScreen = () => {
                   <li key={e.id} style={{ fontSize: 12, color: COLORS.textDark }}>
                     <strong>{e.name}</strong>
                     <span style={{ fontSize: 11, color: COLORS.textSub, marginLeft: 6 }}>
-                      {e.role === 'programmer'
-                        ? '🧑‍💻 プログラマー'
-                        : e.role === 'designer'
-                          ? '🎨 デザイナー'
-                          : '📣 広報'}{' '}
-                      ／ Lv{e.level}
+                      {jobTitleOf(e.skills)} ／ Lv{e.level} ／ {formatSkills(e.skills)}
                     </span>
                   </li>
                 ))}
               </ul>
               {(() => {
                 // このチームで作ると何が起きるか（効き先の可視化。値は balance.ts から生成）
-                const speed = employees
-                  .filter((e) => e.role === 'programmer')
-                  .reduce((a, b) => a + b.power * ROLE_EFFECT.programmerLocPerSec, 0);
-                const quality = employees
-                  .filter((e) => e.role === 'designer')
-                  .reduce((a, b) => a + b.power * ROLE_EFFECT.designerQualityBonus, 0);
-                const sales = employees
-                  .filter((e) => e.role === 'pr')
-                  .reduce((a, b) => a + b.power * ROLE_EFFECT.prSalesBonus, 0);
+                // ここに出すのは**実際にスコア・売上へ効くものだけ**。
+                // 「開発速度 LoC/秒」は自動開発機能が存在しないため表示しない（進捗は打鍵のみ）
+                // 「🎨 品質 +X」は designerQualityBonus がどの計算にも繋がっておらず、
+                // 何も起きない数値だったため撤去した（docs/spec/glossary.md の ❌廃止）
+                const sales = sumPrBonus(employees);
                 const suppress = Math.round(bugSuppression(employees) * 100);
                 return (
                   <div
@@ -485,8 +503,6 @@ export const PlanScreen = () => {
                       rowGap: 2,
                     }}
                   >
-                    <span>⚡ 開発速度 +{speed.toFixed(2)} LoC/秒</span>
-                    <span>🎨 品質 +{quality.toFixed(1)}</span>
                     <span>📣 売上 +{Math.round(sales * 100)}%</span>
                     <span>🐛 バグ抑制 {suppress}%</span>
                   </div>
@@ -559,6 +575,76 @@ export const PlanScreen = () => {
           </p>
         </PixelWindow>
 
+        {/* このジャンルで重要な分野（docs/spec/score-model.md §4）。
+            プレイヤーが「手持ちのスキルに合うジャンルを選ぶ」判断をするための表示 */}
+        <PixelWindow
+          // 「型」（絵物語型 等）は27ジャンルを整理するための内部の分類名。
+          // プレイヤーが選んだのはジャンルなので、ジャンル名で言う
+          title={`🎯 ${GENRE_BY_ID[genreId].name}で重要な分野`}
+          variant="standard"
+          bodyStyle={{ padding: 8 }}
+        >
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {FEATURE_ROWS.map((row) => {
+              const label = weightsFor(genreId)[row.id];
+              const color =
+                label === '◎' ? COLORS.trendHot : label === '○' ? COLORS.textDark : COLORS.textSub;
+              return (
+                <span
+                  key={row.id}
+                  style={{ fontSize: 12, color, fontWeight: label === '◎' ? 700 : 400 }}
+                >
+                  {label} {row.icon}
+                  {row.label}
+                </span>
+              );
+            })}
+          </div>
+          <p style={{ ...hintStyle, marginTop: 4 }}>
+            ◎ が重い。打って伸ばした分野がジャンルに合うほどメタスコアが伸びる
+          </p>
+          {/* 革新性は打鍵では動かず、**ここでしか直せない**（組合せを変える）。
+              だから開発中ではなく企画画面に出す */}
+          {/* 革新性は打鍵では動かず、**ここでしか直せない**（組合せを変える）。
+              だから開発中ではなく企画画面に出す */}
+          {(() => {
+            const innovation = innovationFor(library, genreId, themeId);
+            if (innovation >= 100) return null;
+            return (
+              <p style={{ ...hintStyle, marginTop: 4, color: COLORS.trendHot }}>
+                ⚠ 💡 革新性 {innovation}／100 ── この組合せが続いています。
+                ジャンルかテーマを変えれば 100 に戻ります
+              </p>
+            );
+          })()}
+          {/* 分野ごとの担当者（docs/spec/score-model.md §3）。
+              **その分野でいちばん強い1人が担当**なので、注釈なしで読める。
+
+              担当がいない分野は**事実だけ**を書く（「この分野は0点」）。
+              以前は警告色で出していたが、**促したとおりに4分野ぶん雇うと破産する**
+              （初期資金¥500万に対し4人で月固定費¥318万＝ランウェイ1.6ヶ月）。
+              画面が守れない約束をしていた。採用の判断材料はランウェイ表示のほうで出す。 */}
+          {employees.length > 0 && (
+            <div style={{ marginTop: 5, borderTop: `1px solid ${COLORS.borderHard}`, paddingTop: 4 }}>
+              {DEV_SKILL_IDS.map((field) => {
+                const lead = leadForField(employees, field);
+                return (
+                  <div key={field} style={{ fontSize: 11, color: COLORS.textDark }}>
+                    {SKILL_VISUAL[field].emoji}{' '}
+                    {lead ? (
+                      <>
+                        担当：{lead.name} <strong>{Math.round(lead.skills?.[field] ?? 0)}</strong>
+                      </>
+                    ) : (
+                      <span style={{ opacity: 0.65 }}>担当なし（この分野は 0 点）</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </PixelWindow>
+
         {/* 企画プレビュー */}
         <PixelWindow title="🎮 企画プレビュー" variant="emphasis" bodyStyle={{ padding: 8 }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
@@ -616,7 +702,7 @@ export const PlanScreen = () => {
                     width: 'fit-content',
                   }}
                 >
-                  🌱 新規開拓 +30%
+                  🌱 新規開拓 +5%
                 </span>
               )}
               {surveyedCompat !== null ? (
@@ -628,7 +714,11 @@ export const PlanScreen = () => {
                     fontWeight: 700,
                   }}
                 >
-                  相性: {compatLabel(surveyedCompat)} ({surveyedCompat.toFixed(2)}x)
+                  {/* 相性は倍率ではなく**メタスコアへの加点**。`1.20x` と書くと
+                      売上が1.2倍になると読めるが、実際は点が +3 されるだけ（オーナー指摘系の詐称） */}
+                  相性: {compatLabel(surveyedCompat)}（メタスコア{' '}
+                  {compatBonusFor(surveyedCompat) >= 0 ? '+' : ''}
+                  {compatBonusFor(surveyedCompat)} 点）
                 </p>
               ) : (
                 <PixelButton
@@ -707,3 +797,13 @@ export const PlanScreen = () => {
     </div>
   );
 };
+
+
+/** 企画画面で出す特徴ポイントの見出し（docs/spec/score-model.md §2 の順） */
+const FEATURE_ROWS = [
+  { id: 'usabilityPt', icon: '🕹', label: '操作性' },
+  { id: 'graphicsPt', icon: '🎨', label: 'グラフィック' },
+  { id: 'soundPt', icon: '🎵', label: 'サウンド' },
+  { id: 'storyPt', icon: '📖', label: 'ストーリー' },
+  { id: 'innovationPt', icon: '💡', label: '革新性' },
+] as const;

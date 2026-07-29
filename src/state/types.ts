@@ -1,5 +1,4 @@
 import type { GachaRank } from '../data/balance';
-import type { CategoryId } from '../data/categories';
 import type { EquipLoadout } from '../data/equipment';
 import type { GenreId } from '../data/genres';
 import type { Scale } from '../data/scales';
@@ -76,24 +75,34 @@ export type Achievement =
 export type EmployeeRole = 'programmer' | 'designer' | 'pr';
 
 export type EmployeeSpecialty = {
-  categoryId: CategoryId;
+  categoryId: string;
   bonus: number;
 };
+
+/**
+ * 社員のスキル（docs/spec/score-model.md §1）。
+ * 上4つは開発スキルで、それぞれ対応する特徴ポイントを伸ばす。
+ * `pr`（広報）だけ特徴ポイントに効かず、売上に効く。
+ */
+export type SkillId = 'programming' | 'graphics' | 'sound' | 'scenario' | 'pr';
+
+/** 特徴ポイントを伸ばす4つの開発スキル（広報を除く） */
+export const DEV_SKILL_IDS = ['programming', 'graphics', 'sound', 'scenario'] as const;
+export type DevSkillId = (typeof DEV_SKILL_IDS)[number];
+
+/**
+ * 社員が持つスキル値（0〜100）。**持てるのは1つか2つ**。
+ * 持っていないスキルはキーを置かない（＝その分野は伸ばせない）。
+ */
+export type SkillSet = Partial<Record<SkillId, number>>;
 
 export type Employee = {
   id: string;
   name: string;
   role: EmployeeRole;
-  /**
-   * v0.22：採用ガチャの排出ランク（表示ラベル専用）。
-   * 能力への影響は basePower / specialties に織り込み済みで、rank 自体が
-   * 品質・売上に加点する経路は作らない（spec v22 §2）。旧セーブの社員は undefined。
-   */
+  /** 採用時に決まるランク（C/B/A/S）。総合力の天井を決める */
   rank?: GachaRank;
-  /**
-   * v0.16：全役割共通の 0..1 正規化スケール（成長込みの現在値）。
-   * 実効果は使用側で ROLE_EFFECT 係数を掛ける（LoC/秒・品質+・売上%）。
-   */
+  /** 互換：総合力 ÷ 100。給与計算だけが使う（スコアはスキル経由） */
   power: number;
   /** v0.16：素質（採用時に決まる 0.2〜0.6）。power = basePower × レベル成長率 */
   basePower: number;
@@ -104,9 +113,12 @@ export type Employee = {
   wage: number;
   specialties: EmployeeSpecialty[];
   /**
-   * v0.25：装備（スロット→アイテムID）。未装備スロットは undefined、旧セーブの社員は undefined。
-   * 効果はリリース品質に別枠で加点（EQUIP_QUALITY_BONUS_CAP）。see core/equip.ts。
+   * スキル（docs/spec/score-model.md §1）。**1つか2つ**。値は 0〜100。
+   * 合計＝総合力。ランクが天井を、レベルが現在値を決める。
+   * 旧セーブは storage の移行で power/role から生成される。
    */
+  skills: SkillSet;
+  /** 装備。分野別の倍率で**社員のスキル**に掛かる（core/equip.ts） */
   equipped?: EquipLoadout;
 };
 
@@ -120,23 +132,51 @@ export type Candidate = Employee;
  *  - trendMul / pioneer はメタスコア/売上に乗る別系統
  *  - 旧 v0.9 4 レバー（categories/employees/ads/variance）は互換用に optional 残置
  */
+/**
+ * メタスコアの内訳（リリース画面の開封演出で見せる）。
+ *
+ * docs/spec/score-model.md §4 の式そのまま：
+ * Σ(特徴ポイント × 正規化重み) ＋ 相性補正 ＋ トレンド合致 ＋ 評価家のブレ。
+ * **画面に出す数値は必ずこの内訳に対応させる**（効かない数値を出さない）。
+ */
 export type WorkBreakdown = {
-  // v0.10 新ブレイクダウン
-  charPower?: number;
-  genreAffinity?: number;
-  performance?: number;
-  luck?: number;
+  /** 特徴ポイントごとの寄与（合計 = base） */
+  features?: Partial<Record<FeatureId, number>>;
+  /** 特徴ポイントの加重和 */
   base?: number;
-  luckMultiplier?: number;
+  /** 相性補正（−8〜+8） */
+  compatBonus?: number;
+  /** トレンド合致（+10 / +5） */
+  trendBonus?: number;
+  /** 評価家のブレ（±5） */
+  criticVariance?: number;
+  // --- 売上の内訳（docs/spec/scoring.md §3。画面で式そのものを見せる） ---
+  /** 基準売上（規模。普通=×1 のときの額） */
+  baseRevenue?: number;
+  /** ヒット区分の倍率（×0.25〜×10） */
+  tierMul?: number;
+  /** ヒット区分のキー（表示名の引き当て用） */
+  tier?: string;
+  /** 広報スキルによる上乗せ（比率） */
+  prBonus?: number;
+  /** ファン数による上乗せ（比率） */
+  fanBonus?: number;
+  /** 初組合せボーナス（比率） */
+  pioneerBonus?: number;
+  /** 市場系軸（話題性 − 炎上リスク）の倍率 */
+  axisSalesMul?: number;
+  /** マーケティング広告の倍率 */
+  marketingMul?: number;
+  // --- ファン増加の内訳 ---
+  /** メタスコアと広報から出る基礎ぶん */
+  fanBase?: number;
+  /** 企画フェーズの打鍵で積んだ期待度ぶん */
+  fanFromHype?: number;
+  /** 話題性・信頼度・炎上リスクの合計ぶん */
+  fanFromBuzz?: number;
+  /** 売上側の倍率（スコアには効かない） */
   trendMul?: number;
   pioneer?: boolean;
-  /** v0.14：イベント新軸（面白さ/操作性/バランス−バグ率）による品質への加点 */
-  axisBonus?: number;
-  // v0.9 互換
-  categories?: number;
-  employees?: number;
-  ads?: number;
-  variance?: number;
 };
 
 export type Work = {
@@ -145,8 +185,8 @@ export type Work = {
   genreId: GenreId;
   themeId: ThemeId;
   scale: Scale;
-  quality: number;
   metascore: number;
+  /** 神ゲー認定（メタスコア95+）。`scoreTierFor` の結果を保存したもの */
   isMasterpiece: boolean;
   developSec: number;
   /** 初動売上（releaseで即時加算済み） */
@@ -168,12 +208,15 @@ export type Work = {
   pioneer: boolean;
   releasedAt: number;
   createdAt: number;
-  /** 品質の4レバー内訳 */
   breakdown: WorkBreakdown;
-  /** ライブラリ表示用：このリリースで選んだカテゴリ */
-  selectedCategories?: CategoryId[];
   /** v0.10：開発に要したゲーム内週数（カレンダー差分。リリース時に確定） */
   developWeeks?: number;
+  /**
+   * 開発中に**実際に払った**月固定費の合計と、その徴収回数。
+   * 推定（週数÷4）ではなく `monthlyTick` の実額。詳しくは `CurrentProject.fixedCostPaid`。
+   */
+  fixedCostPaid?: number;
+  fixedCostTicks?: number;
 };
 
 /**
@@ -203,12 +246,14 @@ export const DEV_PHASE_ORDER: DevPhase[] = [
  * `current.axes` に蓄積し、リリース時に既存の品質→メタスコア→売上/ファンへ合流する（spec §5-6）。
  */
 export type DevAxis =
-  | 'funFactor' // 面白さ → 品質
-  | 'usability' // 操作性 → 品質
-  | 'balance' // バランス → 品質
+  // 実装ステップ3：品質系の軸（面白さ / 操作性 / バランス）は削除した。
+  // 品質という合成値そのものを廃止し、作品の出来は特徴ポイント5種で表すようにしたため。
+  // これらを付与していたイベントは hype（期待度）へ付け替えてある。
   | 'hype' // 期待度 → ファン/初動
+  // 旧 'salesForecast'（売上予測%）は削除（オーナー判断 2026-07-25）。
+  // 「予測」という名前なのに実売上を増やす補正で、効果も buzz と同じ式・同じ分母に足すだけだった＝
+  // ゲーム内で何も表していない変数名がそのまま UI に出ていた。付与していたイベントは buzz に付け替え。
   | 'buzz' // 話題性 → ファン/売上
-  | 'salesForecast' // 売上予測% → 売上
   | 'bugRate' // バグ率±（+ で品質減）
   | 'reputationRisk' // 炎上リスク（+ で売上/ファン減）
   | 'devWeeksDelta' // 開発期間±週
@@ -217,13 +262,35 @@ export type DevAxis =
 
 export type DevAxes = Record<DevAxis, number>;
 
+/**
+ * 特徴ポイント（docs/spec/score-model.md §2）。**どの作品も常に5つとも持つ。**
+ * 企画で選ぶものではなく、その作品の出来を表す数値（0〜100）。
+ *
+ * メタスコアはこの5つだけから決まる（docs/spec/scoring.md §2）。
+ */
+export const FEATURE_IDS = ['usabilityPt', 'graphicsPt', 'soundPt', 'storyPt', 'innovationPt'] as const;
+export type FeatureId = (typeof FEATURE_IDS)[number];
+export type FeaturePoints = Record<FeatureId, number>;
+
+export const ZERO_FEATURES: FeaturePoints = {
+  usabilityPt: 0,
+  graphicsPt: 0,
+  soundPt: 0,
+  storyPt: 0,
+  innovationPt: 0,
+};
+
+/** 開発スキル → 伸びる特徴ポイント（革新性はスキルでは伸びない） */
+export const SKILL_TO_FEATURE: Record<DevSkillId, FeatureId> = {
+  programming: 'usabilityPt',
+  graphics: 'graphicsPt',
+  sound: 'soundPt',
+  scenario: 'storyPt',
+};
+
 export const ZERO_AXES: DevAxes = {
-  funFactor: 0,
-  usability: 0,
-  balance: 0,
   hype: 0,
   buzz: 0,
-  salesForecast: 0,
   bugRate: 0,
   reputationRisk: 0,
   devWeeksDelta: 0,
@@ -250,11 +317,13 @@ export type CurrentProject = {
   phase?: DevPhase;
   /** v0.14：イベントで蓄積する新名称軸。リリース時に既存パイプラインへ合流（spec §5-6） */
   axes?: DevAxes;
+  /** 特徴ポイント5種（この作品の出来） */
+  features?: FeaturePoints;
   /**
    * v0.15 ビルドアップ・タイピング：打った文の属性ごとに伸びる開発パラメータ。
    * リリース時に品質・売上へ合流（因果を最後まで一本にする）
    */
-  devStats?: { program: number; graphics: number; sound: number; design: number };
+  devStats?: { program: number; graphics: number; sound: number; scenario: number };
   requiredLoC: number;
   doneLoC: number;
   /** ノリ／コンボ最大値（このプロジェクト内） */
@@ -278,8 +347,6 @@ export type CurrentProject = {
   adBoostActive: boolean;
   /** 市場調査広告で開示された相性 */
   surveyedCompat: number | null;
-  /** 今回開発で選ばれた3つのカテゴリ */
-  selectedCategories: CategoryId[];
   /** 今回開発に割り当てた従業員 */
   assignedEmployeeIds: string[];
   /** タイピングのパフォーマンス指標 */
@@ -290,6 +357,19 @@ export type CurrentProject = {
   };
   /** v0.10：開発開始時のゲーム内日付（F-6 完成サマリ用） */
   startDate?: GameDate;
+  /**
+   * この作品を作っている間に**実際に資金から引かれた**月固定費の合計（円）。
+   *
+   * リリース画面の利益計算は以前「月固定費 × Math.round(開発週数 ÷ 4)」という**推定**を
+   * 出していた。10週なら `round(2.5)` で3ヶ月と表示されるが、実際の月またぎは2回のことがあり、
+   * 誤差1ヶ月（3人チームなら約 ¥252万）が**その作品の総売上を上回る**規模だった。
+   * さらに「今の給与 × 月数」なので、開発の途中で採用すると過去にさかのぼって課金されて見えた。
+   *
+   * `monthlyTick`（＝実際に funds を減らす場所）で積むので、給与の変動も借金の利息も自動で入る。
+   */
+  fixedCostPaid?: number;
+  /** 上の額が何回の月初徴収で発生したか（画面に「月初 N 回」と出す） */
+  fixedCostTicks?: number;
   /** v0.10：WPM しきい値クロスで -X 週テロップを出した一覧（重複防止） */
   timeShortcutsUnlocked?: number[];
   /**

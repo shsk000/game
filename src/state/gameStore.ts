@@ -9,17 +9,21 @@ import {
 import { simulateAverageDevRun } from '../core/devSimulate';
 import { computeBorrow, computeMonthlyTick, computeRepay, computeSpend } from '../core/economy';
 import { canBuyEquipment, freeCopies, type OwnedItems } from '../core/equip';
-import { gachaPrice, nextPityCount, rollRank } from '../core/gacha';
+import { gachaPrice, nextPityCount } from '../core/gacha';
+import { addFeature, coveredFieldsOf, initialFeatures } from '../core/features';
+import { rollRank4 } from '../core/skills';
 import type { LevelUp } from '../core/growth';
-import { investPrice } from '../core/invest';
+import { investPriceFor } from '../core/invest';
 import { type Deps, defaultDeps } from '../core/ports';
 import { evaluateAchievements } from '../core/progression';
-import { computeRelease, type ReleaseOpts } from '../core/release';
+import {
+  applyLaunchAd as applyLaunchAdToWork,
+  computeRelease,
+  type ReleaseOpts,
+} from '../core/release';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { DEV_PHRASES_PER_WEEK, type GachaKind } from '../data/balance';
-import type { CategoryId } from '../data/categories';
-import { INITIAL_CATEGORY_IDS } from '../data/categories';
-import { newCandidate, sumProgrammerSpeed } from '../data/employees';
+import { newCandidate } from '../data/employees';
 import { DEFAULT_LOADOUT, EQUIPMENT_BY_ID, type EquipSlot } from '../data/equipment';
 import type { GenreId } from '../data/genres';
 import { GENRE_BY_ID, GENRES } from '../data/genres';
@@ -46,8 +50,16 @@ import type {
   OfflineReport,
   Screen,
   Work,
+  DevSkillId,
 } from './types';
-import { addWeeks, DEV_PHASE_ORDER, INITIAL_GAME_DATE, ZERO_AXES } from './types';
+import {
+  addWeeks,
+  DEV_PHASE_ORDER,
+  DEV_SKILL_IDS,
+  INITIAL_GAME_DATE,
+  ZERO_AXES,
+  ZERO_FEATURES,
+} from './types';
 
 /**
  * v0.11：開発フェーズの「MISSION 名・見出し」を生成（演出専用）。
@@ -125,7 +137,6 @@ type Actions = {
    * v0.17：従業員は常に全員参加（オーナー指示）。title 省略時はランダム生成。
    */
   startProject: (genreId: GenreId, themeId: ThemeId, scale: Scale, title?: string) => void;
-  tickAuto: (deltaSec: number) => void;
   tickSales: (deltaSec: number) => void;
   /**
    * v0.10：ゲーム内時間を1週進める。
@@ -141,7 +152,8 @@ type Actions = {
   /** v0.15：バグ侵食（完成度じわ減り。0 未満にならない） */
   erodeDevelopLoC: (n: number) => void;
   /** v0.15：ビルドアップ・タイピングの属性ポイント加算 */
-  addDevStat: (key: 'program' | 'graphics' | 'sound' | 'design', n: number) => void;
+  addFeaturePoint: (field: DevSkillId, gain: number) => void;
+  addDevStat: (key: 'program' | 'graphics' | 'sound' | 'scenario', n: number) => void;
   reportCombo: (combo: number) => void;
   reportWPM: (wpm: number) => void;
   reportAccuracy: (acc: number) => void;
@@ -168,6 +180,11 @@ type Actions = {
   /** v0.14：イベント/ミッション結果の新軸デルタを current.axes に適用 */
   applyAxisDelta: (delta: Partial<Record<DevAxis, number>>) => void;
   releaseWork: (opts?: ReleaseOpts) => Work;
+  /**
+   * ローンチ広告（発売後のリワード広告）を直近リリース作に適用し、初動売上を ×1.5 する。
+   * 返り値は即入金されたボーナス額（適用不可＝未リリース/二重適用なら 0）。
+   */
+  applyLaunchAd: () => number;
   buyAdDevBoost: () => void;
   buyAdSurvey: (g: GenreId, t: ThemeId) => void;
   /** v0.17.1：ミス打鍵はバグ確定（開発フェーズ中のみ。発生したら true） */
@@ -181,6 +198,14 @@ type Actions = {
    * 1開発1回。使用済み・バグ 0・プロジェクト無しのときは false。
    */
   adDebugAssist: () => boolean;
+  /**
+   * 開発ビルド限定：残バグを一括で 0 にする（QA フック）。
+   *
+   * デバッグフェーズは 1バグ = 2文の打鍵で、バグが多いと検証したい先（発売・売上・
+   * 解放）に届く前に時間を使い切る。バグの発生・修正そのものを検証したいときは
+   * 通常フローで、それ以外を見たいときはここで飛ばす（docs/qa/bug-hunt.md）。
+   */
+  devClearAllBugs: () => void;
   hireCandidate: () => boolean;
   /**
    * v0.22：採用ガチャを1回引く（spec v22 §3〜4）。v0.22.1：種類（normal/premium）を指定。
@@ -236,7 +261,6 @@ export type GameState = {
   unlockedScales: Scale[];
   unlockedGenres: GenreId[];
   unlockedThemes: ThemeId[];
-  unlockedCategories: CategoryId[];
   ghosts: Record<Scale, number | null>;
   library: Work[];
   trend: Trend;
@@ -250,7 +274,6 @@ export type GameState = {
   lastLevelUps: LevelUp[];
   offlineReport: OfflineReport | null;
   /** v0.21 投資：先行購入した累計回数（価格の逓増カーブに使う） */
-  investPurchaseCount: number;
   /** v0.10：ゲーム内日付（週単位） */
   currentDate: GameDate;
   /** v0.10：直近に発生した月初固定費（UI 表示用。発生していなければ null） */
@@ -295,7 +318,6 @@ export const useGameStore = create<GameState>()(
     unlockedScales: pureDefaults.unlockedScales,
     unlockedGenres: pureDefaults.unlockedGenres,
     unlockedThemes: pureDefaults.unlockedThemes,
-    unlockedCategories: [...INITIAL_CATEGORY_IDS],
     ghosts: pureDefaults.ghosts,
     library: [],
     trend: { genreId: GENRES[0].id, themeId: THEMES[0].id, expiresAt: 0 },
@@ -307,7 +329,6 @@ export const useGameStore = create<GameState>()(
     lastReleased: null,
     lastLevelUps: [],
     offlineReport: null,
-    investPurchaseCount: pureDefaults.investPurchaseCount,
     currentDate: pureDefaults.currentDate ?? INITIAL_GAME_DATE,
     lastFixedCost: null,
     gameOver: false,
@@ -324,8 +345,18 @@ export const useGameStore = create<GameState>()(
       const title = titleInput?.trim() || generateTitle(genreId, themeId, deps.rng);
       // v0.11 後期：締切（残り時間）を廃止し進捗オンリーに。
       // 作業量目標 workTarget（完走フレーズ数）まで打って初めて完了する（AFK では終わらない）。
-      // 例：mini neededWeeks 8 × 3 = 24 フレーズ。速く打つほど少ない本数で到達＝早期完了。
-      const workTarget = Math.max(3, Math.round(def.neededWeeks * DEV_PHRASES_PER_WEEK));
+      //
+      // 実装ステップ2（docs/spec/score-model.md §3）：
+      // **1分野あたりの文数は固定**（総文数 ÷ 4）で、実際に打つのは**カバーしている分野だけ**。
+      // 分野を絞ると総打鍵量が減り、開発が早く終わる（＝月固定費が安い）。これが
+      // 「集中＝早く安く回す／均等＝1本のスコアを取る」の対価構造そのもの。
+      // カバー分野数で割る方式（1分野あたりの文数を増やす）は不採用：
+      // 「文数が倍」＋「スキルが集中して倍」の二重取りで、2分野集中が支配戦略になっていた。
+      const fullTarget = Math.max(4, Math.round(def.neededWeeks * DEV_PHRASES_PER_WEEK));
+      const perField = Math.max(1, Math.round(fullTarget / DEV_SKILL_IDS.length));
+      const assigned = get().employees.filter((e) => e.skills && Object.keys(e.skills).length > 0);
+      const coveredCount = coveredFieldsOf(assigned).length;
+      const workTarget = perField * Math.max(1, coveredCount);
       const project: CurrentProject = {
         title,
         genreId,
@@ -333,7 +364,9 @@ export const useGameStore = create<GameState>()(
         scale,
         phase: 'planning',
         axes: { ...ZERO_AXES },
-        devStats: { program: 0, graphics: 0, sound: 0, design: 0 },
+        // 革新性だけ企画時点で決まる（同じジャンル×テーマの連投で下がる）
+        features: initialFeatures(get().library, genreId, themeId),
+        devStats: { program: 0, graphics: 0, sound: 0, scenario: 0 },
         requiredLoC: def.requiredLoC,
         doneLoC: 0,
         maxCombo: 0,
@@ -345,7 +378,6 @@ export const useGameStore = create<GameState>()(
         adBoostActive: false,
         surveyedCompat: null,
         // v0.14：開発カテゴリ選択は廃止（オーナー決定）。型は後方互換のため残し空配列固定
-        selectedCategories: [],
         // v0.17：常に全員参加
         assignedEmployeeIds: get().employees.map((e) => e.id),
         perf: { wpm: 0, maxCombo: 0, accuracy: 1 },
@@ -366,24 +398,6 @@ export const useGameStore = create<GameState>()(
       });
     },
 
-    tickAuto: (deltaSec) => {
-      const cur = get().current;
-      if (!cur) return;
-      const progSpeed = sumProgrammerSpeed(get().employees);
-      const boost = cur.devBoostRemainingSec > 0 ? 2 : 1;
-      const add = progSpeed * deltaSec * boost;
-      if (cur.finishedAt === null) {
-        const newDone = Math.min(cur.requiredLoC, cur.doneLoC + add);
-        set({
-          current: {
-            ...cur,
-            doneLoC: newDone,
-            devBoostRemainingSec: Math.max(0, cur.devBoostRemainingSec - deltaSec),
-          },
-        });
-      }
-    },
-
     tickWeek: () => {
       const s = get();
       const prev = s.currentDate;
@@ -398,7 +412,23 @@ export const useGameStore = create<GameState>()(
 
     monthlyTick: () => {
       const r = computeMonthlyTick(get());
-      set({ funds: r.funds, debt: r.debt, lastFixedCost: r.cost });
+      // 開発中の作品には、**この徴収の実額**を積む（リリース画面の利益計算はこれを使う）。
+      // 推定月数ではなく実際に引かれた額なので、給与の変動も借金の利息も自動で入る。
+      const cur = get().current;
+      set({
+        funds: r.funds,
+        debt: r.debt,
+        lastFixedCost: r.cost,
+        ...(cur
+          ? {
+              current: {
+                ...cur,
+                fixedCostPaid: (cur.fixedCostPaid ?? 0) + r.cost.total,
+                fixedCostTicks: (cur.fixedCostTicks ?? 0) + 1,
+              },
+            }
+          : {}),
+      });
       if (r.gameOver) get().triggerGameOver();
       return r.cost;
     },
@@ -479,10 +509,18 @@ export const useGameStore = create<GameState>()(
       set({ current: { ...cur, doneLoC: Math.max(0, cur.doneLoC - n) } });
     },
 
+    addFeaturePoint: (field, gain) => {
+      const cur = get().current;
+      if (!cur || cur.finishedAt !== null || gain <= 0) return;
+      set({
+        current: { ...cur, features: addFeature(cur.features ?? ZERO_FEATURES, field, gain) },
+      });
+    },
+
     addDevStat: (key, n) => {
       const cur = get().current;
       if (!cur || cur.finishedAt !== null) return;
-      const stats = cur.devStats ?? { program: 0, graphics: 0, sound: 0, design: 0 };
+      const stats = cur.devStats ?? { program: 0, graphics: 0, sound: 0, scenario: 0 };
       set({ current: { ...cur, devStats: { ...stats, [key]: stats[key] + n } } });
     },
 
@@ -606,6 +644,42 @@ export const useGameStore = create<GameState>()(
       return work;
     },
 
+    applyLaunchAd: () => {
+      const s = get();
+      const released = s.lastReleased;
+      if (!released) return 0;
+      // lastReleased と library の同一作品は**別の役割**を持つので、それぞれに適用する。
+      //  - lastReleased … 発売時点のスナップショット（リリース画面の「初動／販売プール／売上見込」）。
+      //                   tickSales は触らないので、ここに library の減衰済み salesPool を
+      //                   持ち込むと「広告を見たら売上見込が減った」ように見えてしまう。
+      //  - library      … 販売中の現物（totalRevenue が積み上がり salesPool が減衰していく）。
+      //                   ここを lastReleased で上書きすると販売ぶんが巻き戻る。
+      // initialRevenue は tickSales で変化しないため、両者のボーナス額は必ず一致する。
+      const snapshot = applyLaunchAdToWork(released);
+      if (!snapshot) return 0; // 二重適用ガード
+      const live = s.library.find((w) => w.id === released.id);
+      const liveApplied = live ? applyLaunchAdToWork(live) : null;
+      const bonus = snapshot.bonus;
+      set({
+        lastReleased: snapshot.work,
+        library: liveApplied
+          ? s.library.map((w) => (w.id === released.id ? liveApplied.work : w))
+          : s.library,
+        funds: s.funds + bonus,
+        lifetimeRevenue: s.lifetimeRevenue + bonus,
+        records: {
+          ...s.records,
+          // computeRelease と同じ意味（発売時点の総売上見込）で最高記録を更新。
+          // salesPool は減衰するので initialSalesPool を使う。
+          bestRevenue: Math.max(
+            s.records.bestRevenue,
+            snapshot.work.initialRevenue + snapshot.work.initialSalesPool,
+          ),
+        },
+      });
+      return bonus;
+    },
+
     buyAdDevBoost: () => {
       const cur = get().current;
       if (!cur || cur.finishedAt !== null) return;
@@ -634,7 +708,9 @@ export const useGameStore = create<GameState>()(
     noteBugOnKeystroke: () => {
       const cur = get().current;
       if (!cur || cur.finishedAt !== null) return false;
-      if (!rollBugOnKeystroke(get().employees, deps.rng)) return false;
+      // イベントの「バグ率 −10%」等（axes.bugRate）はここで効く
+      if (!rollBugOnKeystroke(get().employees, deps.rng, get().current?.axes?.bugRate ?? 0))
+        return false;
       set({ current: { ...cur, bugCount: cur.bugCount + 1 } });
       return true;
     },
@@ -651,6 +727,12 @@ export const useGameStore = create<GameState>()(
       const cleared = bugsClearedByAd(cur.bugCount);
       set({ current: { ...cur, bugCount: cur.bugCount - cleared, adDebugUsed: true } });
       return true;
+    },
+
+    devClearAllBugs: () => {
+      const cur = get().current;
+      if (!cur) return;
+      set({ current: { ...cur, bugCount: 0 } });
     },
 
     hireCandidate: () => {
@@ -674,7 +756,8 @@ export const useGameStore = create<GameState>()(
       const price = gachaPrice(kind, get().unlockedScales);
       if (get().funds < price) return false;
       const pity = get().gachaPity;
-      const rank = rollRank(kind, deps.rng, pity);
+      // 実装ステップ3：C を含む4種（GACHA_RANK_RATES）。ランクの天井が効くのと同時に解禁した
+      const rank = rollRank4(kind, deps.rng, pity);
       set({
         funds: get().funds - price,
         candidate: newCandidate(deps, rank),
@@ -703,19 +786,18 @@ export const useGameStore = create<GameState>()(
       return true;
     },
 
-    // v0.21 投資：未解放ジャンル/テーマを資金で先行購入する。unlockedGenres/Themes は
-    // セーブされる単調増加の union（解放済みが消えない蓄積配列）なので、そこへ追加するだけで
-    // 永続化され、以後は自動解放分と同一扱いになる（computeStageUnlocks は無改修）。
-    // 価格は investPurchaseCount による逓増カーブ。購入のたびにカウントを +1 する。
+    // 未解放ジャンル/テーマを資金で先行購入する。**これが stage2 以上の唯一の解放経路**
+    // （発売時の自動解放は v0.29 で廃止。`core/release.ts`）。
+    // unlockedGenres/Themes はセーブされる単調増加の union なので、そこへ追加するだけで永続化される。
+    // 価格は「その stage でこれまでに買った数」で決まる（解放リストから導出。状態を持たない）。
     buyGenre: (id) => {
       const s = get();
       if (s.unlockedGenres.includes(id)) return false;
-      const price = investPrice(GENRE_BY_ID[id].unlockStage, s.investPurchaseCount);
+      const price = investPriceFor(GENRE_BY_ID[id].unlockStage, s.unlockedGenres, s.unlockedThemes);
       if (price === null || s.funds < price) return false;
       set({
         funds: s.funds - price,
         unlockedGenres: [...s.unlockedGenres, id],
-        investPurchaseCount: s.investPurchaseCount + 1,
       });
       return true;
     },
@@ -723,12 +805,11 @@ export const useGameStore = create<GameState>()(
     buyTheme: (id) => {
       const s = get();
       if (s.unlockedThemes.includes(id)) return false;
-      const price = investPrice(THEME_BY_ID[id].unlockStage, s.investPurchaseCount);
+      const price = investPriceFor(THEME_BY_ID[id].unlockStage, s.unlockedGenres, s.unlockedThemes);
       if (price === null || s.funds < price) return false;
       set({
         funds: s.funds - price,
         unlockedThemes: [...s.unlockedThemes, id],
-        investPurchaseCount: s.investPurchaseCount + 1,
       });
       return true;
     },
@@ -812,7 +893,6 @@ export const useGameStore = create<GameState>()(
         unlockedScales: d.unlockedScales,
         unlockedGenres: d.unlockedGenres,
         unlockedThemes: d.unlockedThemes,
-        unlockedCategories: d.unlockedCategories,
         ghosts: d.ghosts,
         library: d.library,
         trend: ensureTrend(null, now(), deps.rng),
@@ -824,7 +904,6 @@ export const useGameStore = create<GameState>()(
         lastReleased: null,
         lastLevelUps: [],
         offlineReport: null,
-        investPurchaseCount: d.investPurchaseCount,
         currentDate: d.currentDate,
         lastFixedCost: null,
         gameOver: false,

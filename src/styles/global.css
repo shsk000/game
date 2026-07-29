@@ -356,7 +356,9 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* 1280×720 スクロール禁止。神ゲー＋実績＋昇格が全部乗る最悪ケースでも
+     「💰 売上を見る ▶」が画面内に残る値（10px だと 78px あふれた） */
+  gap: 4px;
 }
 
 .release-info h2 {
@@ -374,7 +376,7 @@ body {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 4px 16px;
   background: var(--panel-2);
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -390,7 +392,7 @@ body {
   font-size: 13px;
 }
 .meta-value {
-  font-size: 56px;
+  font-size: 40px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: var(--accent-2);
@@ -400,7 +402,8 @@ body {
 }
 
 .meta-flavor {
-  font-size: 18px;
+  font-size: 13px;
+  margin: 0;
   color: var(--warn);
 }
 
@@ -410,14 +413,28 @@ body {
   font-size: 18px;
 }
 
+/* 神ゲー認定バッジ。ゴースト更新バッジと同じ1行の形にそろえる（縦を食わない） */
+.masterpiece-badge-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(255, 217, 90, 0.18);
+  color: #ffd95a;
+  font-weight: 800;
+  font-size: 14px;
+  align-self: flex-start;
+}
+
 .release-stats {
   list-style: none;
   padding: 0;
-  margin: 8px 0 0;
+  margin: 4px 0 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
   color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .release-stats .revenue {
@@ -1038,16 +1055,18 @@ body {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
+/* 内訳は7行（特徴5＋相性＋ブレ）に増えたので、1280×720 に収まるよう詰める */
 .breakdown-row {
   display: grid;
-  grid-template-columns: 28px 1fr auto;
-  gap: 10px;
+  grid-template-columns: 20px 1fr auto;
+  gap: 8px;
   align-items: baseline;
-  font-size: 14px;
+  font-size: 11px;
+  line-height: 1.3;
   animation: bd-fade 0.45s ease both;
 }
 .breakdown-emoji {
-  font-size: 20px;
+  font-size: 15px;
 }
 .breakdown-label {
   color: var(--muted);
@@ -1059,8 +1078,9 @@ body {
 }
 .breakdown-total {
   border-top: 1px dashed var(--border);
-  padding-top: 8px;
-  margin-top: 4px;
+  padding-top: 5px;
+  margin-top: 3px;
+  font-size: 13px;
   color: var(--text);
   font-weight: 800;
 }
@@ -2219,6 +2239,10 @@ body,
   color: #f0c020;
 }
 
+/* C は最下位ランク＝鉄色。ランク4種（C/B/A/S）に増えた実装ステップ1で追加 */
+.gacha-card--C {
+  border-color: #8a8f96;
+}
 .gacha-card--B {
   border-color: #b87333;
 }
@@ -2266,6 +2290,10 @@ body,
   border: 2px solid #10151c;
 }
 
+.gacha-rank-badge--C {
+  background: #8a8f96;
+  color: #202840;
+}
 .gacha-rank-badge--B {
   background: #b87333;
   color: #fff8e0;
@@ -2304,4 +2332,51 @@ body,
   font-size: 12px;
   line-height: 12px;
   color: #8a96a8;
+}
+
+/* 売上の計算式（リリース画面）。docs/spec/scoring.md §3 の式をそのまま見せる */
+.sales-formula {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.sales-formula-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  /* PixelWindow(standard) は淡色パネル。--muted/--text は暗色背景用なので使わない
+     （濃淡が反転して読めなくなる。lessons: 濃色背景に黒字を置かない の逆パターン） */
+  color: #2a3550;
+}
+.sales-formula-row > span:last-child {
+  color: #0f1830;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.sales-formula-total {
+  border-top: 1px dashed #8a93a8;
+  margin-top: 3px;
+  padding-top: 4px;
+  font-size: 13px;
+  color: #0f1830;
+  font-weight: 800;
+}
+.sales-formula-total > span:last-child {
+  color: #0a6b2e;
+}
+.sales-formula-note {
+  margin-top: 3px;
+  font-size: 10px;
+  color: #4a5570;
+}
+
+/* 広告ボタンの補足（「初動」のような用語をその場で言い換える） */
+.ad-note {
+  display: block;
+  margin: 3px 0 0;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--muted);
 }
