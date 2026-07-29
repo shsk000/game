@@ -254,6 +254,9 @@ export const computeRelease = (
     createdAt: nowMs,
     breakdown: workBreakdown,
     developWeeks,
+    // 開発中に実際に払った固定費（推定ではない。`monthlyTick` が積んだ実額）
+    fixedCostPaid: cur.fixedCostPaid ?? 0,
+    fixedCostTicks: cur.fixedCostTicks ?? 0,
   };
 
   const newLibrary = [work, ...ctx.library];

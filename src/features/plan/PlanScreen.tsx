@@ -366,23 +366,25 @@ export const PlanScreen = () => {
               const range = estimateRevenueRange(scale, employees, genreId, themeId);
               // v0.15.3：予定週は企画・仕上げの猶予込みで案内する
               const totalWeeks = def.neededWeeks + planWeeksAllowance(def.neededWeeks);
-              const monthCount = Math.round(totalWeeks / 4);
+              // 月またぎの回数は 週数÷4 の**切り捨て**（4週=1ヶ月）。
+              // 以前は Math.round ＋ 下限1ヶ月で、全規模の固定費を最大1ヶ月ぶん多く見せていた
+              // （＝規模を上げる判断を不当に赤字寄りにしていた。オーナー指摘 2026-07-29）
+              const monthCount = Math.floor(totalWeeks / 4);
               // E-4: 中央値売上で見込み利益。赤字なら赤色で警告
               // v0.17.1：月固定費に給与を含める（賃料だけだと実際の月次徴収と食い違う）
               const salaries = sumMonthlySalaries(employees);
               const monthlyFixed = salaries + def.monthlyRent;
-              const estMonths = Math.max(1, Math.round(totalWeeks / 4));
               const profitMid = computeProfit({
                 totalRevenue: range.mid,
                 devCost: def.baseCost,
                 monthlyFixedCost: monthlyFixed,
-                developMonths: estMonths,
+                developMonths: totalWeeks / 4,
               });
               const profitHigh = computeProfit({
                 totalRevenue: range.high,
                 devCost: def.baseCost,
                 monthlyFixedCost: monthlyFixed,
-                developMonths: estMonths,
+                developMonths: totalWeeks / 4,
               });
               const profitColor = profitMid.profit >= 0 ? COLORS.pioneer : COLORS.accentRed;
               return (

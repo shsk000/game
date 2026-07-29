@@ -211,6 +211,12 @@ export type Work = {
   breakdown: WorkBreakdown;
   /** v0.10：開発に要したゲーム内週数（カレンダー差分。リリース時に確定） */
   developWeeks?: number;
+  /**
+   * 開発中に**実際に払った**月固定費の合計と、その徴収回数。
+   * 推定（週数÷4）ではなく `monthlyTick` の実額。詳しくは `CurrentProject.fixedCostPaid`。
+   */
+  fixedCostPaid?: number;
+  fixedCostTicks?: number;
 };
 
 /**
@@ -351,6 +357,19 @@ export type CurrentProject = {
   };
   /** v0.10：開発開始時のゲーム内日付（F-6 完成サマリ用） */
   startDate?: GameDate;
+  /**
+   * この作品を作っている間に**実際に資金から引かれた**月固定費の合計（円）。
+   *
+   * リリース画面の利益計算は以前「月固定費 × Math.round(開発週数 ÷ 4)」という**推定**を
+   * 出していた。10週なら `round(2.5)` で3ヶ月と表示されるが、実際の月またぎは2回のことがあり、
+   * 誤差1ヶ月（3人チームなら約 ¥252万）が**その作品の総売上を上回る**規模だった。
+   * さらに「今の給与 × 月数」なので、開発の途中で採用すると過去にさかのぼって課金されて見えた。
+   *
+   * `monthlyTick`（＝実際に funds を減らす場所）で積むので、給与の変動も借金の利息も自動で入る。
+   */
+  fixedCostPaid?: number;
+  /** 上の額が何回の月初徴収で発生したか（画面に「月初 N 回」と出す） */
+  fixedCostTicks?: number;
   /** v0.10：WPM しきい値クロスで -X 週テロップを出した一覧（重複防止） */
   timeShortcutsUnlocked?: number[];
   /**

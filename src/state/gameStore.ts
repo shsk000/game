@@ -407,7 +407,23 @@ export const useGameStore = create<GameState>()(
 
     monthlyTick: () => {
       const r = computeMonthlyTick(get());
-      set({ funds: r.funds, debt: r.debt, lastFixedCost: r.cost });
+      // 開発中の作品には、**この徴収の実額**を積む（リリース画面の利益計算はこれを使う）。
+      // 推定月数ではなく実際に引かれた額なので、給与の変動も借金の利息も自動で入る。
+      const cur = get().current;
+      set({
+        funds: r.funds,
+        debt: r.debt,
+        lastFixedCost: r.cost,
+        ...(cur
+          ? {
+              current: {
+                ...cur,
+                fixedCostPaid: (cur.fixedCostPaid ?? 0) + r.cost.total,
+                fixedCostTicks: (cur.fixedCostTicks ?? 0) + 1,
+              },
+            }
+          : {}),
+      });
       if (r.gameOver) get().triggerGameOver();
       return r.cost;
     },

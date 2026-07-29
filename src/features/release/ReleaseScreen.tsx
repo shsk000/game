@@ -5,7 +5,6 @@ import { PixelWindow } from '../../components/ui';
 import { adviceFor } from '../../core/advice';
 import { ACHIEVEMENT_BY_ID } from '../../data/achievements';
 import { compatLabel, getCompat } from '../../data/compatibility';
-import { sumMonthlySalaries } from '../../data/employees';
 import { GENRE_BY_ID } from '../../data/genres';
 import { SCALE_BY_ID } from '../../data/scales';
 import { THEME_BY_ID } from '../../data/themes';
@@ -68,7 +67,6 @@ export const ReleaseScreen = () => {
   const work = useGameStore((s) => s.lastReleased);
   const current = useGameStore((s) => s.current);
   const lastLevelUps = useGameStore((s) => s.lastLevelUps);
-  const employees = useGameStore((s) => s.employees);
   const releaseWork = useGameStore((s) => s.releaseWork);
   const applyLaunchAd = useGameStore((s) => s.applyLaunchAd);
   const goTo = useGameStore((s) => s.goTo);
@@ -528,78 +526,90 @@ export const ReleaseScreen = () => {
                     </li>
                   </ul>
 
-                  {/* v0.10：利益ブレイクダウン
-                      v0.17.1：月固定費に給与を含める（賃料だけだと実際の月次徴収と食い違う。オーナー指摘） */}
+                  {/* 利益ブレイクダウン。
+                      **固定費は推定ではなく実額**（`monthlyTick` が開発中に積んだ合計）を出す。
+                      以前は「月固定費 × Math.round(開発週数÷4)」の推定で、下限1ヶ月も掛かっていたため
+                      払っていない月を計上することがあった（誤差1ヶ月＝ミニ1本の総売上を超える）。
+                      オーナー指摘「これ最終的にマイナスだけど本当にマイナス？残高的にはプラス」2026-07-29。
+
+                      あわせて**この作品の粗利**と**会社が払った固定費**を分けて出す。
+                      固定費は作品を作らなくても発生する期間費用なので、まぜると
+                      「この作品が¥537万を溶かした」と読めてしまう。 */}
                   {(() => {
                     const scaleDef = SCALE_BY_ID[work.scale];
                     const projectedTotal = work.initialRevenue + work.salesPool;
-                    const salaries = sumMonthlySalaries(employees);
-                    const monthlyFixed = salaries + scaleDef.monthlyRent;
-                    const devMonths = Math.max(
-                      1,
-                      Math.round((work.developWeeks ?? scaleDef.neededWeeks) / 4),
-                    );
+                    const fixedCostTotal = work.fixedCostPaid ?? 0;
+                    const fixedTicks = work.fixedCostTicks ?? 0;
                     const result = computeProfit({
                       totalRevenue: projectedTotal,
                       devCost: scaleDef.baseCost,
-                      monthlyFixedCost: monthlyFixed,
-                      developMonths: devMonths,
+                      fixedCostTotal,
                     });
                     const devCost = result.devCost;
-                    const fixedCostTotal = result.fixedCostTotal;
+                    const gross = projectedTotal - devCost;
                     const profit = result.profit;
                     const roi = formatRoi(profit, devCost + fixedCostTotal);
                     const positive = profit >= 0;
+                    const rowStyle = { color: '#ff6b6b' } as const;
                     return (
-                      <PixelWindow
-                        title="💹 利益計算（見込）"
-                        variant="emphasis"
-                        style={{ marginTop: 10 }}
-                      >
+                      <PixelWindow title="💹 利益計算" variant="emphasis" style={{ marginTop: 10 }}>
                         <div
                           style={{
                             display: 'grid',
                             gridTemplateColumns: '1fr auto',
-                            rowGap: 4,
+                            rowGap: 3,
                             fontSize: 13,
                             fontVariantNumeric: 'tabular-nums',
                           }}
                         >
                           <span>売上見込（発売直後＋販売プール）</span>
                           <strong>{formatYen(projectedTotal)}</strong>
-                          <span>− 開発費（{scaleDef.name}）</span>
-                          <strong style={{ color: '#ff6b6b' }}>-{formatYen(devCost)}</strong>
-                          <span>
-                            − 月固定費 × {devMonths} ヶ月（給与 {formatYen(salaries)} + 賃料{' '}
-                            {formatYen(scaleDef.monthlyRent)} /月）
-                          </span>
-                          <strong style={{ color: '#ff6b6b' }}>-{formatYen(fixedCostTotal)}</strong>
+                          <span>− 開発費（{scaleDef.name}／企画時に支払い済み）</span>
+                          <strong style={rowStyle}>-{formatYen(devCost)}</strong>
+                          <span style={{ fontWeight: 700 }}>この作品の粗利</span>
+                          <strong style={{ color: gross >= 0 ? '#308040' : '#a03030' }}>
+                            {formatYen(gross)}
+                          </strong>
                           <span
                             style={{
                               gridColumn: '1 / 3',
                               height: 1,
                               background: '#16263e',
-                              margin: '4px 0',
+                              margin: '3px 0',
                             }}
                           />
-                          <span style={{ fontWeight: 700 }}>利益見込</span>
-                          <strong
+                          <span>
+                            − 開発中に会社が払った固定費
+                            <span style={{ fontSize: 11, opacity: 0.8 }}>
+                              {' '}
+                              （月初 {fixedTicks} 回・給与＋賃料＋借金利息／支払い済み）
+                            </span>
+                          </span>
+                          <strong style={rowStyle}>-{formatYen(fixedCostTotal)}</strong>
+                          <span
                             style={{
-                              color: positive ? '#308040' : '#a03030',
-                              fontSize: 16,
+                              gridColumn: '1 / 3',
+                              height: 1,
+                              background: '#16263e',
+                              margin: '3px 0',
                             }}
+                          />
+                          <span style={{ fontWeight: 700 }}>差引</span>
+                          <strong
+                            style={{ color: positive ? '#308040' : '#a03030', fontSize: 16 }}
                           >
                             {formatYen(profit)}
                           </strong>
                           <span style={{ fontWeight: 700 }}>ROI</span>
-                          <strong
-                            style={{
-                              color: positive ? '#308040' : '#a03030',
-                            }}
-                          >
-                            {roi}
-                          </strong>
+                          <strong style={{ color: positive ? '#308040' : '#a03030' }}>{roi}</strong>
                         </div>
+                        {/* 「画面はマイナスなのに残高は増えた」の食い違いを潰す1行。
+                            費用はすべて過去に払い終えていて、この画面で動くのは初動の入金だけ */}
+                        <p style={{ margin: '4px 0 0', fontSize: 11, opacity: 0.85 }}>
+                          費用はすべて支払い済み。この画面で入金されるのは
+                          発売直後の {formatYen(work.initialRevenue)} だけで、
+                          残りは販売プールから時間をかけて入る
+                        </p>
                       </PixelWindow>
                     );
                   })()}
