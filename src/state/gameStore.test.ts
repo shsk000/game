@@ -115,6 +115,48 @@ describe('devSkipDevelopment（DEV検証フック：平均成績で“それな�
   });
 });
 
+describe('devSkipPhase（DEV検証フック：今いる工程だけを次へスキップ）', () => {
+  beforeEach(() => resetStore());
+
+  it('企画→開発：1工程だけ進む（発売まで飛ばない）', () => {
+    resetStore({ current: devProject({ phase: 'planning' }) });
+    useGameStore.getState().devSkipPhase();
+    const s = useGameStore.getState();
+    expect(s.current?.phase).toBe('development');
+    expect(s.screen).not.toBe('release');
+  });
+
+  it('開発→テスト：平均成績を積んでから testing へ（品質のもとが 0 のままでない）', () => {
+    resetStore({
+      current: devProject({
+        phase: 'development',
+        perf: { wpm: 0, maxCombo: 0, accuracy: 1 },
+        devStats: { program: 0, graphics: 0, sound: 0, scenario: 0 },
+      }),
+    });
+    useGameStore.getState().devSkipPhase();
+    const s = useGameStore.getState();
+    expect(s.current?.phase).toBe('testing');
+    expect(s.current?.perf.wpm).toBeGreaterThan(0);
+    const st = s.current?.devStats;
+    expect((st?.program ?? 0) + (st?.graphics ?? 0) + (st?.sound ?? 0) + (st?.scenario ?? 0)).toBeGreaterThan(0);
+  });
+
+  it('デバッグ→発売：最後の工程スキップは発売フローへ委譲', () => {
+    resetStore({ current: devProject({ phase: 'debugging', workTarget: 100, doneLoC: 10 }) });
+    useGameStore.getState().devSkipPhase();
+    const s = useGameStore.getState();
+    expect(s.current?.phase).toBe('release');
+    expect(s.screen).toBe('release');
+  });
+
+  it('プロジェクトが無ければ何もしない', () => {
+    resetStore({ current: null });
+    useGameStore.getState().devSkipPhase();
+    expect(useGameStore.getState().current).toBeNull();
+  });
+});
+
 describe('startProject（前払い開発費 devCost の徴収）', () => {
   beforeEach(() => {
     resetStore();

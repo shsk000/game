@@ -1546,6 +1546,21 @@ body,
   animation: emote-bubble-pop-kf 260ms steps(4) both;
 }
 
+/* v0.32：開発フェーズの着席キャラに微小なアイドル揺れ（呼吸・タイピングの気配で「置物」に見せない）。
+   bottom-center アンカー transform は外側ラッパーが持つので、ここは translateY のみに限定する
+   （同じ要素でアンカーと揺れを兼ねるとアンカーが消える＝reference_css_anim_overrides_transform）。 */
+@keyframes desk-idle-bob-kf {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-2px);
+  }
+}
+.desk-idle-bob {
+  animation: desk-idle-bob-kf 900ms steps(2) infinite alternate;
+}
+
 /* v0.15.2：グラフィック作業中パネルのスパークル（ドット絵スター）が回転しながら明滅 */
 @keyframes dev-sparkle-twinkle-kf {
   0% {

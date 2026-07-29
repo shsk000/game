@@ -1,6 +1,8 @@
 import { expect, type Page, test } from '@playwright/test';
 
-const BASE = 'http://localhost:5173';
+// URL は必ず相対で書く（playwright.config.ts の baseURL＝GAME_PORT に解決される）。
+// ここに http://localhost:5173 をハードコードすると、worktree で検証しているつもりで
+// 別ツリーのサーバーを見に行き、変更が入っていなくても緑になる（偽グリーン）。
 
 /**
  * v0.10 用スモークテスト：オフィス画面トップ + ピクセル UI 構造を確認する。
@@ -35,7 +37,7 @@ async function resetAndOpen(page: Page) {
       /* ignore */
     }
   });
-  await page.goto(BASE);
+  await page.goto('/');
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(800);
   await dismissTutorial(page);
